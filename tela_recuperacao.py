@@ -8,7 +8,7 @@ API_BASE_URL = "https://vegastock.onrender.com"
 class TelaRecuperacao(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon("logo.png"))
+        self.setWindowIcon(QIcon("logo.ico"))
         self.setWindowTitle("VegaStock - Sistema de Estoque - Recuperar Senha")
         self.setFixedSize(300, 350)
 

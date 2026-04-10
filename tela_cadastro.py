@@ -11,7 +11,7 @@ API_BASE_URL = "https://vegastock.onrender.com"
 class TelaCadastro(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon("logo.png"))
+        self.setWindowIcon(QIcon("logo.ico"))
         self.setWindowTitle("VegaStock - Sistema de Estoque - Novo Cadastro")
         self.setFixedSize(350, 550)
 
