@@ -92,6 +92,22 @@ class MainWindow(QMainWindow):
             QPushButton:checked { background-color: #FFD700; border: 1px solid #E6C200; color: #000; }
         """
         
+        # --- MAPA DE PERMISSÕES (NOVO) ---
+        # Relaciona o nome do botão com a palavra salva no banco de dados
+        mapa_permissoes = {
+            "DASHBOARD": "dashboard",
+            "CATÁLOGO DE PRODUTOS": "catalogo",
+            "OPERAÇÃO DE ESTOQUE": "estoque",
+            "ANÁLISE DE DESPERDÍCIO": "relatorios",
+            "EQUIPE E PERMISSÕES 🔒": "admin", # Apenas Admin/Dono
+            "MINHA CONTA": "livre",           # Todos veem
+            "CONFIGURAÇÕES": "configuracoes"
+        }
+
+        # Descobre quem é o cara logado
+        cargo_usuario = self.cliente_dados.get("cargo", "Admin")
+        permissoes_usuario = self.cliente_dados.get("permissoes", [])
+
         self.botoes_abas = []
         for i, nome in enumerate(self.nomes_abas):
             btn = QPushButton(nome)
@@ -101,13 +117,11 @@ class MainWindow(QMainWindow):
             btn.setStyleSheet(estilo_btn)
             btn.clicked.connect(lambda _, idx=i: self.mudar_aba(idx))
             
-            # Lógica do PRO dinâmica
+            # Lógica do PRO dinâmica (que já funcionava)
             if "🔒" in nome:
                 if self.cliente_dados.get('status_assinatura') == "PRO":
-                    # É PRO: Arranca o cadeado do nome e deixa o estilo original do loop agir
                     btn.setText(nome.replace(" 🔒", ""))
                 else:
-                    # NÃO É PRO: Tira o setEnabled(False) pra ele ser clicável, e aplica o CSS cinza
                     estilo_bloqueado = """
                         QPushButton {
                             background-color: #fafafa; color: #aaa; border: 1px solid #e0e0e0;
@@ -117,6 +131,17 @@ class MainWindow(QMainWindow):
                     """
                     btn.setStyleSheet(estilo_bloqueado)
                     
+            # ==========================================
+            # O GRAN FINALE: TRAVA DE VISIBILIDADE
+            # ==========================================
+            chave = mapa_permissoes.get(nome, "livre")
+
+            # Se NÃO for o dono (Admin) e a aba não for "livre"
+            if self.cliente_dados.get("nivel_acesso") != "Admin" and chave != "livre":
+                # Esconde se for aba de Admin ou se ele não tiver a permissão na carteira
+                if chave == "admin" or chave not in permissoes_usuario:
+                    btn.hide() # O botão fica invisível e intocável!
+
             self.layout_abas.addWidget(btn)
             self.botoes_abas.append(btn)
 
@@ -155,7 +180,7 @@ class MainWindow(QMainWindow):
         # Rodapé
         layout_rodape = QHBoxLayout()
         layout_rodape.addStretch()
-        user = self.cliente_dados.get('login', 'ADMIN')
+        user = self.cliente_dados.get('login_usuario', 'ADMIN')
         lbl_user = QLabel(f"USUÁRIO: {user.upper()}")
         lbl_user.setStyleSheet("font-weight: normal; color: #000; font-size: 12px;")
         layout_rodape.addWidget(lbl_user)

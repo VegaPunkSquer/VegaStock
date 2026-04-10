@@ -101,11 +101,29 @@ class AbaConta(QWidget):
         btn_salvar_senha = QPushButton("Atualizar Senha")
         btn_salvar_senha.setFixedWidth(150)
         btn_salvar_senha.setStyleSheet("background-color: #FFD700; color: #000; font-weight: bold; padding: 8px; border-radius: 3px;")
+        # NOVO CAMPO: Login para funcionários
+        self.input_novo_login = QLineEdit()
+        self.input_novo_login.setPlaceholderText("Novo Login (Deixe em branco para manter)")
+        self.input_novo_login.setFixedWidth(300)
+        self.input_novo_login.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        layout_senha.insertWidget(1, self.input_novo_login) # Coloca logo abaixo do título
+
         btn_salvar_senha.clicked.connect(self.alterar_senha)
         layout_senha.addWidget(btn_salvar_senha)
 
         layout_principal.addWidget(frame_senha)
         layout_principal.addStretch() # Empurra tudo para cima
+
+        # ==========================================
+        # TRAVA DE HIERARQUIA (O PPOREEEEM GIGANTE)
+        # ==========================================
+        if self.cliente_dados.get("nivel_acesso", "Normal") != "Admin":
+            frame_info.hide() # Somem os dados do restaurante e logo
+            lbl_senha_titulo.setText("Segurança: Alterar Minhas Credenciais")
+            self.input_senha_atual.hide() # Funcionário não precisa validar a atual na nossa rota simplificada
+            btn_salvar_senha.setText("Atualizar Minha Conta")
+        else:
+            self.input_novo_login.hide() # Admin não muda login por aqui, mantemos o visual original dele
 
     def alterar_logo(self):
         arquivo, _ = QFileDialog.getOpenFileName(self, "Selecionar Nova Logo", "", "Imagens (*.png *.jpg *.jpeg)")
@@ -148,32 +166,65 @@ class AbaConta(QWidget):
             QMessageBox.critical(self, "Erro", f"Sem conexão com a API.\n{e}")
 
     def alterar_senha(self):
-        atual = self.input_senha_atual.text()
+        nivel_acesso = self.cliente_dados.get("nivel_acesso", "Normal")
         nova = self.input_nova_senha.text()
         confirma = self.input_confirma_senha.text()
-
-        if not all([atual, nova, confirma]):
-            QMessageBox.warning(self, "Aviso", "Preencha todos os campos de senha.")
-            return
 
         if nova != confirma:
             QMessageBox.warning(self, "Aviso", "A nova senha e a confirmação não batem.")
             return
 
-        dados = {
-            "cliente_id": self.cliente_dados['cliente_id'],
-            "senha_atual": atual,
-            "nova_senha": nova
-        }
+        # ==========================================
+        # ROTA 1: SE FOR ADMIN (Mantém a sua lógica intacta)
+        # ==========================================
+        if nivel_acesso == "Admin":
+            atual = self.input_senha_atual.text()
+            if not all([atual, nova, confirma]):
+                QMessageBox.warning(self, "Aviso", "Preencha todos os campos de senha.")
+                return
 
-        try:
-            response = requests.put(f"{API_BASE_URL}/atualizar_senha", json=dados)
-            if response.status_code == 200:
-                QMessageBox.information(self, "Sucesso", "Senha atualizada com sucesso!")
-                self.input_senha_atual.clear()
-                self.input_nova_senha.clear()
-                self.input_confirma_senha.clear()
-            else:
-                QMessageBox.warning(self, "Erro", response.json().get("detail", "Erro ao atualizar."))
-        except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Sem conexão com a API.\n{e}")
+            dados = {
+                "cliente_id": self.cliente_dados['cliente_id'],
+                "senha_atual": atual,
+                "nova_senha": nova
+            }
+
+            try:
+                response = requests.put(f"{API_BASE_URL}/atualizar_senha", json=dados)
+                if response.status_code == 200:
+                    QMessageBox.information(self, "Sucesso", "Senha atualizada com sucesso!")
+                    self.input_senha_atual.clear()
+                    self.input_nova_senha.clear()
+                    self.input_confirma_senha.clear()
+                else:
+                    QMessageBox.warning(self, "Erro", response.json().get("detail", "Erro ao atualizar."))
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Sem conexão com a API.\n{e}")
+
+        # ==========================================
+        # ROTA 2: SE FOR FUNCIONÁRIO (Usa a nova rota)
+        # ==========================================
+        else:
+            novo_log = self.input_novo_login.text().strip()
+            
+            if not novo_log and not nova:
+                QMessageBox.warning(self, "Aviso", "Preencha o login ou a senha para atualizar.")
+                return
+                
+            dados_func = {
+                "usuario_id": self.cliente_dados.get("usuario_id"),
+                "novo_login": novo_log,
+                "nova_senha": nova
+            }
+            
+            try:
+                response = requests.put(f"{API_BASE_URL}/atualizar_conta_funcionario", json=dados_func)
+                if response.status_code == 200:
+                    QMessageBox.information(self, "Sucesso", "Conta atualizada! No próximo acesso, use suas novas credenciais.")
+                    self.input_novo_login.clear()
+                    self.input_nova_senha.clear()
+                    self.input_confirma_senha.clear()
+                else:
+                    QMessageBox.warning(self, "Erro", response.json().get("detail", "Erro ao atualizar."))
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Sem conexão com a API.\n{e}")

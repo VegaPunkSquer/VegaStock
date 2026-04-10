@@ -662,3 +662,27 @@ def excluir_funcionario(usuario_id: int, db: Session = Depends(get_db)):
         db.delete(usuario)
         db.commit()
     return {"status": "removido"}
+
+# ==========================================
+# ROTA: ATUALIZAR CONTA DO FUNCIONÁRIO
+# ==========================================
+@app.put("/atualizar_conta_funcionario")
+def atualizar_conta_funcionario(dados: dict, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == dados["usuario_id"]).first()
+    if not usuario:
+        raise HTTPException(status_code=404, detail="Usuário não encontrado.")
+    
+    # Atualiza o login (se enviou um novo)
+    if dados.get("novo_login"):
+        # Verifica se o novo login já existe pra outra pessoa
+        existe = db.query(models.Usuario).filter(models.Usuario.login == dados["novo_login"], models.Usuario.id != dados["usuario_id"]).first()
+        if existe:
+            raise HTTPException(status_code=400, detail="Este login já está em uso.")
+        usuario.login = dados["novo_login"]
+        
+    # Atualiza a senha (se enviou uma nova)
+    if dados.get("nova_senha"):
+        usuario.senha = gerar_hash(dados["nova_senha"])
+        
+    db.commit()
+    return {"mensagem": "Conta atualizada com sucesso!"}
