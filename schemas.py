@@ -33,9 +33,10 @@ class ProdutoCreate(BaseModel):
 class MovimentacaoCreate(BaseModel):
     cliente_id: int
     produto_id: int
-    motivo_baixa_id: int
+    tipo_movimento: str  # "ENTRADA" ou "SAIDA"
+    motivo_baixa_id: Optional[int] = None #Só pra saída
     quantidade: float
-    
+    custo_unitario: Optional[float] = None # Quanto ele pagou na hora da Entrada
 class CadastroRequest(BaseModel):
     token_licenca: str
     nome_fantasia: str

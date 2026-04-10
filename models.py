@@ -31,9 +31,10 @@ class MovimentacaoEstoque(Base):
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("clientes.id"))
     produto_id = Column(Integer, ForeignKey("produtos.id"))
-    motivo_baixa_id = Column(Integer, ForeignKey("motivos_baixa.id"))
+    motivo_baixa_id = Column(Integer, ForeignKey("motivos_baixa.id"), nullable=True) # Nullable porque nem toda movimentação precisa de motivo (ex: Entrada por compra)
     tipo_movimento = Column(String)  # "ENTRADA" ou "SAIDA"
     quantidade = Column(Float)
+    custo_unitario = Column(Float, nullable=True) # Quanto ele pagou na hora da Entrada
     data_hora = Column(DateTime, default=datetime.utcnow)
     usuario_id = Column(Integer, nullable=True)  # Nullable até termos o módulo de RH/Login de Staff
     

@@ -1,3 +1,4 @@
+from datetime import timedelta
 from fastapi import FastAPI, Request, Depends, HTTPException
 from sqlalchemy.orm import Session
 from typing import List
@@ -43,47 +44,82 @@ def listar_produtos(cliente_id: int, db: Session = Depends(get_db)):
     return produtos
 
 # 3. Endpoint Crítico: Dar Baixa / Movimentação
+# ==========================================
+# ROTAS: OPERAÇÃO DE ESTOQUE
+# ==========================================
 @app.post("/movimentacao")
 def registrar_movimentacao(mov: schemas.MovimentacaoCreate, db: Session = Depends(get_db)):
-    # Localizar o produto e confirmar que pertence ao cliente
-    produto = db.query(models.Produto).filter(
-        models.Produto.id == mov.produto_id,
-        models.Produto.cliente_id == mov.cliente_id
-    ).first()
-    
+    produto = db.query(models.Produto).filter(models.Produto.id == mov.produto_id, models.Produto.cliente_id == mov.cliente_id).first()
     if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado no estoque deste cliente")
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-    # Localizar o motivo
-    motivo = db.query(models.MotivoBaixa).filter(
-        models.MotivoBaixa.id == mov.motivo_baixa_id,
-        models.MotivoBaixa.cliente_id == mov.cliente_id
-    ).first()
-
-    if not motivo:
-        raise HTTPException(status_code=404, detail="Motivo de baixa inválido")
-
-    # Deduzir ou somar do saldo baseado no tipo de motivo (NEGATIVO/POSITIVO)
-    tipo_movimento = "SAIDA" if motivo.tipo == "NEGATIVO" or "Venda" in motivo.descricao else "ENTRADA"
-    
-    if tipo_movimento == "SAIDA":
-        produto.quantidade_atual -= mov.quantidade
-    else:
-        produto.quantidade_atual += mov.quantidade
-
-    # Gravar o registro no histórico
     nova_movimentacao = models.MovimentacaoEstoque(
         cliente_id=mov.cliente_id,
         produto_id=mov.produto_id,
-        motivo_baixa_id=mov.motivo_baixa_id,
-        tipo_movimento=tipo_movimento,
+        tipo_movimento=mov.tipo_movimento,
         quantidade=mov.quantidade
     )
 
+    if mov.tipo_movimento == "ENTRADA":
+        if mov.custo_unitario is None:
+            raise HTTPException(status_code=400, detail="Entrada exige o preenchimento do custo unitário.")
+        
+        # O Motor da Matemática: Calcula o Custo Médio Ponderado
+        estoque_total_futuro = produto.quantidade_atual + mov.quantidade
+        if estoque_total_futuro > 0:
+            custo_antigo_total = produto.quantidade_atual * produto.custo_medio
+            custo_novo_total = mov.quantidade * mov.custo_unitario
+            produto.custo_medio = (custo_antigo_total + custo_novo_total) / estoque_total_futuro
+        
+        produto.quantidade_atual += mov.quantidade
+        nova_movimentacao.custo_unitario = mov.custo_unitario
+
+    elif mov.tipo_movimento == "SAIDA":
+        if mov.motivo_baixa_id is None:
+            raise HTTPException(status_code=400, detail="Saída exige a seleção de um motivo.")
+        if produto.quantidade_atual < mov.quantidade:
+            raise HTTPException(status_code=400, detail="Estoque insuficiente para esta saída.")
+        
+        produto.quantidade_atual -= mov.quantidade
+        nova_movimentacao.motivo_baixa_id = mov.motivo_baixa_id
+
     db.add(nova_movimentacao)
     db.commit()
+    return {"status": "sucesso", "novo_saldo": produto.quantidade_atual, "novo_custo": produto.custo_medio}
+
+@app.get("/movimentacoes/{cliente_id}")
+def historico_movimentacoes(cliente_id: int, dias: int = 7, db: Session = Depends(get_db)):
+    # O filtro de dias que vai alimentar a tabela de histórico na interface
+    data_limite = datetime.utcnow() - timedelta(days=dias)
     
-    return {"status": "sucesso", "novo_saldo": produto.quantidade_atual}
+    # Busca o histórico e "costura" com o nome do produto e do motivo
+    movs = db.query(
+        models.MovimentacaoEstoque, 
+        models.Produto.nome.label("produto_nome"),
+        models.Produto.unidade_medida,
+        models.MotivoBaixa.descricao.label("motivo_descricao")
+    ).join(
+        models.Produto, models.MovimentacaoEstoque.produto_id == models.Produto.id
+    ).outerjoin(
+        models.MotivoBaixa, models.MovimentacaoEstoque.motivo_baixa_id == models.MotivoBaixa.id
+    ).filter(
+        models.MovimentacaoEstoque.cliente_id == cliente_id,
+        models.MovimentacaoEstoque.data_hora >= data_limite
+    ).order_by(models.MovimentacaoEstoque.data_hora.desc()).all()
+
+    resultados = []
+    for mov, prod_nome, un_medida, motivo_desc in movs:
+        resultados.append({
+            "id": mov.id,
+            "tipo": mov.tipo_movimento,
+            "produto": prod_nome,
+            "unidade": un_medida,
+            "quantidade": mov.quantidade,
+            "custo": mov.custo_unitario,
+            "motivo": motivo_desc if mov.tipo_movimento == "SAIDA" else "Nova Entrada",
+            "data": mov.data_hora.strftime("%d/%m/%Y %H:%M")
+        })
+    return resultados
 
 # 4. Endpoint: Relatório de Desperdício (A isca de vendas)
 @app.get("/relatorios/desperdicio")
