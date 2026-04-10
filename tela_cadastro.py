@@ -52,6 +52,10 @@ class TelaCadastro(QDialog):
         self.input_senha.setPlaceholderText("Criar Senha")
         self.input_senha.setEchoMode(QLineEdit.Password)
         layout.addWidget(self.input_senha)
+        self.input_senha_confirma = QLineEdit()
+        self.input_senha_confirma.setPlaceholderText("Confirmar Senha")
+        self.input_senha_confirma.setEchoMode(QLineEdit.Password)
+        layout.addWidget(self.input_senha_confirma)
         
         # --- INÍCIO: FEEDBACK VISUAL DA SENHA ---
         # Dispara a validação a cada tecla que o usuário digita
@@ -121,13 +125,24 @@ class TelaCadastro(QDialog):
     def fazer_cadastro(self):
         licenca = self.input_licenca.text().strip()
         cnpj_cru = self.input_cnpj.text().strip()
-        cnpj = re.sub(r'[^0-9]', '', cnpj_cru) # Tira os pontos da máscara para enviar só número pra API
+        cnpj = re.sub(r'[^0-9]', '', cnpj_cru)
         nome = self.input_nome.text().strip()
         login = self.input_login.text().strip()
         senha = self.input_senha.text()
+        senha_confirma = self.input_senha_confirma.text() # NOVA VARIÁVEL
 
-        if not all([licenca, cnpj, nome, login, senha]):
+        if not all([licenca, cnpj, nome, login, senha, senha_confirma]):
             QMessageBox.warning(self, "Erro", "Preencha todos os campos.")
+            return
+
+        # NOVA TRAVA 1: Senhas não batem
+        if senha != senha_confirma:
+            QMessageBox.warning(self, "Erro", "As senhas não coincidem.")
+            return
+            
+        # NOVA TRAVA 2: Senha igual ao login
+        if senha.lower() == login.lower():
+            QMessageBox.warning(self, "Segurança", "A senha não pode ser igual ao nome de usuário.")
             return
 
         # Validação de Senha (min 8 chars, 1 letra, 1 numero)

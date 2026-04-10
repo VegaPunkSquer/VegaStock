@@ -1,0 +1,483 @@
+import webbrowser
+import requests
+from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+                               QLineEdit, QPushButton, QMessageBox, QFrame, 
+                               QListWidget, QListWidgetItem, QCheckBox, QInputDialog, QDialog, QRadioButton, QButtonGroup)
+from PySide6.QtCore import Qt
+
+API_BASE_URL = "http://127.0.0.1:8000"
+
+class DialogUpgradePRO(QDialog):
+    def __init__(self, cliente_id):
+        super().__init__()
+        self.setWindowTitle("SaaS Restaurante - Calculadora SaaS")
+        self.setFixedSize(780, 420)
+        self.cliente_id = cliente_id
+        
+        # Tema Escuro Global da Janela
+        self.setStyleSheet("background-color: #1a1a1f; color: white; font-family: Arial;")
+
+        layout = QVBoxLayout(self)
+        
+        lbl_titulo = QLabel("Calculadora SaaS - Upgrade PRO")
+        lbl_titulo.setStyleSheet("font-size: 20px; font-weight: bold; border: none; margin-bottom: 10px;")
+        layout.addWidget(lbl_titulo)
+
+        # Layout horizontal para os 4 cartões
+        layout_cards = QHBoxLayout()
+        layout_cards.setSpacing(15)
+        
+        self.grupo_planos = QButtonGroup(self)
+        
+        # Dados: (Chave API, Título, Total, Por Mês, Economia, Destaque)
+        planos_info = [
+            ("MENSAL", "Mensal", "R$ 95,00", "R$ 95,00 /mês", "", False),
+            ("TRIMESTRAL", "Trimestral", "R$ 256,50", "R$ 85,50 /mês", "Economize R$ 28,50", False),
+            ("SEMESTRAL", "Semestral", "R$ 456,00", "R$ 76,00 /mês", "Economize R$ 114,00", False),
+            ("ANUAL", "Anual\n⭐️ MELHOR PREÇO", "R$ 684,00", "R$ 57,00 /mês", "Economize R$ 456,00", True)
+        ]
+        
+        self.chaves_api = []
+        
+        for i, (chave, titulo, total, por_mes, economia, destaque) in enumerate(planos_info):
+            frame = QFrame()
+            
+            # Condicionais de estilo para o cartão "Melhor Preço"
+            borda = "2px solid #5c85d6" if destaque else "1px solid #333"
+            bg_color = "#2b2b36" if destaque else "#25252c"
+            
+            frame.setStyleSheet(f"""
+                QFrame {{
+                    background-color: {bg_color};
+                    border: {borda};
+                    border-radius: 12px;
+                }}
+            """)
+            
+            card_layout = QVBoxLayout(frame)
+            card_layout.setContentsMargins(15, 20, 15, 20)
+            card_layout.setSpacing(10)
+            
+            # O RadioButton fica no topo do cartão
+            rb = QRadioButton(titulo)
+            # CSS avançado para pintar a bolinha de amarelo por dentro e por fora
+            rb.setStyleSheet("""
+                QRadioButton { font-size: 15px; font-weight: bold; border: none; padding-bottom: 5px; }
+                QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 2px solid #aaa; background-color: transparent; }
+                QRadioButton::indicator:checked { border: 2px solid #FFD700; background-color: #FFD700; }
+            """)
+            if i == 0: rb.setChecked(True)
+            self.grupo_planos.addButton(rb, i)
+            card_layout.addWidget(rb, alignment=Qt.AlignHCenter)
+            
+            lbl_sub = QLabel("Total do pacote:")
+            lbl_sub.setStyleSheet("color: #aaa; font-size: 11px; border: none;")
+            card_layout.addWidget(lbl_sub, alignment=Qt.AlignHCenter)
+            
+            lbl_total = QLabel(total)
+            lbl_total.setStyleSheet("font-size: 22px; font-weight: bold; border: none;")
+            card_layout.addWidget(lbl_total, alignment=Qt.AlignHCenter)
+            
+            lbl_mes = QLabel(por_mes)
+            lbl_mes.setStyleSheet("color: #aaa; font-size: 12px; border: none; margin-top: 15px;")
+            card_layout.addWidget(lbl_mes, alignment=Qt.AlignHCenter)
+            
+            # Rótulo verde de economia (só aparece se existir)
+            if economia:
+                lbl_eco = QLabel(economia)
+                lbl_eco.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold; border: none;")
+                card_layout.addWidget(lbl_eco, alignment=Qt.AlignHCenter)
+            else:
+                # Espaçador invisível para manter os cartões alinhados
+                lbl_vazio = QLabel()
+                lbl_vazio.setStyleSheet("border: none;")
+                card_layout.addWidget(lbl_vazio)
+                
+            layout_cards.addWidget(frame)
+            self.chaves_api.append(chave)
+            
+        layout.addLayout(layout_cards)
+        layout.addSpacing(15)
+
+        self.btn_pagar = QPushButton("GERAR PAGAMENTO SEGURO")
+        self.btn_pagar.setStyleSheet("background-color: #009EE3; color: white; font-weight: bold; padding: 15px; font-size: 14px; border-radius: 5px;")
+        self.btn_pagar.clicked.connect(self.abrir_pagamento)
+        layout.addWidget(self.btn_pagar)
+
+    def abrir_pagamento(self):
+        id_selecionado = self.grupo_planos.checkedId()
+        plano_txt = self.chaves_api[id_selecionado] # Pega "MENSAL", "ANUAL", etc.
+        
+        try:
+            resp = requests.post(f"{API_BASE_URL}/gerar_pagamento_pro", 
+                                 json={"cliente_id": self.cliente_id, "plano": plano_txt})
+            
+            if resp.status_code == 200:
+                link = resp.json().get("link_pagamento")
+                webbrowser.open(link)
+                QMessageBox.information(self, "Redirecionando...", "Abrimos o Mercado Pago no seu navegador.\nO PRO será liberado assim que o pagamento for processado!")
+                self.accept()
+            else:
+                QMessageBox.warning(self, "Erro na API", f"Status: {resp.status_code}\nDetalhe: {resp.text}")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro de Conexão", f"Servidor inacessível.\n{e}")
+
+    def processar_pagamento(self):
+        try:
+            resp = requests.put(f"{API_BASE_URL}/ativar_pro_automatizado", json={"cliente_id": self.cliente_id})
+            if resp.status_code == 200:
+                QMessageBox.information(self, "SUCESSO!", "Pagamento aprovado! Suas funções PRO foram liberadas.")
+                self.accept()
+        except:
+            QMessageBox.critical(self, "Erro", "Erro ao processar transação via API.")
+
+class AbaConfiguracoes(QWidget):
+    def __init__(self, cliente_dados):
+        super().__init__()
+        self.cliente_dados = cliente_dados
+        
+        layout_principal = QVBoxLayout(self)
+        layout_principal.setContentsMargins(20, 20, 20, 20)
+        layout_principal.setSpacing(15)
+
+        lbl_titulo = QLabel("Configurações do Sistema")
+        lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333;")
+        layout_principal.addWidget(lbl_titulo)
+
+        # ==========================================
+        # 1. NOTIFICAÇÕES (Global e PRO)
+        # ==========================================
+        frame_notif = QFrame()
+        frame_notif.setStyleSheet("background-color: #f0f8ff; border: 1px solid #b0c4de; border-radius: 5px;")
+        layout_notif = QVBoxLayout(frame_notif) # Mudamos para Vertical para caber a lista PRO
+
+        # Linha 1: Toggles Gerais
+        layout_linha1 = QHBoxLayout()
+        self.btn_toggle_notif = QPushButton("Notificações LIGADAS")
+        self.btn_toggle_notif.setCheckable(True)
+        self.btn_toggle_notif.setChecked(self.cliente_dados.get('receber_notificacoes', True))
+        self.btn_toggle_notif.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 6px;")
+        layout_linha1.addWidget(self.btn_toggle_notif)
+        
+        self.chk_som = QCheckBox("Emitir aviso sonoro")
+        self.chk_som.setChecked(True)
+        layout_linha1.addWidget(self.chk_som)
+        
+        layout_linha1.addStretch()
+        layout_notif.addLayout(layout_linha1)
+
+        # Linha 2: Limite Global
+        layout_linha2 = QHBoxLayout()
+        
+        lbl_avisar = QLabel("Avisar quando o estoque for menor que:")
+        lbl_avisar.setStyleSheet("color: #333; border: none;") # Força cor escura
+        layout_linha2.addWidget(lbl_avisar)
+        
+        self.input_limite_global = QLineEdit(str(self.cliente_dados.get('limite_global', 5.0)))
+        self.input_limite_global.setFixedWidth(50)
+        self.input_limite_global.setStyleSheet("color: #000; background-color: #fff; border: 1px solid #ccc; padding: 4px;")
+        layout_linha2.addWidget(self.input_limite_global)
+        
+        lbl_unidades = QLabel("unidades (Geral)")
+        lbl_unidades.setStyleSheet("color: #333; border: none;") # Força cor escura
+        layout_linha2.addWidget(lbl_unidades)
+        
+        btn_salvar_global = QPushButton("Salvar Regra Geral")
+        btn_salvar_global.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 6px 12px; border-radius: 4px;")
+        btn_salvar_global.clicked.connect(self.salvar_config_global)
+        layout_linha2.addWidget(btn_salvar_global)
+        
+        layout_linha2.addStretch()
+        layout_notif.addLayout(layout_linha2)
+
+        # Linha 3: Ativador PRO
+        self.btn_toggle_pro = QPushButton("Habilitar limites individuais por Produto (PRO 👑)")
+        self.btn_toggle_pro.setCheckable(True)
+        self.btn_toggle_pro.setStyleSheet("background-color: #FFD700; color: #000; padding: 8px; font-weight: bold; border: 1px solid #E6C200; border-radius: 4px;")
+        self.btn_toggle_pro.clicked.connect(self.verificar_assinatura_pro)
+        layout_notif.addWidget(self.btn_toggle_pro)
+
+        # Área PRO: Lista de produtos (Escondida por padrão)
+        self.area_lista_pro = QFrame()
+        self.area_lista_pro.setStyleSheet("background-color: #ffffff; border-top: 1px dashed #ccc;")
+        self.layout_lista_pro = QVBoxLayout(self.area_lista_pro)
+        self.area_lista_pro.hide()
+        layout_notif.addWidget(self.area_lista_pro)
+
+        layout_principal.addWidget(frame_notif)
+
+        # ==========================================
+        # 2. A PALAVRA MESTRA DE USO (Trava de Segurança)
+        # ==========================================
+        frame_uso = QFrame()
+        frame_uso.setStyleSheet("background-color: #fff3e0; border: 1px solid #ffcc80; border-radius: 5px;")
+        layout_uso = QHBoxLayout(frame_uso)
+        layout_uso.setContentsMargins(15, 15, 15, 15)
+
+        lbl_uso = QLabel("Palavra padrão para Saída Normal (Uso da Cozinha):")
+        lbl_uso.setStyleSheet("font-weight: bold; font-size: 13px; border: none; color: #d84315;")
+        layout_uso.addWidget(lbl_uso)
+
+        self.input_uso = QLineEdit()
+        self.input_uso.setPlaceholderText("Ex: Uso Interno")
+        self.input_uso.setStyleSheet("padding: 6px; border: 1px solid #ccc; background-color: #fff;")
+        layout_uso.addWidget(self.input_uso)
+
+        self.btn_salvar_uso = QPushButton("Salvar")
+        self.btn_salvar_uso.setStyleSheet("background-color: #FFD700; color: #000; font-weight: bold; padding: 6px;")
+        self.btn_salvar_uso.clicked.connect(self.salvar_motivo_uso)
+        layout_uso.addWidget(self.btn_salvar_uso)
+
+        self.btn_editar_uso = QPushButton("Alterar Palavra")
+        self.btn_editar_uso.setStyleSheet("background-color: #333; color: #fff; font-weight: bold; padding: 6px;")
+        self.btn_editar_uso.clicked.connect(self.abrir_popup_uso)
+        self.btn_editar_uso.hide() # Fica escondido até ele salvar a primeira vez
+        layout_uso.addWidget(self.btn_editar_uso)
+
+        layout_principal.addWidget(frame_uso)
+
+        # ==========================================
+        # 3. PAINÉIS LADO A LADO (Categorias e Perdas)
+        # ==========================================
+        layout_paineis = QHBoxLayout()
+        layout_paineis.setSpacing(20)
+
+        # PAINEL ESQUERDO: CATEGORIAS
+        frame_cat = QFrame()
+        frame_cat.setStyleSheet("background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px;")
+        layout_cat = QVBoxLayout(frame_cat)
+
+        lbl_cat_titulo = QLabel("1. Categorias do Cardápio")
+        lbl_cat_titulo.setStyleSheet("font-weight: bold; border: none;")
+        layout_cat.addWidget(lbl_cat_titulo)
+
+        layout_add_cat = QHBoxLayout()
+        self.input_nova_cat = QLineEdit()
+        self.input_nova_cat.setPlaceholderText("Ex: Hortifruti")
+        layout_add_cat.addWidget(self.input_nova_cat)
+        btn_add_cat = QPushButton("Adicionar")
+        btn_add_cat.setStyleSheet("background-color: #000; color: #fff; font-weight: bold;")
+        btn_add_cat.clicked.connect(self.adicionar_categoria)
+        layout_add_cat.addWidget(btn_add_cat)
+        layout_cat.addLayout(layout_add_cat)
+
+        self.lista_categorias = QListWidget()
+        layout_cat.addWidget(self.lista_categorias)
+
+        btn_del_cat = QPushButton("Excluir Categoria Selecionada")
+        btn_del_cat.setStyleSheet("color: red; font-weight: bold; border: 1px solid red;")
+        btn_del_cat.clicked.connect(self.deletar_categoria)
+        layout_cat.addWidget(btn_del_cat)
+
+        layout_paineis.addWidget(frame_cat)
+
+        # PAINEL DIREITO: MOTIVOS DE PERDA (Dinheiro pro Ralo)
+        frame_perda = QFrame()
+        frame_perda.setStyleSheet("background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px;")
+        layout_perda = QVBoxLayout(frame_perda)
+
+        lbl_perda_titulo = QLabel("2. Motivos de Desperdício/Perda")
+        lbl_perda_titulo.setStyleSheet("font-weight: bold; border: none;")
+        layout_perda.addWidget(lbl_perda_titulo)
+
+        layout_add_perda = QHBoxLayout()
+        self.input_nova_perda = QLineEdit()
+        self.input_nova_perda.setPlaceholderText("Ex: Passou da validade")
+        layout_add_perda.addWidget(self.input_nova_perda)
+        btn_add_perda = QPushButton("Adicionar")
+        btn_add_perda.setStyleSheet("background-color: #000; color: #fff; font-weight: bold;")
+        btn_add_perda.clicked.connect(self.adicionar_motivo_perda)
+        layout_add_perda.addWidget(btn_add_perda)
+        layout_perda.addLayout(layout_add_perda)
+
+        self.lista_perdas = QListWidget()
+        layout_perda.addWidget(self.lista_perdas)
+
+        btn_del_perda = QPushButton("Excluir Motivo Selecionado")
+        btn_del_perda.setStyleSheet("color: red; font-weight: bold; border: 1px solid red;")
+        btn_del_perda.clicked.connect(self.deletar_motivo)
+        layout_perda.addWidget(btn_del_perda)
+
+        layout_paineis.addWidget(frame_perda)
+        layout_principal.addLayout(layout_paineis)
+        
+        # Assinatura e Info
+        layout_app_info = QHBoxLayout()
+        lbl_app_dados = QLabel(f"SaaS Restaurante v1.0.0 | Cliente: {self.cliente_dados.get('nome_fantasia', '')}")
+        lbl_app_dados.setStyleSheet("color: #aaa; font-size: 10px; border: none;")
+        
+        lbl_dev = QLabel("Desenvolvido por Vega Studios")
+        lbl_dev.setStyleSheet("color: #aaa; font-size: 10px; font-weight: bold; border: none;")
+        
+        layout_app_info.addWidget(lbl_app_dados)
+        layout_app_info.addStretch()
+        layout_app_info.addWidget(lbl_dev)
+        layout_principal.addLayout(layout_app_info)
+        
+        self.carregar_listas()
+
+    # --- FUNÇÕES DE LÓGICA E CONEXÃO COM A API ---
+
+    def carregar_listas(self):
+        self.lista_categorias.clear()
+        self.lista_perdas.clear()
+        
+        try:
+            # Puxa Categorias
+            resp_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_dados['cliente_id']}")
+            if resp_cat.status_code == 200:
+                for cat in resp_cat.json():
+                    item = QListWidgetItem(cat["nome"])
+                    item.setData(Qt.UserRole, cat["id"]) # Esconde o ID real do banco no item
+                    self.lista_categorias.addItem(item)
+
+            # Puxa Motivos (Separa o de USO dos de PERDA)
+            resp_motivos = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_dados['cliente_id']}")
+            if resp_motivos.status_code == 200:
+                for mov in resp_motivos.json():
+                    if mov["tipo"] == "USO":
+                        self.travar_campo_uso(mov["descricao"])
+                    elif mov["tipo"] == "PERDA":
+                        item = QListWidgetItem(mov["descricao"])
+                        item.setData(Qt.UserRole, mov["id"])
+                        self.lista_perdas.addItem(item)
+        except:
+            pass
+
+    def travar_campo_uso(self, palavra):
+        self.input_uso.setText(palavra)
+        self.input_uso.setReadOnly(True)
+        self.input_uso.setStyleSheet("padding: 6px; border: 1px solid #ccc; background-color: #e0e0e0; color: #555;")
+        self.btn_salvar_uso.hide()
+        self.btn_editar_uso.show()
+
+    def salvar_motivo_uso(self, palavra_fornecida=None):
+        # Se veio do popup usa a palavra fornecida, senão pega do QLineEdit
+        palavra = palavra_fornecida if palavra_fornecida else self.input_uso.text().strip()
+        if not palavra:
+            return
+            
+        dados = {"cliente_id": self.cliente_dados['cliente_id'], "descricao": palavra, "tipo": "USO"}
+        try:
+            requests.post(f"{API_BASE_URL}/motivo_uso", json=dados)
+            self.travar_campo_uso(palavra)
+            QMessageBox.information(self, "Sucesso", "Palavra de Uso definida com sucesso!")
+        except Exception as e:
+            QMessageBox.warning(self, "Erro", "Falha ao salvar a palavra.")
+
+    def abrir_popup_uso(self):
+        nova_palavra, ok = QInputDialog.getText(self, "Alterar Palavra", "Digite a nova palavra para Saída Normal:")
+        if ok and nova_palavra.strip():
+            self.salvar_motivo_uso(nova_palavra.strip())
+
+    def adicionar_categoria(self):
+        nome = self.input_nova_cat.text().strip()
+        if not nome: return
+        dados = {"cliente_id": self.cliente_dados['cliente_id'], "nome": nome}
+        try:
+            requests.post(f"{API_BASE_URL}/categorias", json=dados)
+            self.input_nova_cat.clear()
+            self.carregar_listas()
+        except:
+            pass
+
+    def adicionar_motivo_perda(self):
+        descricao = self.input_nova_perda.text().strip()
+        if not descricao: return
+        dados = {"cliente_id": self.cliente_dados['cliente_id'], "descricao": descricao, "tipo": "PERDA"}
+        try:
+            requests.post(f"{API_BASE_URL}/motivos", json=dados)
+            self.input_nova_perda.clear()
+            self.carregar_listas()
+        except:
+            pass
+
+    def deletar_categoria(self):
+        item_selecionado = self.lista_categorias.currentItem()
+        if item_selecionado:
+            item_id = item_selecionado.data(Qt.UserRole)
+            requests.delete(f"{API_BASE_URL}/categorias/{item_id}")
+            self.carregar_listas()
+
+    def deletar_motivo(self):
+        item_selecionado = self.lista_perdas.currentItem()
+        if item_selecionado:
+            item_id = item_selecionado.data(Qt.UserRole)
+            requests.delete(f"{API_BASE_URL}/motivos/{item_id}")
+            self.carregar_listas()
+            
+    def salvar_config_global(self):
+        try:
+            dados = {
+                "cliente_id": self.cliente_dados['cliente_id'],
+                "receber_notificacoes": self.btn_toggle_notif.isChecked(),
+                "limite_global": float(self.input_limite_global.text())
+            }
+            response = requests.put(f"{API_BASE_URL}/atualizar_config_notificacoes", json=dados)
+            if response.status_code == 200:
+                QMessageBox.information(self, "Sucesso", "Regra geral de notificação atualizada!")
+        except:
+            QMessageBox.warning(self, "Erro", "Verifique o valor do limite digitado.")
+
+    def verificar_assinatura_pro(self):
+        status = self.cliente_dados.get('status_assinatura', 'Ativo')
+        
+        if status != "PRO":
+            # Desmarca o botão imediatamente, pois ele ainda não é PRO
+            self.btn_toggle_pro.setChecked(False) 
+            
+            # Abre a janela de vendas (Pode ser aberta infinitas vezes agora)
+            dialog = DialogUpgradePRO(self.cliente_dados['cliente_id'])
+            dialog.exec() 
+        else:
+            # Se ele JÁ É PRO no banco de dados
+            if self.btn_toggle_pro.isChecked():
+                self.area_lista_pro.show()
+                self.carregar_produtos_pro()
+            else:
+                self.area_lista_pro.hide()
+
+    def carregar_produtos_pro(self):
+        # Limpa o layout antes de carregar
+        for i in reversed(range(self.layout_lista_pro.count())): 
+            self.layout_lista_pro.itemAt(i).widget().setParent(None)
+
+        try:
+            # Busca todos os produtos do cliente
+            response = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_dados['cliente_id']})
+            if response.status_code == 200:
+                produtos = response.json()
+                for prod in produtos:
+                    linha = QHBoxLayout()
+                    lbl = QLabel(f"{prod['nome']} ({prod['unidade_medida']}):")
+                    lbl.setFixedWidth(150)
+                    input_lim = QLineEdit(str(prod.get('estoque_minimo', 0)))
+                    input_lim.setFixedWidth(50)
+                    
+                    btn_save = QPushButton("✓")
+                    btn_save.setFixedWidth(30)
+                    # Conexão direta passando os dados
+                    btn_save.clicked.connect(lambda chk, p_id=prod['id'], inp=input_lim: self.salvar_limite_individual(p_id, inp))
+                    
+                    linha.addWidget(lbl)
+                    linha.addWidget(input_lim)
+                    linha.addWidget(btn_save)
+                    linha.addStretch()
+                    
+                    widget_linha = QWidget()
+                    widget_linha.setLayout(linha)
+                    self.layout_lista_pro.addWidget(widget_linha)
+        except:
+            pass
+
+    def salvar_limite_individual(self, produto_id, input_widget):
+        try:
+            dados = {
+                "produto_id": produto_id,
+                "cliente_id": self.cliente_dados['cliente_id'],
+                "estoque_minimo": float(input_widget.text())
+            }
+            requests.put(f"{API_BASE_URL}/atualizar_limite_produto", json=dados)
+            input_widget.setStyleSheet("background-color: #c8e6c9;") # Feedback de salvo (verde)
+        except:
+            QMessageBox.warning(self, "Erro", "Valor inválido.")

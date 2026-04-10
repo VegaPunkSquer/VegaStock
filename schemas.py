@@ -38,3 +38,58 @@ class CadastroRequest(BaseModel):
 class LoginRequest(BaseModel):
     login: str
     senha: str
+    
+class RecuperacaoRequest(BaseModel):
+    cnpj: str
+    token_licenca: str
+    nova_senha: str
+    
+class VerificarLicencaRequest(BaseModel):
+    cnpj: str
+    token_licenca: str
+    
+class AtualizarPerfilRequest(BaseModel):
+    cliente_id: int
+    nome_fantasia: str
+    logo_url: str
+
+class AtualizarSenhaRequest(BaseModel):
+    cliente_id: int
+    senha_atual: str
+    nova_senha: str
+    
+class CategoriaCreate(BaseModel):
+    cliente_id: int
+    nome: str
+
+class CategoriaResponse(BaseModel):
+    id: int
+    nome: str
+    class Config:
+        from_attributes = True
+
+class MotivoCreate(BaseModel):
+    cliente_id: int
+    descricao: str
+    tipo: str
+
+class MotivoResponse(BaseModel):
+    id: int
+    descricao: str
+    tipo: str
+    class Config:
+        from_attributes = True
+        
+class AtualizarConfigNotifRequest(BaseModel):
+    cliente_id: int
+    receber_notificacoes: bool
+    limite_global: float
+
+class AtualizarLimiteProdutoRequest(BaseModel):
+    produto_id: int
+    cliente_id: int
+    estoque_minimo: float
+    
+class PagamentoPRORequest(BaseModel):
+    cliente_id: int
+    plano: str

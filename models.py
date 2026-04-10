@@ -10,23 +10,14 @@ class Cliente(Base):
     logo_url = Column(String, nullable=True)
     status_assinatura = Column(String, default="Ativo")
     receber_notificacoes = Column(Boolean, default=True) # Gatilho para a aba de Configurações
+    limite_global_notificacao = Column(Float, default=5.0) # Valor padrão global
+    validade_pro = Column(DateTime, nullable=True) # Data em que o acesso PRO expira
 
 class CategoriaProduto(Base):
     __tablename__ = "categorias_produto"
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("clientes.id"))
     nome = Column(String)
-
-class Produto(Base):
-    __tablename__ = "produtos"
-    id = Column(Integer, primary_key=True, index=True)
-    cliente_id = Column(Integer, ForeignKey("clientes.id"))
-    categoria_id = Column(Integer, ForeignKey("categorias_produto.id"))
-    nome = Column(String)
-    unidade_medida = Column(String)
-    quantidade_atual = Column(Float, default=0.0)
-    estoque_minimo = Column(Float, default=0.0)
-    custo_medio = Column(Float, default=0.0)
 
 class MotivoBaixa(Base):
     __tablename__ = "motivos_baixa"

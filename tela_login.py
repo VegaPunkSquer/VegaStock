@@ -1,5 +1,6 @@
 import requests
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
+from PySide6.QtCore import Qt
 
 API_BASE_URL = "http://127.0.0.1:8000"
 
@@ -11,7 +12,8 @@ class TelaLogin(QDialog):
         
         # Variáveis para devolver ao app.py
         self.cliente_dados = None
-        self.ir_para_cadastro = False 
+        self.ir_para_cadastro = False
+        self.ir_para_recuperacao = False
 
         layout = QVBoxLayout()
 
@@ -37,8 +39,19 @@ class TelaLogin(QDialog):
         # Botão preto normal, por isso não tem objectName
         self.btn_cadastrar.clicked.connect(self.abrir_cadastro)
         layout.addWidget(self.btn_cadastrar)
+        
+        self.btn_esqueci = QPushButton("Esqueci minha senha")
+        self.btn_esqueci.setStyleSheet("background-color: transparent; color: gray; text-decoration: underline; border: none;")
+        self.btn_esqueci.clicked.connect(self.abrir_recuperacao)
+        layout.addWidget(self.btn_esqueci)
 
         self.setLayout(layout)
+        
+        # Assinatura Vega
+        lbl_assinatura = QLabel("Desenvolvido por Vega | v1.0.0")
+        lbl_assinatura.setAlignment(Qt.AlignCenter)
+        lbl_assinatura.setStyleSheet("color: #888; font-size: 10px; margin-top: 10px; border: none;")
+        layout.addWidget(lbl_assinatura)
 
     def fazer_login(self):
         login = self.input_login.text()
@@ -55,7 +68,11 @@ class TelaLogin(QDialog):
                 self.cliente_dados = response.json()
                 self.accept() # Fecha com sucesso
             else:
-                erro = response.json().get("detail", "Erro desconhecido")
+                try:
+                    erro = response.json().get("detail", "Erro desconhecido")
+                except:
+                    # Se a API der Erro 500 e não mandar JSON, cai aqui em vez de quebrar o App
+                    erro = f"Erro interno de comunicação com o servidor (Status {response.status_code})."
                 QMessageBox.warning(self, "Acesso Negado", erro)
         except requests.exceptions.ConnectionError:
             QMessageBox.critical(self, "Erro Fatal", "Não foi possível conectar à API.")
@@ -63,3 +80,7 @@ class TelaLogin(QDialog):
     def abrir_cadastro(self):
         self.ir_para_cadastro = True
         self.reject() # Fecha a tela de login avisando o app.py para abrir o Cadastro
+        
+    def abrir_recuperacao(self):
+        self.ir_para_recuperacao = True
+        self.reject()

@@ -25,6 +25,8 @@ class MaquinaVendas(QWidget):
         self.input_cnpj = QLineEdit()
         self.input_cnpj.setInputMask("99.999.999/9999-99") # Máscara visual nativa do Qt
         layout.addWidget(self.input_cnpj)
+        # Permite apertar Enter para gerar
+        self.input_cnpj.returnPressed.connect(self.gerar_licenca)
         
         self.btn_gerar = QPushButton("Gerar Licença de 48h")
         self.btn_gerar.setStyleSheet("background-color: #FFD700; color: #000000; font-weight: bold; padding: 8px;")
@@ -35,10 +37,20 @@ class MaquinaVendas(QWidget):
         self.lbl_resultado.setStyleSheet("font-size: 12px; font-weight: bold; color: green;")
         layout.addWidget(self.lbl_resultado)
         
+        from PySide6.QtWidgets import QHBoxLayout # Adiciona o layout horizontal para alinhar o botão
+        layout_copiar = QHBoxLayout()
+        
         self.input_token_gerado = QLineEdit()
-        self.input_token_gerado.setReadOnly(True) # O tio só pode copiar, não editar
+        self.input_token_gerado.setReadOnly(True)
         self.input_token_gerado.setPlaceholderText("O código da licença aparecerá aqui")
-        layout.addWidget(self.input_token_gerado)
+        
+        self.btn_copiar = QPushButton("Copiar")
+        self.btn_copiar.setStyleSheet("background-color: #000000; color: #FFFFFF; font-weight: bold;")
+        self.btn_copiar.clicked.connect(self.copiar_licenca)
+        
+        layout_copiar.addWidget(self.input_token_gerado)
+        layout_copiar.addWidget(self.btn_copiar)
+        layout.addLayout(layout_copiar)
         
         self.setLayout(layout)
 
@@ -78,6 +90,13 @@ class MaquinaVendas(QWidget):
             
         except Exception as e:
             QMessageBox.critical(self, "Erro Fatal", f"Erro ao salvar no banco: {str(e)}")
+            
+    def copiar_licenca(self):
+        texto = self.input_token_gerado.text()
+        if texto:
+            QApplication.clipboard().setText(texto)
+            self.btn_copiar.setText("Copiado!")
+            self.btn_copiar.setStyleSheet("background-color: green; color: white; font-weight: bold;")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
