@@ -3,7 +3,7 @@ import requests
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "https://vegastock.onrender.com"
 
 class TelaRecuperacao(QDialog):
     def __init__(self):

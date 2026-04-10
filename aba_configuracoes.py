@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QListWidget, QListWidgetItem, QCheckBox, QInputDialog, QDialog, QRadioButton, QButtonGroup)
 from PySide6.QtCore import Qt, QTimer
 
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "https://vegastock.onrender.com"
 
 class DialogUpgradePRO(QDialog):
     def __init__(self, cliente_id):

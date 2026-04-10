@@ -8,7 +8,7 @@ from PySide6.QtCore import Qt
 # IMPORTANTE: Importa a janela de vendas lá do seu arquivo de configurações!
 from aba_configuracoes import DialogUpgradePRO 
 
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "https://vegastock.onrender.com"
 
 class AbaEquipe(QWidget):
     def __init__(self, cliente_dados):

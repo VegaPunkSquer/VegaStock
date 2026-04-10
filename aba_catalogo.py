@@ -4,7 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineE
                                QHeaderView, QMessageBox, QGroupBox, QFormLayout, QAbstractItemView, QInputDialog)
 from PySide6.QtCore import Qt
 
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "https://vegastock.onrender.com"
 
 class AbaCatalogo(QWidget):
     def __init__(self, cliente_dados):

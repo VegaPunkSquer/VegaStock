@@ -3,7 +3,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButt
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QIcon
 
-API_BASE_URL = "http://127.0.0.1:8000"
+API_BASE_URL = "https://vegastock.onrender.com"
 
 class TelaLogin(QDialog):
     def __init__(self):
