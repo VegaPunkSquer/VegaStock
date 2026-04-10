@@ -1,5 +1,5 @@
 from datetime import timedelta
-from fastapi import FastAPI, Request, Depends, HTTPException
+from fastapi import FastAPI, Request, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from typing import List
 from datetime import datetime
@@ -9,12 +9,24 @@ import models
 import schemas
 import hashlib
 import requests
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 
 app = FastAPI(title="SaaS Restaurante - Estoque API")
 
-# Chave do Sandbox do Asaas (Cole a sua aqui)
-ASAAS_API_KEY = "$aact_hmlg_000MzkwODA2MWY2OGM3MWRlMDU2NWM3MzJlNzZmNGZhZGY6OmY5NzA0MzRjLTY4NjUtNDNmOS1iN2U1LTk1MmMyYmRlYjVkYTo6JGFhY2hfZDgzODYwMzEtMjIyNy00NDg2LTkzZGMtMzQ3OWM5OTM1Njk3"
-ASAAS_URL = "https://sandbox.asaas.com/api/v3"
+# Carrega o cofre invisível (.env)
+load_dotenv() 
+
+# Puxa a chave de dentro do cofre
+ASAAS_API_KEY = os.getenv("ASAAS_API_KEY")
+ASAAS_WEBHOOK_TOKEN = os.getenv("ASAAS_WEBHOOK_TOKEN")
+
+# Mantém a URL (Quando for pra valer, é só apagar a palavra 'sandbox.' daqui)
+ASAAS_URL = "https://api.asaas.com/v3"
+
+# Mantém os Headers porque a requisição lá embaixo precisa deles
 HEADERS = {
     "access_token": ASAAS_API_KEY,
     "Content-Type": "application/json"
@@ -686,3 +698,44 @@ def atualizar_conta_funcionario(dados: dict, db: Session = Depends(get_db)):
         
     db.commit()
     return {"mensagem": "Conta atualizada com sucesso!"}
+
+# ==========================================
+# ROTA: RADAR DE PAGAMENTO (Para o App)
+# ==========================================
+@app.get("/status_assinatura/{cliente_id}")
+def checar_status_assinatura(cliente_id: int, db: Session = Depends(get_db)):
+    cliente = db.query(models.Cliente).filter(models.Cliente.id == cliente_id).first()
+    if cliente:
+        return {"status": cliente.status_assinatura}
+    return {"status": "Normal"}
+
+# ==========================================
+# ROTA: WEBHOOK DO ASAAS (Recebe a confirmação de pagamento)
+# ==========================================
+@app.post("/webhook/asaas")
+async def asaas_webhook(request: Request, asaas_access_token: str = Header(None), db: Session = Depends(get_db)):
+    
+    # 1. Barreira de Segurança: Verifica se foi o Asaas mesmo que mandou
+    if asaas_access_token != ASAAS_WEBHOOK_TOKEN:
+        raise HTTPException(status_code=403, detail="Token de Webhook inválido. Acesso Negado.")
+
+    # 2. Lê a mensagem JSON que o Asaas mandou
+    payload = await request.json()
+    evento = payload.get("event")
+
+    # 3. Se for um evento de dinheiro na conta
+    if evento in ["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]:
+        pagamento = payload.get("payment", {})
+        
+        # Pega a identificação de qual cliente pagou (vem do externalReference)
+        cliente_id_str = pagamento.get("externalReference")
+
+        if cliente_id_str:
+            cliente = db.query(models.Cliente).filter(models.Cliente.id == int(cliente_id_str)).first()
+            if cliente:
+                # A MÁGICA ACONTECE AQUI: Carimba o banco de dados como PRO
+                cliente.status_assinatura = "PRO"
+                db.commit()
+
+    # O Asaas exige que a gente responda algo para ele saber que a mensagem chegou, senão ele fica reenviando
+    return {"status": "recebido"}

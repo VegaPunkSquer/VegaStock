@@ -3,7 +3,7 @@ import requests
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QFrame, 
                                QListWidget, QListWidgetItem, QCheckBox, QInputDialog, QDialog, QRadioButton, QButtonGroup)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 
 API_BASE_URL = "http://127.0.0.1:8000"
 
@@ -103,6 +103,10 @@ class DialogUpgradePRO(QDialog):
         self.btn_pagar.setStyleSheet("background-color: #009EE3; color: white; font-weight: bold; padding: 15px; font-size: 14px; border-radius: 5px;")
         self.btn_pagar.clicked.connect(self.abrir_pagamento)
         layout.addWidget(self.btn_pagar)
+        
+        # O Radar que vai verificar o PIX
+        self.timer_pagamento = QTimer(self)
+        self.timer_pagamento.timeout.connect(self.checar_se_ficou_pro)
 
     def abrir_pagamento(self):
         id_selecionado = self.grupo_planos.checkedId()
@@ -115,12 +119,28 @@ class DialogUpgradePRO(QDialog):
             if resp.status_code == 200:
                 link = resp.json().get("link_pagamento")
                 webbrowser.open(link)
-                QMessageBox.information(self, "Redirecionando...", "Abrimos o Mercado Pago no seu navegador.\nO PRO será liberado assim que o pagamento for processado!")
-                self.accept()
+                
+                # Muda a cara do botão e trava ele
+                self.btn_pagar.setText("⏳ AGUARDANDO PAGAMENTO...")
+                self.btn_pagar.setStyleSheet("background-color: #555; color: white; font-weight: bold; padding: 15px; font-size: 14px; border-radius: 5px;")
+                self.btn_pagar.setEnabled(False)
+                
+                # LIGA O RADAR: Bate na sua API a cada 3 segundos (3000 ms)
+                self.timer_pagamento.start(3000)
             else:
                 QMessageBox.warning(self, "Erro na API", f"Status: {resp.status_code}\nDetalhe: {resp.text}")
         except Exception as e:
             QMessageBox.critical(self, "Erro de Conexão", f"Servidor inacessível.\n{e}")
+            
+    def checar_se_ficou_pro(self):
+        try:
+            resp = requests.get(f"{API_BASE_URL}/status_assinatura/{self.cliente_id}")
+            if resp.status_code == 200 and resp.json().get("status") == "PRO":
+                self.timer_pagamento.stop() # Desliga o radar
+                QMessageBox.information(self, "PAGAMENTO APROVADO!", "A mágica aconteceu! Bem-vindo à Elite. O sistema foi destrancado.")
+                self.accept() # Fecha a janela sozinha
+        except:
+            pass # Se a API engasgar, fica quieto e tenta de novo no próximo pulso
 
     def processar_pagamento(self):
         try:
