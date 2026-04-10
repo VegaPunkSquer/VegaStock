@@ -7,7 +7,7 @@ API_BASE_URL = "http://127.0.0.1:8000"
 class TelaLogin(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SaaS Restaurante - Login")
+        self.setWindowTitle("VegaStock - Sistema de Estoque - Login")
         self.setFixedSize(300, 250)
         
         # Variáveis para devolver ao app.py

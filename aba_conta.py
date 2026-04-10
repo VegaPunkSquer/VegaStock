@@ -19,7 +19,7 @@ class AbaConta(QWidget):
         # Título da Aba
         lbl_titulo = QLabel("Configurações da Conta")
         lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333;")
-        layout_principal.addWidget(lbl_titulo)
+        layout_principal.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
 
         # --- BLOCO 1: INFORMAÇÕES E LOGO ---
         self.caminho_logo_temporario = self.cliente_dados.get('logo_url', '')

@@ -9,7 +9,7 @@ API_BASE_URL = "http://127.0.0.1:8000"
 class TelaCadastro(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("SaaS Restaurante - Novo Cadastro")
+        self.setWindowTitle("VegaStock - Sistema de Estoque - Novo Cadastro")
         self.setFixedSize(350, 550)
 
         layout = QVBoxLayout()

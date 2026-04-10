@@ -16,9 +16,9 @@ class AbaDashboard(QWidget):
         # Cabeçalho Boas-Vindas
         self.lbl_boas_vindas = QLabel(f"Olá, {self.cliente_dados.get('login_usuario', 'usuário')}!")
         self.lbl_boas_vindas.setStyleSheet("font-size: 26px; font-weight: bold; color: #333;")
-        layout_principal.addWidget(self.lbl_boas_vindas)
+        layout_principal.addWidget(self.lbl_boas_vindas, alignment=Qt.AlignCenter)
         
-        lbl_sub = QLabel("Aqui está o resumo do seu negócio agora.")
+        lbl_sub = QLabel("Aqui está o resumo do seu negócio e os alertas mais importantes para o dia.")
         lbl_sub.setStyleSheet("font-size: 14px; color: #777; margin-bottom: 20px;")
         layout_principal.addWidget(lbl_sub)
 

@@ -22,7 +22,7 @@ class MainWindow(QMainWindow):
     def __init__(self, cliente_dados):
         super().__init__()
         self.cliente_dados = cliente_dados
-        self.setWindowTitle(f"Controle de Estoque - {self.cliente_dados['nome_fantasia']}")
+        self.setWindowTitle(f"VegaStock - Gerenciamento de Estoque - {self.cliente_dados['nome_fantasia']}")
         self.resize(900, 600)
 
         central_widget = QWidget()

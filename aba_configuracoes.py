@@ -10,7 +10,7 @@ API_BASE_URL = "http://127.0.0.1:8000"
 class DialogUpgradePRO(QDialog):
     def __init__(self, cliente_id):
         super().__init__()
-        self.setWindowTitle("SaaS Restaurante - Calculadora SaaS")
+        self.setWindowTitle("VegaStock - Sistema de Estoque - Upgrade de conta PRO")
         self.setFixedSize(780, 420)
         self.cliente_id = cliente_id
         
@@ -19,8 +19,8 @@ class DialogUpgradePRO(QDialog):
 
         layout = QVBoxLayout(self)
         
-        lbl_titulo = QLabel("Calculadora SaaS - Upgrade PRO")
-        lbl_titulo.setStyleSheet("font-size: 20px; font-weight: bold; border: none; margin-bottom: 10px;")
+        lbl_titulo = QLabel("VegaStock - Sistema de Estoque - Upgrade PRO")
+        lbl_titulo.setStyleSheet("font-size: 20px; font-weight: bold; border: none; margin-bottom: 10px; align-self: center;")
         layout.addWidget(lbl_titulo)
 
         # Layout horizontal para os 4 cartões
@@ -162,7 +162,7 @@ class AbaConfiguracoes(QWidget):
 
         lbl_titulo = QLabel("Configurações do Sistema")
         lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333;")
-        layout_principal.addWidget(lbl_titulo)
+        layout_principal.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
 
         # ==========================================
         # 1. NOTIFICAÇÕES (Global e PRO)

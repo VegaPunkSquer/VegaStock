@@ -14,7 +14,7 @@ class AbaCatalogo(QWidget):
 
         lbl_titulo = QLabel("Catálogo de Produtos")
         lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333; margin-bottom: 10px;")
-        layout_principal.addWidget(lbl_titulo)
+        layout_principal.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
 
         # =================================================================
         # 1. SUBSTITUA O QGROUPBOX DO CADASTRO (CSS AGRESSIVO) E COMBO_UNIDADE

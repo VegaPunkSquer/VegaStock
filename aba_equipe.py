@@ -21,13 +21,17 @@ class AbaEquipe(QWidget):
 
         lbl_titulo = QLabel("Gestão de Equipe e Permissões")
         lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333; margin-bottom: 10px;")
-        layout_principal.addWidget(lbl_titulo)
+        layout_principal.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
 
         # ==========================================
         # TELA 1: BLOQUEIO PRO (A Isca)
         # ==========================================
         self.frame_bloqueado = QFrame()
         layout_bloq = QVBoxLayout(self.frame_bloqueado)
+
+        # 1. Adicione um stretch no topo (valor 1) para empurrar para baixo
+        layout_bloq.addStretch(1)
+        
         layout_bloq.setAlignment(Qt.AlignCenter)
         
         lbl_lock = QLabel("🔒")
@@ -47,6 +51,9 @@ class AbaEquipe(QWidget):
         btn_liberar.setStyleSheet("background-color: #FFD700; color: #000; font-weight: bold; font-size: 16px; padding: 15px 30px; border-radius: 5px; border: 1px solid #E6C200;")
         btn_liberar.clicked.connect(self.abrir_vendas_pro)
         layout_bloq.addWidget(btn_liberar, alignment=Qt.AlignCenter)
+
+        # 2. Adicione um stretch maior no fundo (valor 2) para empurrar tudo para CIMA
+        layout_bloq.addStretch(2)
 
         layout_principal.addWidget(self.frame_bloqueado)
 
