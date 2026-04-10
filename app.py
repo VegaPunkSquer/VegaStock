@@ -120,7 +120,7 @@ class MainWindow(QMainWindow):
         self.area_central = QStackedWidget()
         self.area_central.setStyleSheet("border: none;")
         
-        self.aba_dash = AbaDashboard()
+        self.aba_dash = AbaDashboard(self.cliente_dados)
         self.aba_cat = AbaCatalogo(self.cliente_dados)
         self.aba_est = AbaEstoque(self.cliente_dados)
         self.aba_rel = AbaRelatorios(self.cliente_dados)

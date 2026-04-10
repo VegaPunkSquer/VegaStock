@@ -276,6 +276,7 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
         "status": "sucesso",
         "cliente_id": cliente.id,
         "nome_fantasia": cliente.nome_fantasia,
+        "login_usuario": usuario.login,
         "nivel_acesso": usuario.nivel_acesso,
         "logo_url": cliente.logo_url,  # <-- ESSA É A LINHA QUE FALTAVA
         "status_assinatura": cliente.status_assinatura, # Para saber se é PRO
@@ -565,3 +566,51 @@ def deletar_unidade(item_id: int, db: Session = Depends(get_db)):
         db.delete(item)
         db.commit()
     return {"mensagem": "Unidade deletada com sucesso!"}
+
+# ==========================================
+# ROTA: DASHBOARD (RESUMO GERAL)
+# ==========================================
+@app.get("/dashboard/resumo/{cliente_id}")
+def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
+    # 1. Busca todos os produtos do cliente
+    produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
+    
+    patrimonio_total = 0.0
+    itens_abaixo_minimo = []
+    total_itens_estoque = len(produtos)
+
+    for p in produtos:
+        # Soma o valor total parado (Qtd Atual * Custo Médio)
+        valor_produto = p.quantidade_atual * p.custo_medio
+        patrimonio_total += valor_produto
+        
+        # Verifica Alerta de Estoque Mínimo
+        if p.quantidade_atual < p.estoque_minimo:
+            itens_abaixo_minimo.append({
+                "id": p.id,
+                "nome": p.nome,
+                "qtd_atual": p.quantidade_atual,
+                "qtd_minima": p.estoque_minimo,
+                "unidade": p.unidade_medida
+            })
+
+    # 2. Busca movimentações de HOJE (Entradas vs Saídas) para o gráfico/resumo
+    hoje_inicio = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    movs_hoje = db.query(models.MovimentacaoEstoque).filter(
+        models.MovimentacaoEstoque.cliente_id == cliente_id,
+        models.MovimentacaoEstoque.data_hora >= hoje_inicio
+    ).all()
+
+    entradas_hoje = sum(m.quantidade for m in movs_hoje if m.tipo_movimento == "ENTRADA")
+    saidas_hoje = sum(m.quantidade for m in movs_hoje if m.tipo_movimento == "SAIDA")
+
+    return {
+        "patrimonio_rs": round(patrimonio_total, 2),
+        "total_produtos": total_itens_estoque,
+        "alertas_criticos_qtd": len(itens_abaixo_minimo),
+        "lista_compras": itens_abaixo_minimo, # Os produtos que o Tio precisa repor
+        "movimento_hoje": {
+            "entradas": entradas_hoje,
+            "saidas": saidas_hoje
+        }
+    }
