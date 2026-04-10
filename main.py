@@ -400,3 +400,78 @@ async def webhook_asaas(request: Request, db: Session = Depends(get_db)):
                 db.commit()
 
     return {"status": "recebido"}
+
+@app.post("/produtos")
+def criar_produto(dados: schemas.ProdutoCreate, db: Session = Depends(get_db)):
+    novo_produto = models.Produto(
+        cliente_id=dados.cliente_id,
+        nome=dados.nome,
+        categoria_id=dados.categoria_id,
+        unidade_medida=dados.unidade_medida,
+        estoque_minimo=dados.estoque_minimo
+    )
+    db.add(novo_produto)
+    db.commit()
+    return {"mensagem": "Produto criado com sucesso!"}
+
+@app.delete("/produtos/{produto_id}")
+def deletar_produto(produto_id: int, db: Session = Depends(get_db)):
+    produto = db.query(models.Produto).filter(models.Produto.id == produto_id).first()
+    if produto:
+        db.delete(produto)
+        db.commit()
+    return {"mensagem": "Produto deletado com sucesso!"}
+
+# ==========================================
+# ROTAS: UNIDADES DE MEDIDA
+# ==========================================
+@app.get("/unidades/{cliente_id}", response_model=List[schemas.UnidadeResponse])
+def listar_unidades(cliente_id: int, db: Session = Depends(get_db)):
+    unidades = db.query(models.UnidadeMedida).filter(models.UnidadeMedida.cliente_id == cliente_id).all()
+    
+    # Semente Automática: Se o cliente não tem unidades, cria as padrões agora.
+    if not unidades:
+        padroes = ["kg", "litro", "unidade", "caixa", "maço", "gramas", "ml"]
+        for p in padroes:
+            db.add(models.UnidadeMedida(cliente_id=cliente_id, nome=p))
+        db.commit()
+        unidades = db.query(models.UnidadeMedida).filter(models.UnidadeMedida.cliente_id == cliente_id).all()
+        
+    return unidades
+
+@app.post("/unidades")
+def criar_unidade(dados: schemas.UnidadeCreate, db: Session = Depends(get_db)):
+    # Transforma tudo em minúsculo para padronizar (anti-idiota)
+    nome_formatado = dados.nome.strip().lower()
+    
+    # Verifica se já existe para este cliente
+    existe = db.query(models.UnidadeMedida).filter(
+        models.UnidadeMedida.cliente_id == dados.cliente_id,
+        models.UnidadeMedida.nome == nome_formatado
+    ).first()
+    
+    if existe:
+        raise HTTPException(status_code=400, detail="Esta unidade já está cadastrada.")
+        
+    nova_unidade = models.UnidadeMedida(cliente_id=dados.cliente_id, nome=nome_formatado)
+    db.add(nova_unidade)
+    db.commit()
+    return {"mensagem": "Unidade criada com sucesso!"}
+
+@app.put("/unidades/{item_id}")
+def editar_unidade(item_id: int, dados: schemas.UnidadeUpdate, db: Session = Depends(get_db)):
+    item = db.query(models.UnidadeMedida).filter(models.UnidadeMedida.id == item_id).first()
+    if not item:
+        raise HTTPException(status_code=404, detail="Unidade não encontrada.")
+        
+    item.nome = dados.nome.strip().lower()
+    db.commit()
+    return {"mensagem": "Unidade editada com sucesso!"}
+
+@app.delete("/unidades/{item_id}")
+def deletar_unidade(item_id: int, db: Session = Depends(get_db)):
+    item = db.query(models.UnidadeMedida).filter(models.UnidadeMedida.id == item_id).first()
+    if item:
+        db.delete(item)
+        db.commit()
+    return {"mensagem": "Unidade deletada com sucesso!"}

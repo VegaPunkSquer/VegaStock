@@ -14,11 +14,20 @@ class ClienteConfig(BaseModel):
 class ProdutoResponse(BaseModel):
     id: int
     nome: str
+    categoria_id: Optional[int] = None
     unidade_medida: str
+    estoque_minimo: float
     quantidade_atual: float
 
     class Config:
         from_attributes = True
+
+class ProdutoCreate(BaseModel):
+    cliente_id: int
+    nome: str
+    categoria_id: int
+    unidade_medida: str
+    estoque_minimo: float
 
 # Schema que o PySide vai ENVIAR para dar a baixa
 class MovimentacaoCreate(BaseModel):
@@ -93,3 +102,16 @@ class AtualizarLimiteProdutoRequest(BaseModel):
 class PagamentoPRORequest(BaseModel):
     cliente_id: int
     plano: str
+    
+class UnidadeCreate(BaseModel):
+    cliente_id: int
+    nome: str
+
+class UnidadeUpdate(BaseModel):
+    nome: str
+
+class UnidadeResponse(BaseModel):
+    id: int
+    nome: str
+    class Config:
+        from_attributes = True

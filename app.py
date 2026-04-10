@@ -121,7 +121,7 @@ class MainWindow(QMainWindow):
         self.area_central.setStyleSheet("border: none;")
         
         self.aba_dash = AbaDashboard()
-        self.aba_cat = AbaCatalogo()
+        self.aba_cat = AbaCatalogo(self.cliente_dados)
         self.aba_est = AbaEstoque()
         self.aba_rel = AbaRelatorios()
         self.aba_eqp = AbaEquipe()

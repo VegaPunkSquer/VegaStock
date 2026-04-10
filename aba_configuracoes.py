@@ -157,6 +157,9 @@ class AbaConfiguracoes(QWidget):
         self.btn_toggle_notif.setCheckable(True)
         self.btn_toggle_notif.setChecked(self.cliente_dados.get('receber_notificacoes', True))
         self.btn_toggle_notif.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 6px;")
+        # LIGA O MOTOR DE REPINTURA (NOVO)
+        self.btn_toggle_notif.toggled.connect(self.atualizar_visual_btn_notif)
+        self.atualizar_visual_btn_notif(self.btn_toggle_notif.isChecked()) # Roda uma vez para pintar certo ao abrir
         layout_linha1.addWidget(self.btn_toggle_notif)
         
         self.chk_som = QCheckBox("Emitir aviso sonoro")
@@ -299,6 +302,38 @@ class AbaConfiguracoes(QWidget):
         layout_perda.addWidget(btn_del_perda)
 
         layout_paineis.addWidget(frame_perda)
+        
+        # PAINEL DIREITO 2: UNIDADES DE MEDIDA (NOVO)
+        frame_unidade = QFrame()
+        frame_unidade.setStyleSheet("background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px;")
+        layout_unidade = QVBoxLayout(frame_unidade)
+
+        lbl_unidade_titulo = QLabel("3. Unidades de Medida")
+        lbl_unidade_titulo.setStyleSheet("font-weight: bold; border: none;")
+        layout_unidade.addWidget(lbl_unidade_titulo)
+
+        layout_add_unidade = QHBoxLayout()
+        self.input_nova_unidade = QLineEdit()
+        self.input_nova_unidade.setPlaceholderText("Ex: Saco")
+        layout_add_unidade.addWidget(self.input_nova_unidade)
+        
+        btn_add_unidade = QPushButton("Adicionar")
+        btn_add_unidade.setStyleSheet("background-color: #000; color: #fff; font-weight: bold;")
+        btn_add_unidade.clicked.connect(self.adicionar_unidade)
+        layout_add_unidade.addWidget(btn_add_unidade)
+        layout_unidade.addLayout(layout_add_unidade)
+
+        self.lista_unidades = QListWidget()
+        self.lista_unidades.itemDoubleClicked.connect(self.editar_unidade)
+        layout_unidade.addWidget(self.lista_unidades)
+
+        btn_del_unidade = QPushButton("Excluir Unidade")
+        btn_del_unidade.setStyleSheet("color: red; font-weight: bold; border: 1px solid red;")
+        btn_del_unidade.clicked.connect(self.deletar_unidade)
+        layout_unidade.addWidget(btn_del_unidade)
+
+        layout_paineis.addWidget(frame_unidade) # Adiciona o 3º painel na tela
+        
         layout_principal.addLayout(layout_paineis)
         
         # Assinatura e Info
@@ -317,6 +352,14 @@ class AbaConfiguracoes(QWidget):
         self.carregar_listas()
 
     # --- FUNÇÕES DE LÓGICA E CONEXÃO COM A API ---
+    
+    def atualizar_visual_btn_notif(self, checado):
+        if checado:
+            self.btn_toggle_notif.setText("Notificações LIGADAS")
+            self.btn_toggle_notif.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 6px;")
+        else:
+            self.btn_toggle_notif.setText("Notificações DESLIGADAS")
+            self.btn_toggle_notif.setStyleSheet("background-color: #f44336; color: white; font-weight: bold; padding: 6px;")
 
     def carregar_listas(self):
         self.lista_categorias.clear()
@@ -341,6 +384,15 @@ class AbaConfiguracoes(QWidget):
                         item = QListWidgetItem(mov["descricao"])
                         item.setData(Qt.UserRole, mov["id"])
                         self.lista_perdas.addItem(item)
+                        
+            # Puxa Unidades de Medida
+            self.lista_unidades.clear()
+            resp_unidades = requests.get(f"{API_BASE_URL}/unidades/{self.cliente_dados['cliente_id']}")
+            if resp_unidades.status_code == 200:
+                for uni in resp_unidades.json():
+                    item = QListWidgetItem(uni["nome"].upper()) # Mostra maiúsculo bonitinho
+                    item.setData(Qt.UserRole, uni["id"])
+                    self.lista_unidades.addItem(item)
         except:
             pass
 
@@ -391,6 +443,45 @@ class AbaConfiguracoes(QWidget):
             self.carregar_listas()
         except:
             pass
+
+    def adicionar_unidade(self):
+        nome = self.input_nova_unidade.text().strip()
+        if not nome: return
+        dados = {"cliente_id": self.cliente_dados['cliente_id'], "nome": nome}
+        try:
+            resp = requests.post(f"{API_BASE_URL}/unidades", json=dados)
+            if resp.status_code == 200:
+                self.input_nova_unidade.clear()
+                self.carregar_listas()
+            else:
+                QMessageBox.warning(self, "Aviso", resp.json().get("detail", "Erro ao adicionar."))
+        except: pass
+        
+    def editar_unidade(self, item):
+        item_id = item.data(Qt.UserRole)
+        nome_atual = item.text()
+        
+        # Abre o popup já com o texto atual preenchido
+        novo_nome, ok = QInputDialog.getText(self, "Editar Unidade", "Modifique o nome da unidade:", text=nome_atual)
+        
+        # Só salva se ele deu OK, se não tá vazio e se ele realmente mudou alguma coisa
+        if ok and novo_nome.strip() and novo_nome.strip().upper() != nome_atual.upper():
+            dados = {"nome": novo_nome.strip()}
+            try:
+                resp = requests.put(f"{API_BASE_URL}/unidades/{item_id}", json=dados)
+                if resp.status_code == 200:
+                    self.carregar_listas() # Dá o F5 na tela
+                else:
+                    QMessageBox.warning(self, "Erro", resp.json().get("detail", "Erro ao editar."))
+            except:
+                pass
+
+    def deletar_unidade(self):
+        item_selecionado = self.lista_unidades.currentItem()
+        if item_selecionado:
+            item_id = item_selecionado.data(Qt.UserRole)
+            requests.delete(f"{API_BASE_URL}/unidades/{item_id}")
+            self.carregar_listas()
 
     def deletar_categoria(self):
         item_selecionado = self.lista_categorias.currentItem()
@@ -454,8 +545,8 @@ class AbaConfiguracoes(QWidget):
                     input_lim = QLineEdit(str(prod.get('estoque_minimo', 0)))
                     input_lim.setFixedWidth(50)
                     
-                    btn_save = QPushButton("✓")
-                    btn_save.setFixedWidth(30)
+                    btn_save = QPushButton("Salvar")
+                    btn_save.setFixedWidth(50)
                     # Conexão direta passando os dados
                     btn_save.clicked.connect(lambda chk, p_id=prod['id'], inp=input_lim: self.salvar_limite_individual(p_id, inp))
                     

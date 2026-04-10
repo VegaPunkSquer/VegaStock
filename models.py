@@ -72,3 +72,9 @@ class Produto(Base):
     custo_medio = Column(Float, default=0.0)
     estoque_minimo = Column(Float, default=0.0)
     quantidade_atual = Column(Float, default=0.0)
+
+class UnidadeMedida(Base):
+    __tablename__ = "unidades_medida"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"))
+    nome = Column(String, index=True)
