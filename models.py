@@ -56,6 +56,8 @@ class Usuario(Base):
     nivel_acesso = Column(String, default="Admin") # Para futuramente separar o Dono do Almoxarife
     cnpj_esperado = Column(String, index=True) # Trava o token a este CNPJ
     data_expiracao = Column(DateTime) # Janela de 48h
+    permissoes = Column(String, default="dashboard") # Dashboard é o acesso mínimo
+    cargo = Column(String, nullable=True) # Ex: Estoquista, Gerente
     
 class Categoria(Base):
     __tablename__ = "categorias"

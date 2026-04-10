@@ -97,12 +97,26 @@ class MainWindow(QMainWindow):
             btn = QPushButton(nome)
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
-            btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding) # Faz esticar até o fundo
+            btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding) 
             btn.setStyleSheet(estilo_btn)
             btn.clicked.connect(lambda _, idx=i: self.mudar_aba(idx))
+            
+            # Lógica do PRO dinâmica
             if "🔒" in nome:
-                btn.setEnabled(False)
-                btn.setStyleSheet("color: #aaa; background-color: #fafafa; text-align: center; border: 1px solid #e0e0e0; border-radius: 0px;")
+                if self.cliente_dados.get('status_assinatura') == "PRO":
+                    # É PRO: Arranca o cadeado do nome e deixa o estilo original do loop agir
+                    btn.setText(nome.replace(" 🔒", ""))
+                else:
+                    # NÃO É PRO: Tira o setEnabled(False) pra ele ser clicável, e aplica o CSS cinza
+                    estilo_bloqueado = """
+                        QPushButton {
+                            background-color: #fafafa; color: #aaa; border: 1px solid #e0e0e0;
+                            text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; border-radius: 5px;
+                        }
+                        QPushButton:checked { background-color: #e0e0e0; color: #555; border: 1px solid #ccc; }
+                    """
+                    btn.setStyleSheet(estilo_bloqueado)
+                    
             self.layout_abas.addWidget(btn)
             self.botoes_abas.append(btn)
 
@@ -124,7 +138,7 @@ class MainWindow(QMainWindow):
         self.aba_cat = AbaCatalogo(self.cliente_dados)
         self.aba_est = AbaEstoque(self.cliente_dados)
         self.aba_rel = AbaRelatorios(self.cliente_dados)
-        self.aba_eqp = AbaEquipe()
+        self.aba_eqp = AbaEquipe(self.cliente_dados)
         self.aba_cnt = AbaConta(self.cliente_dados, self)
         self.aba_cfg = AbaConfiguracoes(self.cliente_dados)
 

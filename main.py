@@ -275,12 +275,15 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     return {
         "status": "sucesso",
         "cliente_id": cliente.id,
+        "usuario_id": usuario.id,              # <-- NOVO: ID do funcionário logado
         "nome_fantasia": cliente.nome_fantasia,
         "login_usuario": usuario.login,
-        "nivel_acesso": usuario.nivel_acesso,
-        "logo_url": cliente.logo_url,  # <-- ESSA É A LINHA QUE FALTAVA
-        "status_assinatura": cliente.status_assinatura, # Para saber se é PRO
-        "limite_global": cliente.limite_global_notificacao
+        "nivel_acesso": getattr(usuario, 'nivel_acesso', 'normal'), # Mantido (com getattr pra não quebrar se o banco ainda não tiver)
+        "cargo": getattr(usuario, 'cargo', 'Admin'),                # <-- NOVO: Cargo
+        "logo_url": cliente.logo_url,          # <-- MANTIDO: O que salva a sua imagem
+        "status_assinatura": cliente.status_assinatura, 
+        "limite_global": cliente.limite_global_notificacao,
+        "permissoes": usuario.permissoes.split(",") if getattr(usuario, 'permissoes', None) else [] # <-- NOVO: Lista de travas
     }
     
 @app.post("/verificar_licenca")
@@ -614,3 +617,48 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
             "saidas": saidas_hoje
         }
     }
+    
+# ==========================================
+# ROTA: GESTÃO DE EQUIPE (ADMIN ONLY)
+# ==========================================
+
+# 1. Listar Equipe
+@app.get("/equipe/{cliente_id}")
+def listar_equipe(cliente_id: int, db: Session = Depends(get_db)):
+    usuarios = db.query(models.Usuario).filter(models.Usuario.cliente_id == cliente_id).all()
+    return [{
+        "id": u.id, 
+        "login": u.login, 
+        "cargo": u.cargo, 
+        "permissoes": u.permissoes.split(",") if u.permissoes else []
+    } for u in usuarios]
+
+# 2. Adicionar/Editar Funcionário
+@app.post("/equipe")
+def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
+    # Se tiver ID, edita. Se não, cria novo.
+    user_id = dados.get("id")
+    if user_id:
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+    else:
+        usuario = models.Usuario(cliente_id=dados["cliente_id"])
+        db.add(usuario)
+    
+    usuario.login = dados["login"]
+    if dados.get("senha"): # Só muda a senha se enviar uma nova
+        usuario.senha = dados["senha"]
+    usuario.cargo = dados["cargo"]
+    # Transforma a lista do front ['estoque', 'relatorios'] em string "estoque,relatorios"
+    usuario.permissoes = ",".join(dados["permissoes"])
+    
+    db.commit()
+    return {"status": "sucesso"}
+
+# 3. Excluir Funcionário
+@app.delete("/equipe/{usuario_id}")
+def excluir_funcionario(usuario_id: int, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
+    if usuario:
+        db.delete(usuario)
+        db.commit()
+    return {"status": "removido"}
