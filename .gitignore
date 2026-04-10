@@ -1,6 +1,7 @@
 # Ignora o ambiente virtual e bibliotecas
 venv/
 env/
+.env
 
 # Ignora os arquivos de cache compilados do Python
 __pycache__/
