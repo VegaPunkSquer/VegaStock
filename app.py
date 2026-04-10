@@ -123,7 +123,7 @@ class MainWindow(QMainWindow):
         self.aba_dash = AbaDashboard()
         self.aba_cat = AbaCatalogo(self.cliente_dados)
         self.aba_est = AbaEstoque(self.cliente_dados)
-        self.aba_rel = AbaRelatorios()
+        self.aba_rel = AbaRelatorios(self.cliente_dados)
         self.aba_eqp = AbaEquipe()
         self.aba_cnt = AbaConta(self.cliente_dados, self)
         self.aba_cfg = AbaConfiguracoes(self.cliente_dados)

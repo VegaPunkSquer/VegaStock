@@ -122,33 +122,87 @@ def historico_movimentacoes(cliente_id: int, dias: int = 7, db: Session = Depend
     return resultados
 
 # 4. Endpoint: Relatório de Desperdício (A isca de vendas)
-@app.get("/relatorios/desperdicio")
-def relatorio_desperdicio(cliente_id: int, db: Session = Depends(get_db)):
-    # Busca todas as movimentações onde o motivo é de perda (NEGATIVO)
-    movimentacoes = db.query(models.MovimentacaoEstoque).join(
+@app.get("/relatorios/desperdicio/{cliente_id}")
+def relatorio_desperdicio_avancado(
+    cliente_id: int, 
+    dias: int = 30, 
+    categoria_id: int = None, 
+    motivo_id: int = None, 
+    db: Session = Depends(get_db)
+):
+    data_limite = datetime.utcnow() - timedelta(days=dias)
+
+    # Passo 1: Busca só as SAÍDAS que foram marcadas como "PERDA"
+    query = db.query(
+        models.MovimentacaoEstoque,
+        models.Produto,
+        models.MotivoBaixa,
+        models.Categoria
+    ).join(
+        models.Produto, models.MovimentacaoEstoque.produto_id == models.Produto.id
+    ).join(
         models.MotivoBaixa, models.MovimentacaoEstoque.motivo_baixa_id == models.MotivoBaixa.id
+    ).outerjoin(
+        models.Categoria, models.Produto.categoria_id == models.Categoria.id
     ).filter(
         models.MovimentacaoEstoque.cliente_id == cliente_id,
-        models.MotivoBaixa.tipo == "NEGATIVO"
-    ).all()
+        models.MovimentacaoEstoque.tipo_movimento == "SAIDA",
+        models.MotivoBaixa.tipo == "PERDA",
+        models.MovimentacaoEstoque.data_hora >= data_limite
+    )
 
-    resultados = []
-    for mov in movimentacoes:
-        produto = db.query(models.Produto).filter(models.Produto.id == mov.produto_id).first()
-        motivo = db.query(models.MotivoBaixa).filter(models.MotivoBaixa.id == mov.motivo_baixa_id).first()
-        
-        # Calcula a grana perdida: Quantidade desperdiçada * Custo daquele produto
-        custo_perdido = mov.quantidade * produto.custo_medio
+    # Aplica os filtros se o usuário tiver selecionado na tela
+    if categoria_id:
+        query = query.filter(models.Produto.categoria_id == categoria_id)
+    if motivo_id:
+        query = query.filter(models.MovimentacaoEstoque.motivo_baixa_id == motivo_id)
 
-        resultados.append({
-            "produto": produto.nome,
+    movimentacoes = query.all()
+
+    total_prejuizo = 0.0
+    produtos_agrupados = {}
+    motivos_agrupados = {}
+    resultados_tabela = []
+
+    # Passo 2: A Matemática Investigativa
+    for mov, prod, motivo, cat in movimentacoes:
+        custo_perdido = mov.quantidade * prod.custo_medio
+        total_prejuizo += custo_perdido
+
+        # Vai somando para o pódio de vilões
+        produtos_agrupados[prod.nome] = produtos_agrupados.get(prod.nome, 0) + custo_perdido
+        motivos_agrupados[motivo.descricao] = motivos_agrupados.get(motivo.descricao, 0) + custo_perdido
+
+        resultados_tabela.append({
+            "produto": prod.nome,
+            "categoria": cat.nome if cat else "Geral",
             "quantidade_perdida": mov.quantidade,
-            "unidade": produto.unidade_medida,
+            "unidade": prod.unidade_medida,
             "motivo": motivo.descricao,
-            "custo_total_perdido_rs": round(custo_perdido, 2)
+            "custo_total_perdido_rs": round(custo_perdido, 2),
+            "data": mov.data_hora.strftime("%d/%m/%Y")
         })
 
-    return resultados
+    # Passo 3: Coroa os Vilões
+    top_produto = max(produtos_agrupados, key=produtos_agrupados.get) if produtos_agrupados else "Nenhum"
+    top_produto_valor = produtos_agrupados[top_produto] if produtos_agrupados else 0.0
+
+    top_motivo = max(motivos_agrupados, key=motivos_agrupados.get) if motivos_agrupados else "Nenhum"
+    top_motivo_valor = motivos_agrupados[top_motivo] if motivos_agrupados else 0.0
+
+    # Ordena a tabela do maior rombo pro menor
+    tabela_ordenada = sorted(resultados_tabela, key=lambda x: x["custo_total_perdido_rs"], reverse=True)
+
+    return {
+        "kpis": {
+            "total_prejuizo": round(total_prejuizo, 2),
+            "top_produto": top_produto,
+            "top_produto_valor": round(top_produto_valor, 2),
+            "top_motivo": top_motivo,
+            "top_motivo_valor": round(top_motivo_valor, 2)
+        },
+        "tabela": tabela_ordenada
+    }
 
 # Função interna para gerar a criptografia (Hash)
 def gerar_hash(texto: str) -> str:
