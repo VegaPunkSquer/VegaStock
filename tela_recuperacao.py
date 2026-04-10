@@ -1,5 +1,6 @@
 import re
 import requests
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 
 API_BASE_URL = "http://127.0.0.1:8000"
@@ -7,6 +8,7 @@ API_BASE_URL = "http://127.0.0.1:8000"
 class TelaRecuperacao(QDialog):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QIcon("logo.png"))
         self.setWindowTitle("VegaStock - Sistema de Estoque - Recuperar Senha")
         self.setFixedSize(300, 350)
 

@@ -3,12 +3,15 @@ import os
 import re
 from PySide6.QtWidgets import (QDialog, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QFileDialog)
+from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 
 API_BASE_URL = "http://127.0.0.1:8000"
 
 class TelaCadastro(QDialog):
     def __init__(self):
         super().__init__()
+        self.setWindowIcon(QIcon("logo.png"))
         self.setWindowTitle("VegaStock - Sistema de Estoque - Novo Cadastro")
         self.setFixedSize(350, 550)
 

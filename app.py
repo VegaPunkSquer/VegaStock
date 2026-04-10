@@ -1,5 +1,6 @@
 import sys
 import os
+import ctypes
 from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
                                QLabel, QHBoxLayout, QStackedWidget,QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout) # ADICIONADO QFrame
@@ -18,9 +19,13 @@ from aba_equipe import AbaEquipe
 from aba_conta import AbaConta
 from aba_configuracoes import AbaConfiguracoes
 
+myappid = 'vegasotck.versao1' # Pode ser qualquer string única
+ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
+
 class MainWindow(QMainWindow):
     def __init__(self, cliente_dados):
         super().__init__()
+        self.setWindowIcon(QIcon("logo.png"))
         self.cliente_dados = cliente_dados
         self.setWindowTitle(f"VegaStock - Gerenciamento de Estoque - {self.cliente_dados['nome_fantasia']}")
         self.resize(900, 600)

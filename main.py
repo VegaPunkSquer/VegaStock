@@ -12,8 +12,6 @@ import requests
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
-
 app = FastAPI(title="SaaS Restaurante - Estoque API")
 
 # Carrega o cofre invisível (.env)
@@ -222,9 +220,8 @@ def gerar_hash(texto: str) -> str:
 
 @app.post("/cadastrar")
 def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(get_db)):
-    # 1. Validar a Licença (Compara o Hash)
-    hash_token = gerar_hash(dados.token_licenca)
-    licenca = db.query(models.Licenca).filter(models.Licenca.token == hash_token, models.Licenca.usada == False).first()
+    # 1. Validar a Licença (Lê direto o que o cliente digitou)
+    licenca = db.query(models.Licenca).filter(models.Licenca.token == dados.token_licenca, models.Licenca.usada == False).first()
     
     if not licenca:
         raise HTTPException(status_code=400, detail="Licença inválida ou já utilizada.")
@@ -300,10 +297,8 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     
 @app.post("/verificar_licenca")
 def verificar_licenca(dados: schemas.VerificarLicencaRequest, db: Session = Depends(get_db)):
-    token_criptografado = hashlib.sha256(dados.token_licenca.encode()).hexdigest()
-    
     licenca = db.query(models.Licenca).filter(
-        models.Licenca.token == token_criptografado,
+        models.Licenca.token == dados.token_licenca,
         models.Licenca.cnpj_esperado == dados.cnpj
     ).first()
 
@@ -314,12 +309,9 @@ def verificar_licenca(dados: schemas.VerificarLicencaRequest, db: Session = Depe
     
 @app.post("/recuperar_senha")
 def recuperar_senha(dados: schemas.RecuperacaoRequest, db: Session = Depends(get_db)):
-    # Criptografa o token recebido para bater com o do banco
-    token_criptografado = hashlib.sha256(dados.token_licenca.encode()).hexdigest()
-    
     # Procura a licença que bate com o token e o CNPJ informados
     licenca = db.query(models.Licenca).filter(
-        models.Licenca.token == token_criptografado,
+        models.Licenca.token == dados.token_licenca,
         models.Licenca.cnpj_esperado == dados.cnpj
     ).first()
 

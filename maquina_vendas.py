@@ -69,15 +69,14 @@ class MaquinaVendas(QWidget):
         # Mistura maiúsculas, minúsculas e números
         caracteres = string.ascii_letters + string.digits
         token_limpo = ''.join(random.choice(caracteres) for _ in range(12))
-        token_criptografado = hashlib.sha256(token_limpo.encode()).hexdigest()
         expiracao = datetime.utcnow() + timedelta(hours=48)
         
         try:
             db = SessionLocal()
             nova_licenca = models.Licenca(
-                token=token_criptografado, 
+                token=token_limpo, # <--- CORTAMOS O HASH. Salva exatamente os 12 caracteres gerados.
                 usada=False,
-                cnpj_esperado=cnpj_limpo, # Salva só os números limpos no banco
+                cnpj_esperado=cnpj_limpo,
                 data_expiracao=expiracao
             )
             db.add(nova_licenca)
