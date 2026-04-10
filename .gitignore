@@ -8,3 +8,15 @@ __pycache__/
 
 # Ignora o banco de dados local (cada cliente terá o seu, não vai pro código)
 *.db
+
+# Ignora arquivos de configuração local (se houver)
+config_local.json   
+
+# Ignora arquivos de log
+*.log
+
+# Ignora arquivos de imagems (ícones, logos, etc.)
+*.png
+*.jpg
+*.jpeg
+*.ico
