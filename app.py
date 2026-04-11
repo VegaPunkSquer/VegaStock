@@ -25,7 +25,10 @@ ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 class MainWindow(QMainWindow):
     def __init__(self, cliente_dados):
         super().__init__()
-        self.setWindowIcon(QIcon("logo.ico"))
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        
+        self.setWindowIcon(QIcon(caminho_icone))
         self.cliente_dados = cliente_dados
         self.setWindowTitle(f"VegaStock - Gerenciamento de Estoque - {self.cliente_dados['nome_fantasia']}")
         self.resize(900, 600)

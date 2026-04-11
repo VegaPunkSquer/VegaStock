@@ -1,4 +1,5 @@
 import sys
+import os
 import hashlib
 import random
 import string
@@ -6,6 +7,7 @@ import re
 from datetime import datetime, timedelta
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox)
+from PySide6.QtGui import QIcon
 from database import engine, Base, SessionLocal
 import models
 
@@ -15,6 +17,10 @@ Base.metadata.create_all(bind=engine)
 class MaquinaVendas(QWidget):
     def __init__(self):
         super().__init__()
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        
+        self.setWindowIcon(QIcon(caminho_icone))
         self.setWindowTitle("Gerador de Licenças B2B")
         self.setFixedSize(350, 250)
         

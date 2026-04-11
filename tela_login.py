@@ -1,14 +1,43 @@
 import requests
+import os
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QIcon
 
 API_BASE_URL = "https://vegastock.onrender.com"
 
+class WorkerLogin(QThread):
+    # O "telefone" para avisar a tela se deu bom ou ruim
+    resultado = Signal(dict)
+    erro = Signal(str)
+
+    def __init__(self, login, senha):
+        super().__init__()
+        self.login = login
+        self.senha = senha
+
+    def run(self):
+        # Tudo que está aqui dentro roda em paralelo sem travar a tela
+        try:
+            response = requests.post(f"{API_BASE_URL}/login", json={"login": self.login, "senha": self.senha})
+            if response.status_code == 200:
+                self.resultado.emit(response.json()) # Liga avisando sucesso
+            else:
+                try:
+                    msg_erro = response.json().get("detail", "Erro desconhecido")
+                except:
+                    msg_erro = f"Erro interno (Status {response.status_code})."
+                self.erro.emit(msg_erro) # Liga avisando erro
+        except requests.exceptions.ConnectionError:
+            self.erro.emit("Não foi possível conectar à API.")
+
 class TelaLogin(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon("logo.ico"))
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        
+        self.setWindowIcon(QIcon(caminho_icone))
         self.setWindowTitle("VegaStock - Sistema de Estoque - Login")
         self.setFixedSize(300, 250)
         
@@ -63,21 +92,27 @@ class TelaLogin(QDialog):
             QMessageBox.warning(self, "Erro", "Preencha usuário e senha.")
             return
 
-        try:
-            # Bate na rota nova que criamos na Parte 2
-            response = requests.post(f"{API_BASE_URL}/login", json={"login": login, "senha": senha})
-            if response.status_code == 200:
-                self.cliente_dados = response.json()
-                self.accept() # Fecha com sucesso
-            else:
-                try:
-                    erro = response.json().get("detail", "Erro desconhecido")
-                except:
-                    # Se a API der Erro 500 e não mandar JSON, cai aqui em vez de quebrar o App
-                    erro = f"Erro interno de comunicação com o servidor (Status {response.status_code})."
-                QMessageBox.warning(self, "Acesso Negado", erro)
-        except requests.exceptions.ConnectionError:
-            QMessageBox.critical(self, "Erro Fatal", "Não foi possível conectar à API.")
+        # Muda o texto do botão e trava ele para o usuário não clicar 2 vezes
+        self.btn_entrar.setText("Conectando...")
+        self.btn_entrar.setEnabled(False)
+
+        # Manda o trabalhador pro porão com o login e senha
+        self.worker = WorkerLogin(login, senha)
+        self.worker.resultado.connect(self.login_sucesso)
+        self.worker.erro.connect(self.login_erro)
+        self.worker.start() # Dá a ordem de trabalhar
+
+    # Função que atende o telefone de sucesso
+    def login_sucesso(self, dados):
+        self.cliente_dados = dados
+        self.accept()
+
+    # Função que atende o telefone de erro
+    def login_erro(self, mensagem):
+        # Destrava o botão e volta ao normal
+        self.btn_entrar.setText("Entrar")
+        self.btn_entrar.setEnabled(True)
+        QMessageBox.warning(self, "Acesso Negado", mensagem)
 
     def abrir_cadastro(self):
         self.ir_para_cadastro = True

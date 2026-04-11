@@ -1,4 +1,5 @@
 import re
+import os
 import requests
 from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
@@ -8,7 +9,10 @@ API_BASE_URL = "https://vegastock.onrender.com"
 class TelaRecuperacao(QDialog):
     def __init__(self):
         super().__init__()
-        self.setWindowIcon(QIcon("logo.ico"))
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        
+        self.setWindowIcon(QIcon(caminho_icone))
         self.setWindowTitle("VegaStock - Sistema de Estoque - Recuperar Senha")
         self.setFixedSize(300, 350)
 

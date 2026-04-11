@@ -6,6 +6,7 @@ env/
 # Ignora os arquivos de cache compilados do Python
 __pycache__/
 *.pyc
+*.spec
 
 # Ignora o banco de dados local (cada cliente terá o seu, não vai pro código)
 *.db
