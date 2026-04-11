@@ -6,7 +6,15 @@ env/
 # Ignora os arquivos de cache compilados do Python
 __pycache__/
 *.pyc
+
+# Ignora arquivos do pyinstaller
+dist/
+build/
 *.spec
+*.exe
+*.log
+*.manifest
+*.dll
 
 # Ignora o banco de dados local (cada cliente terá o seu, não vai pro código)
 *.db
