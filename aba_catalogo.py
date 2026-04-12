@@ -2,9 +2,34 @@ import requests
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                                QComboBox, QSpinBox, QPushButton, QTableWidget, QTableWidgetItem,
                                QHeaderView, QMessageBox, QGroupBox, QFormLayout, QAbstractItemView, QInputDialog)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 
 API_BASE_URL = "https://vegastock.onrender.com"
+
+class WorkerCatalogo(QThread):
+    resultado = Signal(dict)
+    erro = Signal(str)
+
+    def __init__(self, cliente_id):
+        super().__init__()
+        self.cliente_id = cliente_id
+
+    def run(self):
+        try:
+            # Faz as 3 buscas de uma vez
+            r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}")
+            r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
+            r_uni = requests.get(f"{API_BASE_URL}/unidades/{self.cliente_id}")
+
+            # Empacota tudo num dicionário
+            dados = {
+                "categorias": r_cat.json() if r_cat.status_code == 200 else [],
+                "produtos": r_prod.json() if r_prod.status_code == 200 else [],
+                "unidades": r_uni.json() if r_uni.status_code == 200 else []
+            }
+            self.resultado.emit(dados)
+        except Exception as e:
+            self.erro.emit("Falha de conexão.")
 
 class AbaCatalogo(QWidget):
     def __init__(self, cliente_dados):
@@ -84,35 +109,49 @@ class AbaCatalogo(QWidget):
 
     # --- FUNÇÕES DE LÓGICA ---
 
-    def carregar_categorias(self):
-        self.combo_categoria.clear()
-        try:
-            resp = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_dados['cliente_id']}")
-            if resp.status_code == 200:
-                for cat in resp.json():
-                    # Adiciona o nome, mas esconde o ID no 'userData' do item
-                    self.combo_categoria.addItem(cat["nome"], cat["id"])
-        except:
-            pass
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.carregar_dados()
 
-    def carregar_produtos(self):
+    def carregar_dados(self):
+        # Trava a tela e avisa que tá carregando
+        self.combo_unidade.blockSignals(True)
+        self.combo_categoria.clear()
+        self.combo_unidade.clear()
+        self.combo_categoria.addItem("Carregando...")
+        self.combo_unidade.addItem("Carregando...")
         self.tabela.setRowCount(0)
-        try:
-            resp = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_dados['cliente_id']})
-            if resp.status_code == 200:
-                produtos = resp.json()
-                for i, prod in enumerate(produtos):
-                    self.tabela.insertRow(i)
-                    
-                    self.tabela.setItem(i, 0, QTableWidgetItem(str(prod["id"])))
-                    self.tabela.setItem(i, 1, QTableWidgetItem(prod["nome"]))
-                    self.tabela.setItem(i, 2, QTableWidgetItem(str(prod["categoria_id"])))
-                    self.tabela.setItem(i, 3, QTableWidgetItem(prod["unidade_medida"]))
-                    
-                    alerta = str(prod["estoque_minimo"]) if prod["estoque_minimo"] > 0 else "Geral"
-                    self.tabela.setItem(i, 4, QTableWidgetItem(alerta))
-        except:
-            pass
+        self.combo_unidade.blockSignals(False)
+
+        # Manda o trabalhador pro porão
+        self.worker = WorkerCatalogo(self.cliente_dados['cliente_id'])
+        self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.start()
+
+    def atualizar_tela(self, dados):
+        # 1. Preenche Categorias
+        self.combo_categoria.clear()
+        for cat in dados["categorias"]:
+            self.combo_categoria.addItem(cat["nome"], cat["id"])
+
+        # 2. Preenche Unidades
+        self.combo_unidade.blockSignals(True)
+        self.combo_unidade.clear()
+        for uni in dados["unidades"]:
+            self.combo_unidade.addItem(uni["nome"].upper(), uni["nome"])
+        self.combo_unidade.addItem("+ Adicionar Nova...")
+        self.combo_unidade.blockSignals(False)
+
+        # 3. Preenche Tabela
+        self.tabela.setRowCount(0)
+        for i, prod in enumerate(dados["produtos"]):
+            self.tabela.insertRow(i)
+            self.tabela.setItem(i, 0, QTableWidgetItem(str(prod["id"])))
+            self.tabela.setItem(i, 1, QTableWidgetItem(prod["nome"]))
+            self.tabela.setItem(i, 2, QTableWidgetItem(str(prod["categoria_id"])))
+            self.tabela.setItem(i, 3, QTableWidgetItem(prod["unidade_medida"]))
+            alerta = str(prod["estoque_minimo"]) if prod["estoque_minimo"] > 0 else "Geral"
+            self.tabela.setItem(i, 4, QTableWidgetItem(alerta))
 
     def cadastrar_produto(self):
         nome = self.input_nome.text().strip()
@@ -120,8 +159,7 @@ class AbaCatalogo(QWidget):
         unidade = self.combo_unidade.currentText()
         alerta = float(self.spin_alerta.value())
 
-        # TRAVA ANTI-FANTASMA (NOVO)
-        if unidade == "+ Adicionar Nova...":
+        if unidade == "+ Adicionar Nova..." or not unidade:
             QMessageBox.warning(self, "Aviso", "Selecione uma unidade de medida válida.")
             return
 
@@ -138,9 +176,9 @@ class AbaCatalogo(QWidget):
             if resp.status_code == 200:
                 self.input_nome.clear()
                 self.spin_alerta.setValue(0)
-                self.carregar_produtos()
+                self.carregar_dados() # Acorda a Thread pra atualizar a tela
                 QMessageBox.information(self, "Sucesso", "Produto cadastrado!")
-        except Exception as e:
+        except Exception:
             QMessageBox.critical(self, "Erro", "Não foi possível conectar à API.")
 
     def excluir_produto(self):
@@ -149,36 +187,11 @@ class AbaCatalogo(QWidget):
             return
 
         produto_id = self.tabela.item(linha, 0).text()
-        
         try:
             requests.delete(f"{API_BASE_URL}/produtos/{produto_id}")
-            self.carregar_produtos()
+            self.carregar_dados() # Acorda a Thread pra atualizar a tela
         except:
             QMessageBox.critical(self, "Erro", "Falha ao excluir produto.")
-            
-    def showEvent(self, event):
-        # Evento nativo do PySide: Dispara sozinho toda vez que a aba aparece na tela
-        super().showEvent(event)
-        self.carregar_categorias()
-        self.carregar_produtos()
-        self.carregar_unidades()
-        
-    def carregar_unidades(self):
-        # Desliga temporariamente o gatilho para não acionar um loop infinito
-        self.combo_unidade.blockSignals(True) 
-        self.combo_unidade.clear()
-        
-        try:
-            resp = requests.get(f"{API_BASE_URL}/unidades/{self.cliente_dados['cliente_id']}")
-            if resp.status_code == 200:
-                for uni in resp.json():
-                    self.combo_unidade.addItem(uni["nome"].upper(), uni["nome"]) # (Texto exibido, Valor real salvo)
-        except:
-            pass
-            
-        # Adiciona a opção mágica no final
-        self.combo_unidade.addItem("+ Adicionar Nova...")
-        self.combo_unidade.blockSignals(False) # Liga o gatilho de novo
 
     def verificar_nova_unidade(self, index):
         texto_selecionado = self.combo_unidade.itemText(index)
@@ -191,12 +204,9 @@ class AbaCatalogo(QWidget):
                 resp = requests.post(f"{API_BASE_URL}/unidades", json=dados)
                 
                 if resp.status_code == 200:
-                    self.carregar_unidades() 
-                    index_novo = self.combo_unidade.findText(nova_unidade.strip().upper())
-                    if index_novo >= 0:
-                        self.combo_unidade.setCurrentIndex(index_novo)
+                    self.carregar_dados() # Atualiza tudo com a nova unidade
                 else:
                     QMessageBox.warning(self, "Aviso", "Esta unidade já existe!")
-                    self.carregar_unidades() 
+                    self.carregar_dados() 
             else:
-                self.carregar_unidades()
+                self.carregar_dados()
