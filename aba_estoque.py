@@ -3,9 +3,35 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
                                QPushButton, QTableWidget, QTableWidgetItem, QHeaderView, 
                                QMessageBox, QGroupBox, QFormLayout, QRadioButton, 
                                QButtonGroup, QDoubleSpinBox, QAbstractItemView)
-from PySide6.QtCore import Qt
+import os
+from PySide6.QtCore import Qt, QThread, Signal, QSize
+from PySide6.QtGui import QMovie
 
 API_BASE_URL = "https://vegastock.onrender.com"
+
+class WorkerEstoque(QThread):
+    resultado = Signal(dict)
+    erro = Signal(str)
+
+    def __init__(self, cliente_id, dias):
+        super().__init__()
+        self.cliente_id = cliente_id
+        self.dias = dias # Recebe os dias do filtro
+
+    def run(self):
+        try:
+            # Puxa tudo de uma vez
+            r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
+            r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
+            r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/{self.cliente_id}?dias={self.dias}")
+
+            self.resultado.emit({
+                "produtos": r_prod.json() if r_prod.status_code == 200 else [],
+                "motivos": r_mot.json() if r_mot.status_code == 200 else [],
+                "historico": r_hist.json() if r_hist.status_code == 200 else []
+            })
+        except Exception:
+            self.erro.emit("Falha de conexão.")
 
 class AbaEstoque(QWidget):
     def __init__(self, cliente_dados):
@@ -133,16 +159,13 @@ class AbaEstoque(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        self.carregar_produtos()
-        self.carregar_motivos()
-        self.carregar_historico()
+        # Quando abre a aba, carrega os combos e a tabela
+        self.carregar_dados(atualizar_combos=True)
 
     def alternar_modo(self):
-        # Mágica da Interface: Esconde ou Mostra dependendo do botão
         if self.btn_entrada.isChecked():
             self.spin_custo.show()
             self.combo_motivo.hide()
-            # Pega o label associado ao widget no form layout e esconde/mostra
             self.spin_custo.parentWidget().layout().labelForField(self.spin_custo).show()
             self.combo_motivo.parentWidget().layout().labelForField(self.combo_motivo).hide()
         else:
@@ -152,41 +175,92 @@ class AbaEstoque(QWidget):
             self.combo_motivo.parentWidget().layout().labelForField(self.combo_motivo).show()
 
     def ajustar_decimais(self):
-        # Trava Anti-Idiota das Unidades
         dados_produto = self.combo_produto.currentData()
         if not dados_produto: return
-        
         unidade = dados_produto.get("unidade", "").lower()
-        
         if unidade in ["kg", "litro", "gramas", "ml"]:
             self.spin_qtd.setDecimals(3)
         else:
-            # Trava em números inteiros (0 casas decimais)
             self.spin_qtd.setDecimals(0)
 
-    # --- FUNÇÕES DE LÓGICA E API ---
+    def carregar_historico(self):
+        # Quando o filtro de dias muda, NÃO recarrega os combos pra não apagar o que o usuário já digitou, só atualiza a tabela.
+        self.carregar_dados(atualizar_combos=False)
 
-    def carregar_produtos(self):
-        self.combo_produto.blockSignals(True)
-        self.combo_produto.clear()
-        try:
-            resp = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_dados['cliente_id']})
-            if resp.status_code == 200:
-                for prod in resp.json():
-                    # Guarda um dicionário invisível no item com o ID e a Unidade
-                    self.combo_produto.addItem(f"{prod['nome']} ({prod['unidade_medida']})", {"id": prod["id"], "unidade": prod["unidade_medida"]})
-        except: pass
-        self.combo_produto.blockSignals(False)
-        self.ajustar_decimais() # Roda uma vez para o primeiro item
+    def carregar_dados(self, atualizar_combos=True):
+        self.atualizando_combos = atualizar_combos
+        
+        if atualizar_combos:
+            self.combo_produto.blockSignals(True)
+            self.combo_produto.clear()
+            self.combo_produto.addItem("Carregando...")
+            self.combo_produto.blockSignals(False)
+            
+            self.combo_motivo.clear()
+            self.combo_motivo.addItem("Carregando...")
 
-    def carregar_motivos(self):
-        self.combo_motivo.clear()
-        try:
-            resp = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_dados['cliente_id']}")
-            if resp.status_code == 200:
-                for mot in resp.json():
-                    self.combo_motivo.addItem(mot["descricao"], mot["id"])
-        except: pass
+        # Mágica do GIF na Tabela
+        self.tabela.setRowCount(1)
+        lbl_gif = QLabel()
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        
+        self.movie = QMovie(caminho_gif)
+        self.movie.setScaledSize(QSize(20, 20))
+        lbl_gif.setMovie(self.movie)
+        lbl_gif.setAlignment(Qt.AlignCenter)
+        self.movie.start()
+        
+        self.tabela.setCellWidget(0, 0, lbl_gif) # GIF escondido na coluna ID
+        self.tabela.setItem(0, 1, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 2, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 3, QTableWidgetItem("Buscando dados nos EUA..."))
+        self.tabela.setItem(0, 4, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 5, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 6, QTableWidgetItem("..."))
+
+        # Lê o combobox para saber quantos dias pedir pro trabalhador
+        filtro_txt = self.combo_filtro.currentText()
+        if filtro_txt == "Hoje": dias = 1
+        elif filtro_txt == "Últimos 7 Dias": dias = 7
+        else: dias = 30
+
+        # Manda o trabalhador pro porão
+        self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias)
+        self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.start()
+
+    def atualizar_tela(self, dados):
+        # Preenche os combos SOMENTE se for necessário
+        if self.atualizando_combos:
+            self.combo_produto.blockSignals(True)
+            self.combo_produto.clear()
+            for prod in dados["produtos"]:
+                self.combo_produto.addItem(f"{prod['nome']} ({prod['unidade_medida']})", {"id": prod["id"], "unidade": prod["unidade_medida"]})
+            self.combo_produto.blockSignals(False)
+            self.ajustar_decimais()
+
+            self.combo_motivo.clear()
+            for mot in dados["motivos"]:
+                self.combo_motivo.addItem(mot["descricao"], mot["id"])
+
+        # Preenche a tabela finalizando o GIF
+        self.tabela.setRowCount(0)
+        for i, mov in enumerate(dados["historico"]):
+            self.tabela.insertRow(i)
+            self.tabela.setItem(i, 0, QTableWidgetItem(str(mov["id"])))
+            self.tabela.setItem(i, 1, QTableWidgetItem(mov["data"]))
+            
+            item_tipo = QTableWidgetItem(mov["tipo"])
+            item_tipo.setForeground(Qt.darkGreen if mov["tipo"] == "ENTRADA" else Qt.red)
+            self.tabela.setItem(i, 2, item_tipo)
+            
+            self.tabela.setItem(i, 3, QTableWidgetItem(mov["produto"]))
+            self.tabela.setItem(i, 4, QTableWidgetItem(f"{mov['quantidade']} {mov['unidade']}"))
+            
+            custo_str = f"R$ {mov['custo']:.2f}" if mov['custo'] else "-"
+            self.tabela.setItem(i, 5, QTableWidgetItem(custo_str))
+            self.tabela.setItem(i, 6, QTableWidgetItem(mov["motivo"]))
 
     def registrar_movimentacao(self):
         dados_produto = self.combo_produto.currentData()
@@ -195,7 +269,6 @@ class AbaEstoque(QWidget):
             return
 
         tipo = "ENTRADA" if self.btn_entrada.isChecked() else "SAIDA"
-        
         payload = {
             "cliente_id": self.cliente_dados['cliente_id'],
             "produto_id": dados_produto["id"],
@@ -217,43 +290,10 @@ class AbaEstoque(QWidget):
             if resp.status_code == 200:
                 self.spin_qtd.setValue(0)
                 self.spin_custo.setValue(0)
-                self.carregar_historico() # Dá F5 na tabela
+                # Dá F5 na tabela e nos combos para garantir dados frescos usando a Thread
+                self.carregar_dados(atualizar_combos=True) 
                 QMessageBox.information(self, "Sucesso", "Movimentação registrada com sucesso!")
             else:
                 QMessageBox.warning(self, "Erro", resp.json().get("detail", "Erro ao registrar."))
-        except Exception as e:
+        except Exception:
             QMessageBox.critical(self, "Erro", "Falha de conexão com o servidor.")
-
-    def carregar_historico(self):
-        self.tabela.setRowCount(0)
-        
-        # Traduz o combobox para os dias do banco
-        filtro_txt = self.combo_filtro.currentText()
-        if filtro_txt == "Hoje": dias = 1
-        elif filtro_txt == "Últimos 7 Dias": dias = 7
-        else: dias = 30
-        
-        try:
-            resp = requests.get(f"{API_BASE_URL}/movimentacoes/{self.cliente_dados['cliente_id']}?dias={dias}")
-            if resp.status_code == 200:
-                movs = resp.json()
-                for i, mov in enumerate(movs):
-                    self.tabela.insertRow(i)
-                    self.tabela.setItem(i, 0, QTableWidgetItem(str(mov["id"])))
-                    self.tabela.setItem(i, 1, QTableWidgetItem(mov["data"]))
-                    
-                    # Formata a coluna Tipo com cor
-                    item_tipo = QTableWidgetItem(mov["tipo"])
-                    if mov["tipo"] == "ENTRADA":
-                        item_tipo.setForeground(Qt.darkGreen)
-                    else:
-                        item_tipo.setForeground(Qt.red)
-                    self.tabela.setItem(i, 2, item_tipo)
-                    
-                    self.tabela.setItem(i, 3, QTableWidgetItem(mov["produto"]))
-                    self.tabela.setItem(i, 4, QTableWidgetItem(f"{mov['quantidade']} {mov['unidade']}"))
-                    
-                    custo_str = f"R$ {mov['custo']:.2f}" if mov['custo'] else "-"
-                    self.tabela.setItem(i, 5, QTableWidgetItem(custo_str))
-                    self.tabela.setItem(i, 6, QTableWidgetItem(mov["motivo"]))
-        except: pass
