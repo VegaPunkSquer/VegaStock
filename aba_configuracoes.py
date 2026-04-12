@@ -3,9 +3,32 @@ import requests
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QFrame, 
                                QListWidget, QListWidgetItem, QCheckBox, QInputDialog, QDialog, QRadioButton, QButtonGroup)
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QThread, Signal
 
 API_BASE_URL = "https://vegastock.onrender.com"
+
+class WorkerConfiguracoes(QThread):
+    resultado = Signal(dict)
+    erro = Signal(str)
+
+    def __init__(self, cliente_id):
+        super().__init__()
+        self.cliente_id = cliente_id
+
+    def run(self):
+        try:
+            # Puxa as 3 listas na mesma viagem
+            r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}")
+            r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
+            r_uni = requests.get(f"{API_BASE_URL}/unidades/{self.cliente_id}")
+            
+            self.resultado.emit({
+                "categorias": r_cat.json() if r_cat.status_code == 200 else [],
+                "motivos": r_mot.json() if r_mot.status_code == 200 else [],
+                "unidades": r_uni.json() if r_uni.status_code == 200 else []
+            })
+        except Exception:
+            self.erro.emit("Falha")
 
 class DialogUpgradePRO(QDialog):
     def __init__(self, cliente_id):
@@ -356,20 +379,20 @@ class AbaConfiguracoes(QWidget):
         
         layout_principal.addLayout(layout_paineis)
         
-        # Assinatura e Info
+        # Assinatura, Info e Botão de Suporte Vega
         layout_app_info = QHBoxLayout()
-        lbl_app_dados = QLabel(f"SaaS Restaurante v1.0.0 | Cliente: {self.cliente_dados.get('nome_fantasia', '')}")
+        lbl_app_dados = QLabel(f"VegaStock v1.0.0 | Cliente: {self.cliente_dados.get('nome_fantasia', '')}")
         lbl_app_dados.setStyleSheet("color: #aaa; font-size: 10px; border: none;")
         
-        lbl_dev = QLabel("Desenvolvido por Vega Studios")
-        lbl_dev.setStyleSheet("color: #aaa; font-size: 10px; font-weight: bold; border: none;")
+        texto_link = '<a href="https://wa.me/5512981194607" style="color: #aaa; text-decoration: none;">Desenvolvido por Vega | Suporte: (12) 98119-4607</a>'
+        lbl_dev = QLabel(texto_link)
+        lbl_dev.setOpenExternalLinks(True)
+        lbl_dev.setStyleSheet("font-size: 10px; font-weight: bold; border: none;")
         
         layout_app_info.addWidget(lbl_app_dados)
         layout_app_info.addStretch()
         layout_app_info.addWidget(lbl_dev)
         layout_principal.addLayout(layout_app_info)
-        
-        self.carregar_listas()
 
     # --- FUNÇÕES DE LÓGICA E CONEXÃO COM A API ---
     
@@ -381,40 +404,48 @@ class AbaConfiguracoes(QWidget):
             self.btn_toggle_notif.setText("Notificações DESLIGADAS")
             self.btn_toggle_notif.setStyleSheet("background-color: #f44336; color: white; font-weight: bold; padding: 6px;")
 
+    def showEvent(self, event):
+        super().showEvent(event)
+        self.carregar_listas()
+
     def carregar_listas(self):
+        # 1. Avisa que tá carregando nas 3 listas de uma vez
         self.lista_categorias.clear()
         self.lista_perdas.clear()
+        self.lista_unidades.clear()
         
-        try:
-            # Puxa Categorias
-            resp_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_dados['cliente_id']}")
-            if resp_cat.status_code == 200:
-                for cat in resp_cat.json():
-                    item = QListWidgetItem(cat["nome"])
-                    item.setData(Qt.UserRole, cat["id"]) # Esconde o ID real do banco no item
-                    self.lista_categorias.addItem(item)
+        self.lista_categorias.addItem("Carregando...")
+        self.lista_perdas.addItem("Carregando...")
+        self.lista_unidades.addItem("Carregando...")
+        
+        # 2. Chama o Trabalhador
+        self.worker = WorkerConfiguracoes(self.cliente_dados['cliente_id'])
+        self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.start()
 
-            # Puxa Motivos (Separa o de USO dos de PERDA)
-            resp_motivos = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_dados['cliente_id']}")
-            if resp_motivos.status_code == 200:
-                for mov in resp_motivos.json():
-                    if mov["tipo"] == "USO":
-                        self.travar_campo_uso(mov["descricao"])
-                    elif mov["tipo"] == "PERDA":
-                        item = QListWidgetItem(mov["descricao"])
-                        item.setData(Qt.UserRole, mov["id"])
-                        self.lista_perdas.addItem(item)
-                        
-            # Puxa Unidades de Medida
-            self.lista_unidades.clear()
-            resp_unidades = requests.get(f"{API_BASE_URL}/unidades/{self.cliente_dados['cliente_id']}")
-            if resp_unidades.status_code == 200:
-                for uni in resp_unidades.json():
-                    item = QListWidgetItem(uni["nome"].upper()) # Mostra maiúsculo bonitinho
-                    item.setData(Qt.UserRole, uni["id"])
-                    self.lista_unidades.addItem(item)
-        except:
-            pass
+    def atualizar_tela(self, dados):
+        # 3. O trabalhador voltou! Limpa as mensagens e preenche com os dados reais
+        self.lista_categorias.clear()
+        self.lista_perdas.clear()
+        self.lista_unidades.clear()
+        
+        for cat in dados.get("categorias", []):
+            item = QListWidgetItem(cat["nome"])
+            item.setData(Qt.UserRole, cat["id"])
+            self.lista_categorias.addItem(item)
+            
+        for mov in dados.get("motivos", []):
+            if mov["tipo"] == "USO":
+                self.travar_campo_uso(mov["descricao"])
+            elif mov["tipo"] == "PERDA":
+                item = QListWidgetItem(mov["descricao"])
+                item.setData(Qt.UserRole, mov["id"])
+                self.lista_perdas.addItem(item)
+                
+        for uni in dados.get("unidades", []):
+            item = QListWidgetItem(uni["nome"].upper())
+            item.setData(Qt.UserRole, uni["id"])
+            self.lista_unidades.addItem(item)
 
     def travar_campo_uso(self, palavra):
         self.input_uso.setText(palavra)

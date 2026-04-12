@@ -79,7 +79,9 @@ class TelaLogin(QDialog):
         self.setLayout(layout)
         
         # Assinatura Vega
-        lbl_assinatura = QLabel("Desenvolvido por Vega | v1.0.0")
+        texto_assinatura = '<a href="https://wa.me/5512981194607" style="color: #aaa; text-decoration: none;">Desenvolvido por Vega | Suporte: (12) 98119-4607</a>'
+        lbl_assinatura = QLabel(texto_assinatura)
+        lbl_assinatura.setOpenExternalLinks(True) # Permite clicar no link e abrir no navegador
         lbl_assinatura.setAlignment(Qt.AlignCenter)
         lbl_assinatura.setStyleSheet("color: #888; font-size: 10px; margin-top: 10px; border: none;")
         layout.addWidget(lbl_assinatura)
