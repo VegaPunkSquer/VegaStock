@@ -36,3 +36,13 @@ config_local.json
 # Ignora arquivos de backup e temporários
 *.bak
 *.bat
+
+# Ignora arquivos de configuração do editor (se houver)
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*.code-workspace
+*.settings
+*.suo
+*.user
