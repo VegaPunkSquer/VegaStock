@@ -30,3 +30,5 @@ config_local.json
 *.jpg
 *.jpeg
 *.ico
+*.gif
+*.bmp

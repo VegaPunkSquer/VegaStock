@@ -1,8 +1,10 @@
 import requests
+import os
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QTableWidget, QTableWidgetItem, QHeaderView, 
                                QFrame, QAbstractItemView)
-from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtCore import Qt, QThread, Signal, QSize
+from PySide6.QtGui import QPixmap, QIcon, QMovie
 
 API_BASE_URL = "https://vegastock.onrender.com"
 
@@ -107,7 +109,16 @@ class AbaDashboard(QWidget):
 
     def carregar_dados(self):
         # 1. Coloca a tela em estado de carregamento IMEDIATO
-        self.val_patri.setText("Carregando...")
+        # Configura o GIF usando caminho absoluto
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        
+        self.movie = QMovie(caminho_gif)
+        self.movie.setScaledSize(QSize(30, 30)) # Redimensiona para não quebrar seu layout
+        
+        # Coloca o GIF rodando no lugar do valor
+        self.val_patri.setMovie(self.movie)
+        self.movie.start()
         self.val_itens.setText("...")
         self.val_alerta.setText("...")
         self.lbl_mov.setText("Buscando movimentações do dia...")
