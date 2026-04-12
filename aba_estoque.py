@@ -211,7 +211,7 @@ class AbaEstoque(QWidget):
         lbl_gif.setAlignment(Qt.AlignCenter)
         self.movie.start()
         
-        self.tabela.setCellWidget(0, 0, lbl_gif) # GIF escondido na coluna ID
+        self.tabela.setCellWidget(0, 1, lbl_gif) # GIF escondido na coluna ID
         self.tabela.setItem(0, 1, QTableWidgetItem("..."))
         self.tabela.setItem(0, 2, QTableWidgetItem("..."))
         self.tabela.setItem(0, 3, QTableWidgetItem("Buscando dados nos EUA..."))
