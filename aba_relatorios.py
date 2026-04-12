@@ -2,9 +2,47 @@ import requests
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QComboBox, QTableWidget, QTableWidgetItem, QHeaderView, 
                                QFrame, QAbstractItemView)
-from PySide6.QtCore import Qt
+import os
+from PySide6.QtCore import Qt, QThread, Signal, QSize
+from PySide6.QtGui import QMovie
 
 API_BASE_URL = "https://vegastock.onrender.com"
+
+class WorkerRelatorios(QThread):
+    resultado = Signal(dict)
+    erro = Signal(str)
+
+    def __init__(self, cliente_id, url_relatorio, atualizar_filtros):
+        super().__init__()
+        self.cliente_id = cliente_id
+        self.url_relatorio = url_relatorio
+        self.atualizar_filtros = atualizar_filtros # Flag para saber se puxa os combos ou não
+
+    def run(self):
+        try:
+            dados = {"atualizar_filtros": self.atualizar_filtros}
+            
+            # Puxa os filtros de Categoria e Motivo apenas se a tela pedir
+            if self.atualizar_filtros:
+                r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}")
+                r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
+                
+                dados["categorias"] = r_cat.json() if r_cat.status_code == 200 else []
+                # Já filtra só as perdas aqui no porão
+                motivos = r_mot.json() if r_mot.status_code == 200 else []
+                dados["motivos"] = [m for m in motivos if m.get("tipo") == "PERDA"]
+
+            # Puxa a tabela e os KPIs do relatório
+            r_rel = requests.get(self.url_relatorio)
+            if r_rel.status_code == 200:
+                dados["relatorio"] = r_rel.json()
+            else:
+                # Se falhar, manda um dicionário vazio para não quebrar a tela
+                dados["relatorio"] = {"kpis": {}, "tabela": []}
+
+            self.resultado.emit(dados)
+        except Exception:
+            self.erro.emit("Falha de conexão.")
 
 class AbaRelatorios(QWidget):
     def __init__(self, cliente_dados):
@@ -105,83 +143,105 @@ class AbaRelatorios(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        self.carregar_filtros()
-        self.carregar_relatorio()
-
-    def carregar_filtros(self):
-        # Desliga os gatilhos pra não recarregar a tabela 10x enquanto monta os filtros
-        self.combo_cat.blockSignals(True)
-        self.combo_motivo.blockSignals(True)
-        
-        # Limpa mantendo o item "Todos" no topo
-        while self.combo_cat.count() > 1: self.combo_cat.removeItem(1)
-        while self.combo_motivo.count() > 1: self.combo_motivo.removeItem(1)
-
-        try:
-            # Puxa Categorias
-            resp_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_dados['cliente_id']}")
-            if resp_cat.status_code == 200:
-                for cat in resp_cat.json():
-                    self.combo_cat.addItem(cat["nome"], cat["id"])
-            
-            # Puxa Motivos
-            resp_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_dados['cliente_id']}")
-            if resp_mot.status_code == 200:
-                for mot in resp_mot.json():
-                    if mot["tipo"] == "PERDA": # Só mostra motivos de perda nos filtros!
-                        self.combo_motivo.addItem(mot["descricao"], mot["id"])
-        except: pass
-
-        self.combo_cat.blockSignals(False)
-        self.combo_motivo.blockSignals(False)
+        # Ao abrir a aba, avisa o trabalhador para trazer o relatório E preencher os combos
+        self.carregar_dados(atualizar_filtros=True)
 
     def carregar_relatorio(self):
-        # 1. Pega os valores dos filtros
+        # Gatilho de quando o usuário muda um combobox. Não recarrega os combos, só a tabela.
+        self.carregar_dados(atualizar_filtros=False)
+
+    def carregar_dados(self, atualizar_filtros=True):
+        # 1. Congela a tela no modo "Carregando"
+        self.val_prejuizo.setText("...")
+        self.sub_prejuizo.setText("Calculando...")
+        self.val_vilao.setText("...")
+        self.sub_vilao.setText("Investigando...")
+        self.val_motivo.setText("...")
+        self.sub_motivo.setText("Buscando...")
+
+        # 2. O Show do GIF na Tabela
+        self.tabela.setRowCount(1)
+        lbl_gif = QLabel()
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        
+        self.movie = QMovie(caminho_gif)
+        self.movie.setScaledSize(QSize(20, 20))
+        lbl_gif.setMovie(self.movie)
+        lbl_gif.setAlignment(Qt.AlignCenter)
+        self.movie.start()
+        
+        # Coluna 0 é a de Produtos, sem mistério e sem estar oculta!
+        self.tabela.setCellWidget(0, 0, lbl_gif) 
+        self.tabela.setItem(0, 1, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 2, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 3, QTableWidgetItem("Puxando relatório dos EUA..."))
+        self.tabela.setItem(0, 4, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 5, QTableWidgetItem("..."))
+
+        # 3. Constrói a URL lendo os filtros
         txt_tempo = self.combo_tempo.currentText()
         dias = 30
         if txt_tempo == "Últimos 7 Dias": dias = 7
         elif txt_tempo == "Hoje": dias = 1
 
-        cat_id = self.combo_cat.currentData()
-        motivo_id = self.combo_motivo.currentData()
-
-        # 2. Monta a URL com os filtros opcionais
         url = f"{API_BASE_URL}/relatorios/desperdicio/{self.cliente_dados['cliente_id']}?dias={dias}"
-        if cat_id: url += f"&categoria_id={cat_id}"
-        if motivo_id: url += f"&motivo_id={motivo_id}"
+        
+        # Lê categoria e motivo só se eles já existirem no combobox
+        if self.combo_cat.count() > 0:
+            cat_id = self.combo_cat.currentData()
+            if cat_id: url += f"&categoria_id={cat_id}"
+            
+        if self.combo_motivo.count() > 0:
+            motivo_id = self.combo_motivo.currentData()
+            if motivo_id: url += f"&motivo_id={motivo_id}"
 
-        # 3. Busca na API e Preenche a Tela
-        try:
-            resp = requests.get(url)
-            if resp.status_code == 200:
-                dados = resp.json()
+        # 4. Envia o trabalhador pro porão
+        self.worker = WorkerRelatorios(self.cliente_dados['cliente_id'], url, atualizar_filtros)
+        self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.start()
+
+    def atualizar_tela(self, dados):
+        # 1. Preenche os Combos (Só roda na primeira vez)
+        if dados.get("atualizar_filtros"):
+            self.combo_cat.blockSignals(True)
+            self.combo_motivo.blockSignals(True)
+            
+            while self.combo_cat.count() > 1: self.combo_cat.removeItem(1)
+            while self.combo_motivo.count() > 1: self.combo_motivo.removeItem(1)
+            
+            for cat in dados.get("categorias", []):
+                self.combo_cat.addItem(cat["nome"], cat["id"])
+            for mot in dados.get("motivos", []):
+                self.combo_motivo.addItem(mot["descricao"], mot["id"])
                 
-                # Atualiza os Cartões (KPIs)
-                kpis = dados["kpis"]
-                self.val_prejuizo.setText(f"R$ {kpis['total_prejuizo']:.2f}".replace('.', ','))
-                self.sub_prejuizo.setText("Somatório das perdas")
+            self.combo_cat.blockSignals(False)
+            self.combo_motivo.blockSignals(False)
 
-                self.val_vilao.setText(kpis["top_produto"])
-                self.sub_vilao.setText(f"Custou R$ {kpis['top_produto_valor']:.2f}")
+        # 2. Preenche os Cartões (KPIs)
+        rel = dados.get("relatorio", {})
+        kpis = rel.get("kpis", {"total_prejuizo": 0, "top_produto": "-", "top_produto_valor": 0, "top_motivo": "-", "top_motivo_valor": 0})
+        
+        self.val_prejuizo.setText(f"R$ {kpis.get('total_prejuizo', 0):.2f}".replace('.', ','))
+        self.sub_prejuizo.setText("Somatório das perdas")
 
-                self.val_motivo.setText(kpis["top_motivo"])
-                self.sub_motivo.setText(f"Custou R$ {kpis['top_motivo_valor']:.2f}")
+        self.val_vilao.setText(kpis.get("top_produto", "-"))
+        self.sub_vilao.setText(f"Custou R$ {kpis.get('top_produto_valor', 0):.2f}")
 
-                # Atualiza a Tabela
-                tabela_dados = dados["tabela"]
-                self.tabela.setRowCount(0)
-                for i, linha in enumerate(tabela_dados):
-                    self.tabela.insertRow(i)
-                    self.tabela.setItem(i, 0, QTableWidgetItem(linha["produto"]))
-                    self.tabela.setItem(i, 1, QTableWidgetItem(linha["categoria"]))
-                    self.tabela.setItem(i, 2, QTableWidgetItem(f"{linha['quantidade_perdida']} {linha['unidade']}"))
-                    self.tabela.setItem(i, 3, QTableWidgetItem(linha["motivo"]))
-                    
-                    # Formata o dinheiro e pinta de vermelho
-                    item_valor = QTableWidgetItem(f"R$ {linha['custo_total_perdido_rs']:.2f}")
-                    item_valor.setForeground(Qt.darkRed)
-                    self.tabela.setItem(i, 4, item_valor)
-                    
-                    self.tabela.setItem(i, 5, QTableWidgetItem(linha["data"]))
-        except:
-            pass # Se o servidor não responder, simplesmente não atualiza (ou poderiamos por um aviso)
+        self.val_motivo.setText(kpis.get("top_motivo", "-"))
+        self.sub_motivo.setText(f"Custou R$ {kpis.get('top_motivo_valor', 0):.2f}")
+
+        # 3. Preenche a Tabela (Esmagando o GIF)
+        tabela_dados = rel.get("tabela", [])
+        self.tabela.setRowCount(0)
+        for i, linha in enumerate(tabela_dados):
+            self.tabela.insertRow(i)
+            self.tabela.setItem(i, 0, QTableWidgetItem(linha["produto"]))
+            self.tabela.setItem(i, 1, QTableWidgetItem(linha["categoria"]))
+            self.tabela.setItem(i, 2, QTableWidgetItem(f"{linha['quantidade_perdida']} {linha['unidade']}"))
+            self.tabela.setItem(i, 3, QTableWidgetItem(linha["motivo"]))
+            
+            item_valor = QTableWidgetItem(f"R$ {linha['custo_total_perdido_rs']:.2f}")
+            item_valor.setForeground(Qt.darkRed)
+            self.tabela.setItem(i, 4, item_valor)
+            self.tabela.setItem(i, 5, QTableWidgetItem(linha["data"]))
