@@ -601,24 +601,45 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
                 "unidade": p.unidade_medida
             })
 
-    # 2. Busca movimentações de HOJE (Entradas vs Saídas) para o gráfico/resumo
+    # 2. Busca movimentações de HOJE agrupadas pela unidade de medida do produto
     hoje_inicio = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
-    movs_hoje = db.query(models.MovimentacaoEstoque).filter(
+    
+    # Faz uma "costura" (JOIN) com a tabela de Produtos para descobrir a unidade de medida na mesma viagem
+    movs_hoje = db.query(
+        models.MovimentacaoEstoque.tipo_movimento,
+        models.MovimentacaoEstoque.quantidade,
+        models.Produto.unidade_medida
+    ).join(
+        models.Produto, models.MovimentacaoEstoque.produto_id == models.Produto.id
+    ).filter(
         models.MovimentacaoEstoque.cliente_id == cliente_id,
         models.MovimentacaoEstoque.data_hora >= hoje_inicio
     ).all()
 
-    entradas_hoje = sum(m.quantidade for m in movs_hoje if m.tipo_movimento == "ENTRADA")
-    saidas_hoje = sum(m.quantidade for m in movs_hoje if m.tipo_movimento == "SAIDA")
+    # Cria os potinhos vazios
+    dic_entradas = {}
+    dic_saidas = {}
+
+    # Separa a bagunça de hoje, somando cada um no seu potinho correto
+    for tipo, qtd, unidade in movs_hoje:
+        un = unidade if unidade else "un" # Se o produto estiver sem unidade, assume 'un'
+        if tipo == "ENTRADA":
+            dic_entradas[un] = dic_entradas.get(un, 0) + qtd
+        elif tipo == "SAIDA":
+            dic_saidas[un] = dic_saidas.get(un, 0) + qtd
+
+    # Converte os potinhos num texto limpo. Ex: "30.0 kg, 12.0 un"
+    texto_entradas = ", ".join([f"{v} {k}" for k, v in dic_entradas.items()]) if dic_entradas else "Nenhuma"
+    texto_saidas = ", ".join([f"{v} {k}" for k, v in dic_saidas.items()]) if dic_saidas else "Nenhuma"
 
     return {
         "patrimonio_rs": round(patrimonio_total, 2),
         "total_produtos": total_itens_estoque,
         "alertas_criticos_qtd": len(itens_abaixo_minimo),
-        "lista_compras": itens_abaixo_minimo, # Os produtos que o Tio precisa repor
+        "lista_compras": itens_abaixo_minimo,
         "movimento_hoje": {
-            "entradas": entradas_hoje,
-            "saidas": saidas_hoje
+            "entradas": texto_entradas,
+            "saidas": texto_saidas
         }
     }
     

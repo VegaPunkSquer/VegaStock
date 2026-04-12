@@ -2,9 +2,29 @@ import requests
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QTableWidget, QTableWidgetItem, QHeaderView, 
                                QFrame, QAbstractItemView)
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QThread, Signal
 
 API_BASE_URL = "https://vegastock.onrender.com"
+
+class WorkerDashboard(QThread):
+    resultado = Signal(dict)
+    erro = Signal(str)
+
+    def __init__(self, cliente_id):
+        super().__init__()
+        self.cliente_id = cliente_id
+
+    def run(self):
+        try:
+            resp = requests.get(f"{API_BASE_URL}/dashboard/resumo/{self.cliente_id}")
+            if resp.status_code == 200:
+                self.resultado.emit(resp.json())
+            else:
+                self.erro.emit("Erro ao puxar dados do servidor.")
+        except requests.exceptions.ConnectionError:
+            self.erro.emit("Sem conexão com a internet.")
+        except Exception as e:
+            self.erro.emit(str(e))
 
 class AbaDashboard(QWidget):
     def __init__(self, cliente_dados):
@@ -86,37 +106,53 @@ class AbaDashboard(QWidget):
         self.carregar_dados()
 
     def carregar_dados(self):
-        try:
-            resp = requests.get(f"{API_BASE_URL}/dashboard/resumo/{self.cliente_dados['cliente_id']}")
-            if resp.status_code == 200:
-                dados = resp.json()
-                
-                # Atualiza Cards
-                self.val_patri.setText(f"R$ {dados['patrimonio_rs']:.2f}".replace('.', ','))
-                self.val_itens.setText(str(dados['total_produtos']))
-                self.val_alerta.setText(str(dados['alertas_criticos_qtd']))
-                
-                # Muda a cor do card de alerta se tiver algo crítico
-                if dados['alertas_criticos_qtd'] > 0:
-                    self.val_alerta.setStyleSheet("font-size: 28px; font-weight: bold; color: #d32f2f; border: none;")
-                else:
-                    self.val_alerta.setStyleSheet("font-size: 28px; font-weight: bold; color: #2E7D32; border: none;")
+        # 1. Coloca a tela em estado de carregamento IMEDIATO
+        self.val_patri.setText("Carregando...")
+        self.val_itens.setText("...")
+        self.val_alerta.setText("...")
+        self.lbl_mov.setText("Buscando movimentações do dia...")
+        self.tabela_compras.setRowCount(0)
 
-                # Atualiza Tabela de Compras
-                self.tabela_compras.setRowCount(0)
-                for i, item in enumerate(dados["lista_compras"]):
-                    self.tabela_compras.insertRow(i)
-                    self.tabela_compras.setItem(i, 0, QTableWidgetItem(item["nome"]))
-                    self.tabela_compras.setItem(i, 1, QTableWidgetItem(f"{item['qtd_atual']} {item['unidade']}"))
-                    self.tabela_compras.setItem(i, 2, QTableWidgetItem(f"{item['qtd_minima']} {item['unidade']}"))
-                    
-                    status = QTableWidgetItem("⚠️ REPOR")
-                    status.setForeground(Qt.red)
-                    status.setTextAlignment(Qt.AlignCenter)
-                    self.tabela_compras.setItem(i, 3, status)
+        # 2. Chama o Trabalhador do Porão e manda ele pra Virgínia
+        self.worker = WorkerDashboard(self.cliente_dados['cliente_id'])
+        self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.erro.connect(self.mostrar_erro)
+        self.worker.start()
 
-                # Atualiza Movimento
-                m = dados["movimento_hoje"]
-                self.lbl_mov.setText(f"Movimentação de Hoje: {m['entradas']} Entradas | {m['saidas']} Saídas registradas.")
-        except:
-            pass
+    def atualizar_tela(self, dados):
+        # O trabalhador voltou. Hora de preencher a tela!
+        self.val_patri.setText(f"R$ {dados.get('patrimonio_rs', 0):.2f}".replace('.', ','))
+        self.val_itens.setText(str(dados.get('total_produtos', 0)))
+        
+        qtd_alerta = dados.get('alertas_criticos_qtd', 0)
+        self.val_alerta.setText(str(qtd_alerta))
+        if qtd_alerta > 0:
+            self.val_alerta.setStyleSheet("font-size: 28px; font-weight: bold; color: #d32f2f; border: none;")
+        else:
+            self.val_alerta.setStyleSheet("font-size: 28px; font-weight: bold; color: #2E7D32; border: none;")
+
+        # Tabela
+        lista = dados.get("lista_compras", [])
+        self.tabela_compras.setRowCount(0)
+        for i, item in enumerate(lista):
+            self.tabela_compras.insertRow(i)
+            self.tabela_compras.setItem(i, 0, QTableWidgetItem(item["nome"]))
+            self.tabela_compras.setItem(i, 1, QTableWidgetItem(f"{item['qtd_atual']} {item['unidade']}"))
+            self.tabela_compras.setItem(i, 2, QTableWidgetItem(f"{item['qtd_minima']} {item['unidade']}"))
+            status = QTableWidgetItem("⚠️ REPOR")
+            status.setForeground(Qt.red)
+            status.setTextAlignment(Qt.AlignCenter)
+            self.tabela_compras.setItem(i, 3, status)
+
+        # Atualiza Movimento (Pronto para receber o texto formatado da API)
+        m = dados.get("movimento_hoje", {})
+        entradas = m.get('entradas', '0')
+        saidas = m.get('saidas', '0')
+        self.lbl_mov.setText(f"Movimentação de Hoje:\n⬇️ Entradas: {entradas}\n⬆️ Saídas: {saidas}")
+
+    def mostrar_erro(self, msg):
+        # Se a internet cair, a tela não quebra, só avisa.
+        self.val_patri.setText("ERRO")
+        self.val_itens.setText("-")
+        self.val_alerta.setText("-")
+        self.lbl_mov.setText(f"Falha ao carregar: {msg}")
