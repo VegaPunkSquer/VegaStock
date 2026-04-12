@@ -102,11 +102,6 @@ class AbaCatalogo(QWidget):
         self.btn_excluir.clicked.connect(self.excluir_produto)
         layout_principal.addWidget(self.btn_excluir)
 
-        # Carrega os dados na tela
-        self.carregar_categorias()
-        self.carregar_produtos()
-        self.carregar_unidades()
-
     # --- FUNÇÕES DE LÓGICA ---
 
     def showEvent(self, event):
