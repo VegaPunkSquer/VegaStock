@@ -3,12 +3,32 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QMessageBox, QFrame, 
                                QTableWidget, QTableWidgetItem, QHeaderView, 
                                QCheckBox, QFormLayout, QAbstractItemView)
-from PySide6.QtCore import Qt
+import os
+from PySide6.QtCore import Qt, QThread, Signal, QSize
+from PySide6.QtGui import QMovie
 
 # IMPORTANTE: Importa a janela de vendas lá do seu arquivo de configurações!
 from aba_configuracoes import DialogUpgradePRO 
 
 API_BASE_URL = "https://vegastock.onrender.com"
+
+class WorkerEquipe(QThread):
+    resultado = Signal(list)
+    erro = Signal(str)
+
+    def __init__(self, cliente_id):
+        super().__init__()
+        self.cliente_id = cliente_id
+
+    def run(self):
+        try:
+            resp = requests.get(f"{API_BASE_URL}/equipe/{self.cliente_id}")
+            if resp.status_code == 200:
+                self.resultado.emit(resp.json())
+            else:
+                self.resultado.emit([])
+        except Exception:
+            self.erro.emit("Falha de conexão.")
 
 class AbaEquipe(QWidget):
     def __init__(self, cliente_dados):
@@ -161,21 +181,41 @@ class AbaEquipe(QWidget):
         QMessageBox.information(self, "Aviso", "Se você ativou o PRO, saia e entre novamente no sistema para atualizar suas permissões!")
 
     def carregar_equipe(self):
+        # 1. Prepara a Tabela com o GIF
+        self.tabela.setRowCount(1)
+        lbl_gif = QLabel()
+        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        
+        self.movie = QMovie(caminho_gif)
+        self.movie.setScaledSize(QSize(20, 20))
+        lbl_gif.setMovie(self.movie)
+        lbl_gif.setAlignment(Qt.AlignCenter)
+        self.movie.start()
+        
+        # Coluna 0 (ID) tá oculta, então botamos o GIF na coluna 1 (Login)
+        self.tabela.setCellWidget(0, 1, lbl_gif)
+        self.tabela.setItem(0, 2, QTableWidgetItem("Buscando equipe..."))
+        self.tabela.setItem(0, 3, QTableWidgetItem("..."))
+
+        # 2. Manda pro porão
+        self.worker = WorkerEquipe(self.cliente_dados['cliente_id'])
+        self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.start()
+
+    def atualizar_tela(self, dados):
+        # 3. O trabalhador voltou, esmaga o GIF e preenche os reais
         self.tabela.setRowCount(0)
-        try:
-            resp = requests.get(f"{API_BASE_URL}/equipe/{self.cliente_dados['cliente_id']}")
-            if resp.status_code == 200:
-                for i, func in enumerate(resp.json()):
-                    self.tabela.insertRow(i)
-                    self.tabela.setItem(i, 0, QTableWidgetItem(str(func["id"])))
-                    self.tabela.setItem(i, 1, QTableWidgetItem(func["login"]))
-                    self.tabela.setItem(i, 2, QTableWidgetItem(func["cargo"] or "Sem Cargo"))
-                    
-                    # Salva a lista de permissões crua no campo para recuperar depois
-                    item_acessos = QTableWidgetItem(", ".join(func["permissoes"]))
-                    item_acessos.setData(Qt.UserRole, func["permissoes"]) 
-                    self.tabela.setItem(i, 3, item_acessos)
-        except: pass
+        for i, func in enumerate(dados):
+            self.tabela.insertRow(i)
+            self.tabela.setItem(i, 0, QTableWidgetItem(str(func["id"])))
+            self.tabela.setItem(i, 1, QTableWidgetItem(func["login"]))
+            self.tabela.setItem(i, 2, QTableWidgetItem(func["cargo"] or "Sem Cargo"))
+            
+            # Salva a lista de permissões crua no campo para recuperar depois
+            item_acessos = QTableWidgetItem(", ".join(func["permissoes"]))
+            item_acessos.setData(Qt.UserRole, func["permissoes"]) 
+            self.tabela.setItem(i, 3, item_acessos)
 
     def limpar_formulario(self):
         self.usuario_selecionado_id = None
