@@ -854,3 +854,19 @@ def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
     db.add(nova_mov)
     db.commit()
     return {"mensagem": "Movimentação registrada!"}
+
+@app.put("/produtos/{produto_id}")
+async def editar_produto(produto_id: int, request: Request, db: Session = Depends(get_db)):
+    produto = db.query(models.Produto).filter(models.Produto.id == produto_id).first()
+    if not produto:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+    # Abre o "pacote" JSON na marra
+    dados = await request.json()
+
+    # Atualiza SÓ o que veio da tela
+    produto.nome = dados.get("nome", produto.nome)
+    produto.unidade_medida = dados.get("unidade_medida", produto.unidade_medida)
+
+    db.commit()
+    return {"mensagem": "Produto atualizado com sucesso!"}

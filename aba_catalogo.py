@@ -1,7 +1,8 @@
 import requests
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
                                QComboBox, QSpinBox, QPushButton, QTableWidget, QTableWidgetItem,
-                               QHeaderView, QMessageBox, QGroupBox, QFormLayout, QAbstractItemView, QInputDialog)
+                               QHeaderView, QMessageBox, QGroupBox, QFormLayout, QAbstractItemView, QInputDialog,
+                               QStyledItemDelegate)
 from PySide6.QtCore import Qt, QThread, Signal
 
 API_BASE_URL = "https://vegastock.onrender.com"
@@ -30,6 +31,27 @@ class WorkerCatalogo(QThread):
             self.resultado.emit(dados)
         except Exception as e:
             self.erro.emit("Falha de conexão.")
+            
+class UnidadeDelegate(QStyledItemDelegate):
+    def __init__(self, unidades, parent=None):
+        super().__init__(parent)
+        self.unidades = unidades
+
+    def createEditor(self, parent, option, index):
+        # Quando der duplo clique, cria o ComboBox
+        combo = QComboBox(parent)
+        combo.addItems(self.unidades)
+        return combo
+
+    def setEditorData(self, editor, index):
+        # Puxa o texto que estava na célula pro ComboBox
+        texto_atual = index.model().data(index, Qt.EditRole)
+        if texto_atual:
+            editor.setCurrentText(texto_atual)
+
+    def setModelData(self, editor, model, index):
+        # Quando terminar de editar, salva o texto escolhido de volta na célula
+        model.setData(index, editor.currentText(), Qt.EditRole)
 
 class AbaCatalogo(QWidget):
     def __init__(self, cliente_dados):
@@ -85,22 +107,35 @@ class AbaCatalogo(QWidget):
         # 2. TABELA DE PRODUTOS CADASTRADOS
         # ==========================================
         self.tabela = QTableWidget()
-        self.tabela.setColumnCount(5)
+        self.tabela.setColumnCount(5) # Voltamos para 5 colunas!
         self.tabela.setHorizontalHeaderLabels(["ID", "Nome", "ID Cat.", "Unidade", "Alerta Mínimo"])
         self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
-        self.tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
         
-        # Oculta a coluna de ID real para ficar mais limpo
+        # PERMITE edição ao dar dois cliques na célula!
+        self.tabela.setSelectionBehavior(QAbstractItemView.SelectItems)
+        self.tabela.setEditTriggers(QAbstractItemView.DoubleClicked)
+        
         self.tabela.setColumnHidden(0, True)
-        self.tabela.setColumnHidden(2, True) # Oculta o ID da categoria
-        
+        self.tabela.setColumnHidden(2, True) 
         layout_principal.addWidget(self.tabela)
+
+        # Layout horizontal para agrupar os botões do rodapé
+        layout_botoes_rodape = QHBoxLayout()
+
+        self.btn_salvar_edicao = QPushButton("Salvar Edição do Produto")
+        self.btn_salvar_edicao.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 6px;")
+        self.btn_salvar_edicao.clicked.connect(self.salvar_edicao)
+        self.btn_salvar_edicao.hide()
+        # O ALARME: Se alguma célula for alterada, ele roda a função de mostrar o botão
+        self.tabela.itemChanged.connect(self.mostrar_botao_salvar)
 
         self.btn_excluir = QPushButton("Excluir Produto Selecionado")
         self.btn_excluir.setStyleSheet("color: red; font-weight: bold; border: 1px solid red; padding: 6px;")
         self.btn_excluir.clicked.connect(self.excluir_produto)
-        layout_principal.addWidget(self.btn_excluir)
+        
+        layout_botoes_rodape.addWidget(self.btn_salvar_edicao)
+        layout_botoes_rodape.addWidget(self.btn_excluir)
+        layout_principal.addLayout(layout_botoes_rodape)
 
     # --- FUNÇÕES DE LÓGICA ---
 
@@ -138,15 +173,25 @@ class AbaCatalogo(QWidget):
         self.combo_unidade.blockSignals(False)
 
         # 3. Preenche Tabela
-        self.tabela.setRowCount(0)
+        self.tabela.blockSignals(True) # Manda o PySide fechar os olhos
+        self.tabela.setRowCount(0)        
         for i, prod in enumerate(dados["produtos"]):
             self.tabela.insertRow(i)
             self.tabela.setItem(i, 0, QTableWidgetItem(str(prod["id"])))
             self.tabela.setItem(i, 1, QTableWidgetItem(prod["nome"]))
             self.tabela.setItem(i, 2, QTableWidgetItem(str(prod["categoria_id"])))
+            
+            # VOLTOU A SER TEXTO NORMAL!
             self.tabela.setItem(i, 3, QTableWidgetItem(prod["unidade_medida"]))
+            
             alerta = str(prod["estoque_minimo"]) if prod["estoque_minimo"] > 0 else "Geral"
             self.tabela.setItem(i, 4, QTableWidgetItem(alerta))
+
+        # 4. Aplica o espião na coluna da Unidade (Coluna 3)
+        nomes_unidades = [uni["nome"].upper() for uni in dados["unidades"]]
+        delegate = UnidadeDelegate(nomes_unidades, self.tabela)
+        self.tabela.setItemDelegateForColumn(3, delegate)
+        self.tabela.blockSignals(False) # Pode abrir os olhos, terminou!
 
     def cadastrar_produto(self):
         nome = self.input_nome.text().strip()
@@ -205,3 +250,40 @@ class AbaCatalogo(QWidget):
                     self.carregar_dados() 
             else:
                 self.carregar_dados()
+                
+    def mostrar_botao_salvar(self, item):
+        # Só mostra o botão se a tela já terminou de carregar
+        self.btn_salvar_edicao.show()
+                
+    def salvar_edicao(self):
+        linha = self.tabela.currentRow()
+        if linha < 0:
+            QMessageBox.warning(self, "Aviso", "Selecione uma linha para salvar a edição.")
+            return
+
+        # Puxa o que o usuário alterou nas células
+        produto_id = int(self.tabela.item(linha, 0).text())
+        novo_nome = self.tabela.item(linha, 1).text().strip()
+        # Agora ele lê direto a opção que o cara selecionou na listinha da tabela
+        nova_unidade = self.tabela.item(linha, 3).text().strip()
+
+        dados_editados = {
+            "cliente_id": self.cliente_dados['cliente_id'],
+            "nome": novo_nome,
+            "unidade_medida": nova_unidade
+        }
+
+        # Avisa a Render
+        try:
+            # Você precisa ter uma rota PUT /produtos/{produto_id} na sua API (main.py)
+            resp = requests.put(f"{API_BASE_URL}/produtos/{produto_id}", json=dados_editados)
+            if resp.status_code == 200:
+                QMessageBox.information(self, "Sucesso", "Produto atualizado com sucesso!")
+                self.btn_salvar_edicao.hide() # Esconde o botão de salvar de novo
+                self.carregar_dados() # Recarrega para ter certeza
+            else:
+                # Agora ele vai te mostrar o número do erro e o que a API reclamou!
+                QMessageBox.warning(self, "Erro", f"A API recusou: {resp.status_code} - {resp.text}")
+                self.btn_salvar_edicao.hide() # Força o botão a sumir pra não ficar te encarando
+        except Exception:
+            QMessageBox.critical(self, "Erro", "Não foi possível conectar à API.")
