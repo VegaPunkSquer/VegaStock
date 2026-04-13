@@ -135,10 +135,15 @@ class AbaEstoque(QWidget):
         self.combo_filtro.addItems(["Hoje", "Últimos 7 Dias", "Últimos 30 Dias"])
         self.combo_filtro.currentIndexChanged.connect(self.carregar_historico)
         
+        # Cria o botão e liga à função que atualiza a tela
+        self.btn_atualizar = QPushButton("Atualizar Tabela")
+        self.btn_atualizar.clicked.connect(lambda: self.carregar_dados(atualizar_combos=False))
+
         layout_filtro.addWidget(lbl_historico)
         layout_filtro.addStretch()
         layout_filtro.addWidget(QLabel("Filtrar por:"))
         layout_filtro.addWidget(self.combo_filtro)
+        layout_filtro.addWidget(self.btn_atualizar) # O novo botão entra aqui!
         layout_principal.addLayout(layout_filtro)
 
         # Tabela
@@ -251,8 +256,15 @@ class AbaEstoque(QWidget):
             self.tabela.setItem(i, 0, QTableWidgetItem(str(mov["id"])))
             self.tabela.setItem(i, 1, QTableWidgetItem(mov["data"]))
             
-            item_tipo = QTableWidgetItem(mov["tipo"])
-            item_tipo.setForeground(Qt.darkGreen if mov["tipo"] == "ENTRADA" else Qt.red)
+            tipo_mov = mov.get("tipo", "") # Para evitar erros se vier vazio
+            # Se a API na nuvem devolver "Entrada" (como no seu novo back-end mobile) ou "ENTRADA", ele tratará como minúsculo
+            tipo_mov_lower = tipo_mov.lower()
+
+            item_tipo = QTableWidgetItem(tipo_mov)
+            if tipo_mov_lower == "entrada":
+                item_tipo.setForeground(Qt.darkGreen)
+            elif tipo_mov_lower == "saida":
+                item_tipo.setForeground(Qt.red)
             self.tabela.setItem(i, 2, item_tipo)
             
             self.tabela.setItem(i, 3, QTableWidgetItem(mov["produto"]))
@@ -260,7 +272,10 @@ class AbaEstoque(QWidget):
             
             custo_str = f"R$ {mov['custo']:.2f}" if mov['custo'] else "-"
             self.tabela.setItem(i, 5, QTableWidgetItem(custo_str))
-            self.tabela.setItem(i, 6, QTableWidgetItem(mov["motivo"]))
+            
+            # 2. Force o Motivo a ficar vazio na Entrada
+            texto_motivo = mov.get("motivo", "") if tipo_mov_lower == "saida" else ""
+            self.tabela.setItem(i, 6, QTableWidgetItem(texto_motivo))
 
     def registrar_movimentacao(self):
         dados_produto = self.combo_produto.currentData()
