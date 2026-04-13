@@ -7,6 +7,9 @@ export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   
   // Variáveis de Estado (O "cérebro" da tela)
+  const [custo, setCusto] = useState('');
+  const [motivos, setMotivos] = useState([]);
+  const [motivoEscolhido, setMotivoEscolhido] = useState(null);
   const [scanned, setScanned] = useState(false);
   const [modo, setModo] = useState(null); // Vai guardar se é 'ENTRADA', 'SAIDA' ou null (Menu Principal)
   const [codigoNovo, setCodigoNovo] = useState(null);
@@ -109,10 +112,18 @@ export default function App() {
     }
   };
 
-  // Função que envia a quantidade para a nuvem
+  // Função que envia tudo blindado para a nuvem
   const confirmarMovimentacao = async () => {
     if (!quantidade || isNaN(quantidade) || Number(quantidade) <= 0) {
-      alert("Digite uma quantidade válida maior que zero!");
+      alert("Digite uma quantidade válida!");
+      return;
+    }
+    if (modo === 'Entrada' && (!custo || isNaN(custo))) {
+      alert("Digite o custo total ou unitário!");
+      return;
+    }
+    if (modo === 'Saida' && !motivoEscolhido) {
+      alert("Selecione um motivo para a saída!");
       return;
     }
 
@@ -123,19 +134,23 @@ export default function App() {
         body: JSON.stringify({
           cliente_id: 1,
           produto_id: produtoReconhecido.id,
-          tipo_movimento: modo, // 'ENTRADA' ou 'SAIDA'
-          quantidade: Number(quantidade)
+          tipo_movimento: modo,
+          quantidade: Number(quantidade),
+          custo_unitario: modo === 'Entrada' ? Number(custo) : null,
+          motivo_baixa_id: modo === 'Saida' ? motivoEscolhido : null
         })
       });
 
       if (res.ok) {
-        alert(`✅ Sucesso! ${modo} de ${quantidade} registrada no sistema.`);
-        setProdutoReconhecido(null); // Fecha a tela
-        setQuantidade('');           // Limpa o teclado
-        setScanned(false);           // Reseta o leitor
-        setModo(null);               // Volta pro menu principal
+        alert(`✅ Sucesso!`);
+        setProdutoReconhecido(null);
+        setQuantidade('');
+        setCusto('');
+        setMotivoEscolhido(null);
+        setScanned(false);
+        setModo(null);
       } else {
-        alert("Erro ao registrar no servidor.");
+        alert("Erro no servidor.");
       }
     } catch (error) {
       alert("Sem conexão com o servidor.");
@@ -143,34 +158,65 @@ export default function App() {
   };
 
   // ==========================================
-  // TELA 4: DIGITAR A QUANTIDADE (Produto Reconhecido)
+  // TELA 4: DIGITAR QUANTIDADE, CUSTO E MOTIVO
   // ==========================================
   if (produtoReconhecido) {
     return (
       <View style={styles.container}>
-        <Text style={[styles.titulo, { color: modo === 'ENTRADA' ? '#4CAF50' : '#F44336' }]}>
-          {modo}
+        <Text style={[styles.titulo, { color: modo === 'Entrada' ? '#4CAF50' : '#F44336' }]}>
+          {modo.toUpperCase()}
         </Text>
+        <Text style={{fontSize: 24, fontWeight: 'bold', marginVertical: 10}}>{produtoReconhecido.nome}</Text>
         
-        <Text style={{fontSize: 24, fontWeight: 'bold', marginVertical: 10, textAlign: 'center'}}>
-          {produtoReconhecido.nome}
-        </Text>
-        <Text style={{fontSize: 16, color: 'gray', marginBottom: 30}}>
-          Medida em: {produtoReconhecido.unidade_medida}
-        </Text>
-
         <TextInput
-          style={{borderWidth: 2, borderColor: '#ccc', width: '60%', fontSize: 40, padding: 15, textAlign: 'center', borderRadius: 10, marginBottom: 30}}
+          style={{borderWidth: 2, borderColor: '#ccc', width: '80%', fontSize: 24, padding: 10, textAlign: 'center', borderRadius: 10, marginBottom: 15}}
           keyboardType="numeric"
-          placeholder="0"
+          placeholder={`Quantidade (${produtoReconhecido.unidade_medida})`}
           value={quantidade}
           onChangeText={setQuantidade}
         />
 
+        {/* CAMPO DE CUSTO SÓ APARECE NA ENTRADA */}
+        {modo === 'Entrada' && (
+          <TextInput
+            style={{borderWidth: 2, borderColor: '#ccc', width: '80%', fontSize: 24, padding: 10, textAlign: 'center', borderRadius: 10, marginBottom: 15}}
+            keyboardType="numeric"
+            placeholder="Custo (R$)"
+            value={custo}
+            onChangeText={setCusto}
+          />
+        )}
+
+        {/* LISTA DE MOTIVOS SÓ APARECE NA SAÍDA */}
+        {modo === 'Saida' && (
+          <View style={{width: '80%', height: 150, marginBottom: 15}}>
+            <Text style={{textAlign: 'center', fontWeight: 'bold', marginBottom: 5}}>Motivo da Saída:</Text>
+            <FlatList
+              data={motivos}
+              keyExtractor={(item) => item.id.toString()}
+              renderItem={({ item }) => (
+                <TouchableOpacity 
+                  style={{
+                    backgroundColor: motivoEscolhido === item.id ? '#F44336' : '#ddd',
+                    padding: 10, marginVertical: 3, borderRadius: 5
+                  }}
+                  onPress={() => setMotivoEscolhido(item.id)}
+                >
+                  <Text style={{color: motivoEscolhido === item.id ? '#fff' : '#000', textAlign: 'center'}}>
+                    {item.descricao}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            />
+          </View>
+        )}
+
         <View style={{width: '80%'}}>
-          <Button title="CONFIRMAR" color={modo === 'ENTRADA' ? '#4CAF50' : '#F44336'} onPress={confirmarMovimentacao} />
+          <Button title="CONFIRMAR" color={modo === 'Entrada' ? '#4CAF50' : '#F44336'} onPress={confirmarMovimentacao} />
           <View style={{marginTop: 15}}>
-            <Button title="Cancelar" color="#333" onPress={() => { setProdutoReconhecido(null); setQuantidade(''); setScanned(false); }} />
+            <Button title="Cancelar" color="#333" onPress={() => { 
+              setProdutoReconhecido(null); setQuantidade(''); setCusto(''); setMotivoEscolhido(null); setScanned(false); 
+            }} />
           </View>
         </View>
       </View>
@@ -242,14 +288,22 @@ export default function App() {
 
       <TouchableOpacity 
         style={[styles.botao, styles.btnEntrada]} 
-        onPress={() => { setModo('ENTRADA'); setScanned(false); }}
+        onPress={() => { setModo('Entrada'); setScanned(false); }}
       >
         <Text style={styles.btnText}>⬇️ ENTRADA</Text>
       </TouchableOpacity>
 
       <TouchableOpacity 
         style={[styles.botao, styles.btnSaida]} 
-        onPress={() => { setModo('SAIDA'); setScanned(false); }}
+        onPress={async () => { 
+          setModo('Saida'); 
+          setScanned(false); 
+          // Puxa os motivos da nuvem silenciosamente
+          try {
+            let res = await fetch("https://vegastock.onrender.com/motivos_mobile/1");
+            setMotivos(await res.json());
+          } catch(e) {}
+        }}
       >
         <Text style={styles.btnText}>⬆️ SAÍDA</Text>
       </TouchableOpacity>
