@@ -841,6 +841,9 @@ def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
     elif tipo == "Saida":
         produto.quantidade_atual -= qtd
         custo_final_movimentacao = produto.custo_medio # PUXA SOZINHO!
+        # Força o banco a salvar o novo preço médio no cadastro do produto!
+        db.add(produto)
+        db.commit()
 
     # 3. Salva a movimentação do jeito que o Dashboard gosta
     nova_mov = models.MovimentacaoEstoque(
