@@ -75,6 +75,7 @@ class Produto(Base):
     custo_medio = Column(Float, default=0.0)
     estoque_minimo = Column(Float, default=0.0)
     quantidade_atual = Column(Float, default=0.0)
+    codigo_barras = Column(String, index=True, nullable=True)
 
 class UnidadeMedida(Base):
     __tablename__ = "unidades_medida"

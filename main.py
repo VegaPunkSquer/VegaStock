@@ -752,3 +752,43 @@ async def asaas_webhook(request: Request, asaas_access_token: str = Header(None)
 
     # O Asaas exige que a gente responda algo para ele saber que a mensagem chegou, senão ele fica reenviando
     return {"status": "recebido"}
+
+# ==========================================
+# ROTAS DO LEITOR DE CÓDIGO DE BARRAS (MOBILE)
+# ==========================================
+
+@app.get("/produto_por_codigo/{cliente_id}/{codigo}")
+def buscar_produto_por_codigo(cliente_id: int, codigo: str, db: Session = Depends(get_db)):
+    """O Detetive: Tenta achar quem é o dono do código lido pela câmera."""
+    produto = db.query(models.Produto).filter(
+        models.Produto.cliente_id == cliente_id,
+        models.Produto.codigo_barras == codigo
+    ).first()
+
+    if not produto:
+        raise HTTPException(status_code=404, detail="Código não reconhecido pelo sistema.")
+        
+    return {
+        "id": produto.id,
+        "nome": produto.nome,
+        "unidade_medida": produto.unidade_medida
+    }
+
+@app.put("/vincular_codigo")
+def vincular_codigo(dados: dict, db: Session = Depends(get_db)):
+    """O Batismo: Salva o código novo no produto selecionado pelo estoquista."""
+    produto_id = dados.get("produto_id")
+    codigo = dados.get("codigo_barras")
+    cliente_id = dados.get("cliente_id")
+    
+    produto = db.query(models.Produto).filter(
+        models.Produto.id == produto_id,
+        models.Produto.cliente_id == cliente_id
+    ).first()
+    
+    if not produto:
+        raise HTTPException(status_code=404, detail="Produto não encontrado.")
+        
+    produto.codigo_barras = codigo
+    db.commit()
+    return {"mensagem": "Código de barras vinculado com sucesso ao produto!"}
