@@ -35,6 +35,9 @@ export default function App() {
   const handleBarCodeScanned = async ({ type, data }) => {
     setScanned(true);
     
+    // Passa a faca em espaços invisíveis!
+    const codigoLimpo = String(data).trim();
+    
     // ATENÇÃO: Como não fizemos a tela de Login no celular ainda, 
     // vamos fingir que o João Estoquista logou no restaurante de ID 1.
     const cliente_id_temporario = 1; 
@@ -42,7 +45,7 @@ export default function App() {
 
     try {
       // O Detetive: Vai na Render e pergunta de quem é esse código
-      let resposta = await fetch(`${API_URL}/produto_por_codigo/${cliente_id_temporario}/${data}`);
+      let resposta = await fetch(`${API_URL}/produto_por_codigo/${cliente_id_temporario}/${codigoLimpo}`);
 
       if (resposta.status === 200) {
         // Cenário A: O Produto já existe e tem esse código!
@@ -51,7 +54,7 @@ export default function App() {
         
       } else if (resposta.status === 404) {
         // Cenário B: O Batismo! O código existe, mas a API não conhece.
-        setCodigoNovo(data); // Salva o número na memória para a tela de batismo
+        setCodigoNovo(codigoLimpo); // Salva o número na memória para a tela de batismo
         
         // Busca a lista REAL de produtos lá na Render
         try {
