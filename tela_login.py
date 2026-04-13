@@ -56,10 +56,36 @@ class TelaLogin(QDialog):
         self.input_login.setPlaceholderText("Usuário")
         layout.addWidget(self.input_login)
 
+        from PySide6.QtWidgets import QHBoxLayout # Adicione se não tiver lá no topo
+        
         self.input_senha = QLineEdit()
         self.input_senha.setPlaceholderText("Senha")
-        self.input_senha.setEchoMode(QLineEdit.Password) # Esconde a senha com ***
-        layout.addWidget(self.input_senha)
+        self.input_senha.setEchoMode(QLineEdit.Password)
+
+        self.btn_olho = QPushButton("👁️")
+        self.btn_olho.setCursor(Qt.PointingHandCursor)
+        self.btn_olho.setFixedWidth(40)
+        # Tira a borda para não parecer um botão feio colado no campo
+        self.btn_olho.setStyleSheet("border: 1px solid #ccc; background-color: #f0f0f0; border-radius: 4px;")
+
+        def alternar_senha():
+            if self.input_senha.echoMode() == QLineEdit.Password:
+                self.input_senha.setEchoMode(QLineEdit.Normal)
+                self.btn_olho.setText("🙈")
+            else:
+                self.input_senha.setEchoMode(QLineEdit.Password)
+                self.btn_olho.setText("👁️")
+
+        self.btn_olho.clicked.connect(alternar_senha)
+
+        # Agrupa o campo e o botão na mesma linha
+        layout_senha = QHBoxLayout()
+        layout_senha.setContentsMargins(0, 0, 0, 0)
+        layout_senha.addWidget(self.input_senha)
+        layout_senha.addWidget(self.btn_olho)
+        
+        # Adiciona o grupo na tela
+        layout.addLayout(layout_senha)
 
         self.btn_entrar = QPushButton("Entrar")
         self.btn_entrar.setObjectName("btn_destaque") # Botão Amarelo
