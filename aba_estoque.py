@@ -145,6 +145,7 @@ class AbaEstoque(QWidget):
         layout_filtro.addWidget(QLabel("Filtrar por:"))
         layout_filtro.addWidget(self.combo_filtro)
         layout_filtro.addWidget(self.btn_atualizar) # O botão é injetado na tela aqui
+        print("BATATA")
         layout_principal.addLayout(layout_filtro)
 
         # Tabela
