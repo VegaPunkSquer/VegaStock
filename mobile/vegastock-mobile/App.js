@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Button } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Button, FlatList } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function App() {
@@ -9,6 +9,8 @@ export default function App() {
   // Variáveis de Estado (O "cérebro" da tela)
   const [scanned, setScanned] = useState(false);
   const [modo, setModo] = useState(null); // Vai guardar se é 'ENTRADA', 'SAIDA' ou null (Menu Principal)
+  const [codigoNovo, setCodigoNovo] = useState(null);
+  const [produtosCatalogo, setProdutosCatalogo] = useState([]);
 
   // Se ainda tá carregando a permissão
   if (!permission) {
@@ -27,17 +29,103 @@ export default function App() {
     );
   }
 
-  // A função que roda no EXATO milissegundo que a câmera acha um código de barras
-  const handleBarCodeScanned = ({ type, data }) => {
+  // A função que roda no EXATO milissegundo que a câmera acha um código
+  const handleBarCodeScanned = async ({ type, data }) => {
     setScanned(true);
-    // Aqui é onde o aplicativo vai gritar pra sua API lá na Render no futuro!
-    alert(`Operação: ${modo}\nCódigo Lido: ${data}\n\nO leitor está funcionando perfeitamente!`);
     
-    // Volta pro menu principal depois de 2 segundos
+    // ATENÇÃO: Como não fizemos a tela de Login no celular ainda, 
+    // vamos fingir que o João Estoquista logou no restaurante de ID 1.
+    const cliente_id_temporario = 1; 
+    const API_URL = "https://vegastock.onrender.com";
+
+    try {
+      // O Detetive: Vai na Render e pergunta de quem é esse código
+      let resposta = await fetch(`${API_URL}/produto_por_codigo/${cliente_id_temporario}/${data}`);
+
+      if (resposta.status === 200) {
+        // Cenário A: O Produto já existe e tem esse código!
+        let produto = await resposta.json();
+        alert(`✅ PRODUTO RECONHECIDO!\n${produto.nome} (${produto.unidade_medida})\n\nAqui abriria a tela para digitar a quantidade de ${modo}.`);
+        
+      } else if (resposta.status === 404) {
+        // Cenário B: O Batismo! O código existe, mas a API não conhece.
+        setCodigoNovo(data); // Salva o número na memória para a tela de batismo
+        
+        // Busca a lista REAL de produtos lá na Render
+        try {
+          let resProdutos = await fetch(`${API_URL}/produtos_mobile/${cliente_id_temporario}`);
+          if (resProdutos.ok) {
+            let produtosReais = await resProdutos.json();
+            setProdutosCatalogo(produtosReais);
+          } else {
+            alert("Erro ao buscar a lista de produtos reais.");
+          }
+        } catch (e) {
+          alert("Sem conexão para baixar a lista de produtos.");
+        }
+        
+      } else {
+        alert("Erro esquisito na API. Status: " + resposta.status);
+      }
+
+    } catch (erro) {
+      alert("Falha na conexão! O servidor da Render ainda deve estar reiniciando... tenta de novo em 1 minuto.");
+    }
+
+    // Volta pro menu principal depois de 4 segundos
     setTimeout(() => {
       setModo(null);
-    }, 2000);
+    }, 4000);
   };
+
+  // Função que atira na sua rota PUT da Render
+  const realizarBatismo = async (produto_id) => {
+    try {
+      const res = await fetch("https://vegastock.onrender.com/vincular_codigo", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ produto_id: produto_id, codigo_barras: codigoNovo, cliente_id: 1 })
+      });
+
+      if (res.ok) {
+        alert("✅ Código vinculado com sucesso! O sistema já aprendeu.");
+        setCodigoNovo(null); // Fecha a tela de batismo
+        setScanned(false);   // Libera a câmera pra bipar de novo
+      } else {
+        alert("Erro da API ao vincular o código.");
+      }
+    } catch (error) {
+      alert("Sem conexão com o servidor.");
+    }
+  };
+
+  // ==========================================
+  // TELA 3: A TELA DE BATISMO (LISTA DE PRODUTOS)
+  // ==========================================
+  if (codigoNovo) {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.titulo}>Código Novo!</Text>
+        <Text style={{fontSize: 16, marginBottom: 20}}>O que é o produto de código: {codigoNovo}?</Text>
+        
+        <FlatList
+          data={produtosCatalogo}
+          keyExtractor={(item) => item.id.toString()}
+          style={{ width: '100%', marginBottom: 20 }}
+          renderItem={({ item }) => (
+            <TouchableOpacity 
+              style={{backgroundColor: '#e0e0e0', padding: 20, marginVertical: 5, borderRadius: 10}}
+              onPress={() => realizarBatismo(item.id)}
+            >
+              <Text style={{fontSize: 18, fontWeight: 'bold'}}>{item.nome}</Text>
+            </TouchableOpacity>
+          )}
+        />
+        
+        <Button title="Cancelar e Voltar" color="#F44336" onPress={() => { setCodigoNovo(null); setScanned(false); }} />
+      </View>
+    );
+  }
 
   // ==========================================
   // TELA 2: A CÂMERA LIGADA (O Leitor)

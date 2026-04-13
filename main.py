@@ -792,3 +792,9 @@ def vincular_codigo(dados: dict, db: Session = Depends(get_db)):
     produto.codigo_barras = codigo
     db.commit()
     return {"mensagem": "Código de barras vinculado com sucesso ao produto!"}
+
+@app.get("/produtos_mobile/{cliente_id}")
+def listar_produtos_mobile(cliente_id: int, db: Session = Depends(get_db)):
+    """Puxa a lista real de produtos do restaurante para a tela de Batismo."""
+    produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
+    return [{"id": p.id, "nome": p.nome, "unidade_medida": p.unidade_medida} for p in produtos]
