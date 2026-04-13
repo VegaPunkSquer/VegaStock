@@ -819,8 +819,10 @@ def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
     
     # 1. Padroniza para evitar erro no Dashboard
     tipo = str(dados.get("tipo_movimento", "")).upper()
-    qtd = float(dados.get("quantidade", 0))
-    custo_digitado = dados.get("custo_unitario")
+    qtd_bruta = str(dados.get("quantidade", "0")).replace(",", ".")
+    qtd = float(qtd_bruta) if qtd_bruta.strip() != "" else 0.0
+    custo_bruto = str(dados.get("custo_unitario", "0")).replace(",", ".")
+    custo_digitado = float(custo_bruto) if custo_bruto.strip() != "" else 0.0
     motivo_id = dados.get("motivo_baixa_id")
 
     produto = db.query(models.Produto).filter(models.Produto.id == produto_id).first()

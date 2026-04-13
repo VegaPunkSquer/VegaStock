@@ -109,14 +109,29 @@ export default function App() {
 
   // Função que envia tudo blindado para a nuvem
   const confirmarMovimentacao = async () => {
-    if (!quantidade || isNaN(quantidade) || Number(quantidade) <= 0) {
-      alert("Digite uma quantidade válida!");
+    // 1. A Mágica do Replace: Troca vírgula por ponto ANTES de validar
+    let qtdFormatada = quantidade ? quantidade.replace(',', '.') : '0';
+    let custoFormatado = custo ? custo.replace(',', '.') : '0';
+
+    // 2. Transforma em número para as travas
+    let numQtd = parseFloat(qtdFormatada);
+    let numCusto = parseFloat(custoFormatado);
+
+    // TRAVA 1: Quantidade não pode ser nula, texto ou zero.
+    if (!quantidade || isNaN(numQtd) || numQtd <= 0) {
+      alert("Digite uma quantidade válida (maior que zero)!");
       return;
     }
-    if (modo === 'Entrada' && (!custo || isNaN(custo))) {
-      alert("Digite o custo total ou unitário!");
-      return;
+    
+    // TRAVA 2: Entrada OBRIGA o preenchimento de custo. Não pode ser nulo ou texto.
+    if (modo === 'Entrada') {
+        if (!custo || isNaN(numCusto)) {
+            alert("Digite o custo total ou unitário!");
+            return;
+        }
     }
+
+    // TRAVA 3: Saída OBRIGA a escolha do motivo.
     if (modo === 'Saida' && !motivoEscolhido) {
       alert("Selecione um motivo para a saída!");
       return;
@@ -130,11 +145,13 @@ export default function App() {
           cliente_id: 1,
           produto_id: produtoReconhecido.id,
           tipo_movimento: modo,
-          quantidade: Number(quantidade),
-          custo_unitario: modo === 'Entrada' ? Number(custo) : null,
+          quantidade: numQtd, // Envia o número traduzido
+          custo_unitario: modo === 'Entrada' ? numCusto : null, // Envia o número traduzido
           motivo_baixa_id: modo === 'Saida' ? motivoEscolhido : null
         })
       });
+
+      // ... resto do seu código (if res.ok { ... })
 
       if (res.ok) {
         alert(`✅ Sucesso!`);
