@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, Button, FlatList } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, Button, FlatList, TextInput } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function App() {
@@ -10,6 +10,8 @@ export default function App() {
   const [scanned, setScanned] = useState(false);
   const [modo, setModo] = useState(null); // Vai guardar se é 'ENTRADA', 'SAIDA' ou null (Menu Principal)
   const [codigoNovo, setCodigoNovo] = useState(null);
+  const [produtoReconhecido, setProdutoReconhecido] = useState(null);
+  const [quantidade, setQuantidade] = useState('');
   const [produtosCatalogo, setProdutosCatalogo] = useState([]);
 
   // Se ainda tá carregando a permissão
@@ -45,7 +47,7 @@ export default function App() {
       if (resposta.status === 200) {
         // Cenário A: O Produto já existe e tem esse código!
         let produto = await resposta.json();
-        alert(`✅ PRODUTO RECONHECIDO!\n${produto.nome} (${produto.unidade_medida})\n\nAqui abriria a tela para digitar a quantidade de ${modo}.`);
+        setProdutoReconhecido(produto);
         
       } else if (resposta.status === 404) {
         // Cenário B: O Batismo! O código existe, mas a API não conhece.
@@ -98,6 +100,74 @@ export default function App() {
       alert("Sem conexão com o servidor.");
     }
   };
+
+  // Função que envia a quantidade para a nuvem
+  const confirmarMovimentacao = async () => {
+    if (!quantidade || isNaN(quantidade) || Number(quantidade) <= 0) {
+      alert("Digite uma quantidade válida maior que zero!");
+      return;
+    }
+
+    try {
+      const res = await fetch("https://vegastock.onrender.com/movimentar_mobile", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cliente_id: 1,
+          produto_id: produtoReconhecido.id,
+          tipo_movimento: modo, // 'ENTRADA' ou 'SAIDA'
+          quantidade: Number(quantidade)
+        })
+      });
+
+      if (res.ok) {
+        alert(`✅ Sucesso! ${modo} de ${quantidade} registrada no sistema.`);
+        setProdutoReconhecido(null); // Fecha a tela
+        setQuantidade('');           // Limpa o teclado
+        setScanned(false);           // Reseta o leitor
+        setModo(null);               // Volta pro menu principal
+      } else {
+        alert("Erro ao registrar no servidor.");
+      }
+    } catch (error) {
+      alert("Sem conexão com o servidor.");
+    }
+  };
+
+  // ==========================================
+  // TELA 4: DIGITAR A QUANTIDADE (Produto Reconhecido)
+  // ==========================================
+  if (produtoReconhecido) {
+    return (
+      <View style={styles.container}>
+        <Text style={[styles.titulo, { color: modo === 'ENTRADA' ? '#4CAF50' : '#F44336' }]}>
+          {modo}
+        </Text>
+        
+        <Text style={{fontSize: 24, fontWeight: 'bold', marginVertical: 10, textAlign: 'center'}}>
+          {produtoReconhecido.nome}
+        </Text>
+        <Text style={{fontSize: 16, color: 'gray', marginBottom: 30}}>
+          Medida em: {produtoReconhecido.unidade_medida}
+        </Text>
+
+        <TextInput
+          style={{borderWidth: 2, borderColor: '#ccc', width: '60%', fontSize: 40, padding: 15, textAlign: 'center', borderRadius: 10, marginBottom: 30}}
+          keyboardType="numeric"
+          placeholder="0"
+          value={quantidade}
+          onChangeText={setQuantidade}
+        />
+
+        <View style={{width: '80%'}}>
+          <Button title="CONFIRMAR" color={modo === 'ENTRADA' ? '#4CAF50' : '#F44336'} onPress={confirmarMovimentacao} />
+          <View style={{marginTop: 15}}>
+            <Button title="Cancelar" color="#333" onPress={() => { setProdutoReconhecido(null); setQuantidade(''); setScanned(false); }} />
+          </View>
+        </View>
+      </View>
+    );
+  }
 
   // ==========================================
   // TELA 3: A TELA DE BATISMO (LISTA DE PRODUTOS)
