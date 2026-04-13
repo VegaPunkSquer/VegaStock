@@ -834,11 +834,11 @@ def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
     # 2. A SUA REGRA DE PREÇO:
     # Se for ENTRADA: Atualiza o custo médio do produto com o valor digitado.
     # Se for SAÍDA: O custo final é EXATAMENTE o custo médio que já estava salvo!
-    if tipo == "ENTRADA":
+    if tipo == "Entrada":
         produto.quantidade_atual += qtd
         produto.custo_medio = float(custo_digitado) if custo_digitado else produto.custo_medio
         custo_final_movimentacao = float(custo_digitado) if custo_digitado else 0.0
-    elif tipo == "SAIDA":
+    elif tipo == "Saida":
         produto.quantidade_atual -= qtd
         custo_final_movimentacao = produto.custo_medio # PUXA SOZINHO!
 
