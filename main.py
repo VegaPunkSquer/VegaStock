@@ -1,4 +1,5 @@
-from datetime import timedelta
+from datetime import timedelta, datetime
+from collections import defaultdict
 from sqlalchemy import desc
 from fastapi import FastAPI, Request, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
@@ -109,6 +110,8 @@ def listar_movimentacoes(cliente_id: int, dias: int = 30, db: Session = Depends(
         models.MovimentacaoEstoque.cliente_id == cliente_id,
         models.MovimentacaoEstoque.data_hora >= data_corte
     ).order_by(desc(models.MovimentacaoEstoque.id)).all()
+    
+    movimentacoes.sort(key=lambda x: x.id, reverse=True)
 
     resultado = []
     for m in movimentacoes:
@@ -137,85 +140,81 @@ def listar_movimentacoes(cliente_id: int, dias: int = 30, db: Session = Depends(
 
 # 4. Endpoint: Relatório de Desperdício (A isca de vendas)
 @app.get("/relatorios/desperdicio/{cliente_id}")
-def relatorio_desperdicio_avancado(
-    cliente_id: int, 
-    dias: int = 30, 
-    categoria_id: int = None, 
-    motivo_id: int = None, 
-    db: Session = Depends(get_db)
-):
-    data_limite = datetime.utcnow() - timedelta(days=dias)
+def relatorio_desperdicio(cliente_id: int, dias: int = 30, categoria_id: int = None, motivo_id: int = None, db: Session = Depends(get_db)):
+    # 1. Ajuste do Fuso Horário de João Pessoa (UTC-3)
+    hoje_brasil = datetime.utcnow() - timedelta(hours=3)
+    
+    # Se for "Hoje" (dias=1), o corte é exatamente a meia-noite de hoje
+    if dias == 1:
+        data_corte = hoje_brasil.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:
+        data_corte = hoje_brasil - timedelta(days=dias)
 
-    # Passo 1: Busca só as SAÍDAS que foram marcadas como "PERDA"
-    query = db.query(
-        models.MovimentacaoEstoque,
-        models.Produto,
-        models.MotivoBaixa,
-        models.Categoria
-    ).join(
-        models.Produto, models.MovimentacaoEstoque.produto_id == models.Produto.id
-    ).join(
-        models.MotivoBaixa, models.MovimentacaoEstoque.motivo_baixa_id == models.MotivoBaixa.id
-    ).outerjoin(
-        models.Categoria, models.Produto.categoria_id == models.Categoria.id
-    ).filter(
+    # 2. Busca apenas as SAÍDAS
+    query = db.query(models.MovimentacaoEstoque).filter(
         models.MovimentacaoEstoque.cliente_id == cliente_id,
         models.MovimentacaoEstoque.tipo_movimento == "SAIDA",
-        models.MotivoBaixa.tipo == "PERDA",
-        models.MovimentacaoEstoque.data_hora >= data_limite
+        models.MovimentacaoEstoque.data_hora >= data_corte
     )
-
-    # Aplica os filtros se o usuário tiver selecionado na tela
-    if categoria_id:
-        query = query.filter(models.Produto.categoria_id == categoria_id)
     if motivo_id:
         query = query.filter(models.MovimentacaoEstoque.motivo_baixa_id == motivo_id)
-
+        
     movimentacoes = query.all()
 
     total_prejuizo = 0.0
-    produtos_agrupados = {}
-    motivos_agrupados = {}
-    resultados_tabela = []
+    produtos_perdidos = defaultdict(float)
+    motivos_perdidos = defaultdict(float)
+    tabela = []
 
-    # Passo 2: A Matemática Investigativa
-    for mov, prod, motivo, cat in movimentacoes:
-        custo_perdido = mov.quantidade * prod.custo_medio
-        total_prejuizo += custo_perdido
+    for m in movimentacoes:
+        # Só calcula se o motivo existir e se o custo existir (agora vai existir graças ao código novo)
+        custo = float(m.custo_unitario) if m.custo_unitario else 0.0
+        prejuizo_linha = custo * float(m.quantidade)
+        
+        produto = db.query(models.Produto).filter(models.Produto.id == m.produto_id).first()
+        # Aplica o filtro de categoria se o usuário selecionou na tela
+        if categoria_id and (not produto or produto.categoria_id != categoria_id):
+            continue
 
-        # Vai somando para o pódio de vilões
-        produtos_agrupados[prod.nome] = produtos_agrupados.get(prod.nome, 0) + custo_perdido
-        motivos_agrupados[motivo.descricao] = motivos_agrupados.get(motivo.descricao, 0) + custo_perdido
+        nome_produto = produto.nome if produto else "Deletado"
+        cat = db.query(models.Categoria).filter(models.Categoria.id == produto.categoria_id).first() if produto and produto.categoria_id else None
+        nome_cat = cat.nome if cat else "Sem Categoria"
 
-        resultados_tabela.append({
-            "produto": prod.nome,
-            "categoria": cat.nome if cat else "Geral",
-            "quantidade_perdida": mov.quantidade,
-            "unidade": prod.unidade_medida,
-            "motivo": motivo.descricao,
-            "custo_total_perdido_rs": round(custo_perdido, 2),
-            "data": mov.data_hora.strftime("%d/%m/%Y")
+        motivo = db.query(models.MotivoBaixa).filter(models.MotivoBaixa.id == m.motivo_baixa_id).first() if m.motivo_baixa_id else None
+        nome_motivo = motivo.descricao if motivo else "Sem Motivo"
+
+        # Soma nos KPIs
+        total_prejuizo += prejuizo_linha
+        produtos_perdidos[nome_produto] += prejuizo_linha
+        motivos_perdidos[nome_motivo] += prejuizo_linha
+
+        # Adiciona na tabela forçando as casas decimais
+        tabela.append({
+            "produto": nome_produto,
+            "categoria": nome_cat,
+            "quantidade_perdida": m.quantidade,
+            "unidade": produto.unidade_medida if produto else "",
+            "motivo": nome_motivo,
+            "custo_total_perdido_rs": prejuizo_linha,
+            "data": m.data_hora.strftime("%d/%m/%Y")
         })
 
-    # Passo 3: Coroa os Vilões
-    top_produto = max(produtos_agrupados, key=produtos_agrupados.get) if produtos_agrupados else "Nenhum"
-    top_produto_valor = produtos_agrupados[top_produto] if produtos_agrupados else 0.0
+    # Descobre o maior vilão (Produto e Motivo)
+    top_produto = max(produtos_perdidos, key=produtos_perdidos.get) if produtos_perdidos else "Nenhum"
+    top_produto_valor = produtos_perdidos[top_produto] if produtos_perdidos else 0.0
 
-    top_motivo = max(motivos_agrupados, key=motivos_agrupados.get) if motivos_agrupados else "Nenhum"
-    top_motivo_valor = motivos_agrupados[top_motivo] if motivos_agrupados else 0.0
-
-    # Ordena a tabela do maior rombo pro menor
-    tabela_ordenada = sorted(resultados_tabela, key=lambda x: x["custo_total_perdido_rs"], reverse=True)
+    top_motivo = max(motivos_perdidos, key=motivos_perdidos.get) if motivos_perdidos else "Nenhum"
+    top_motivo_valor = motivos_perdidos[top_motivo] if motivos_perdidos else 0.0
 
     return {
         "kpis": {
-            "total_prejuizo": round(total_prejuizo, 2),
+            "total_prejuizo": total_prejuizo,
             "top_produto": top_produto,
-            "top_produto_valor": round(top_produto_valor, 2),
+            "top_produto_valor": top_produto_valor,
             "top_motivo": top_motivo,
-            "top_motivo_valor": round(top_motivo_valor, 2)
+            "top_motivo_valor": top_motivo_valor
         },
-        "tabela": tabela_ordenada
+        "tabela": tabela
     }
 
 # Função interna para gerar a criptografia (Hash)
