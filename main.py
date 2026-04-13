@@ -757,28 +757,12 @@ async def asaas_webhook(request: Request, asaas_access_token: str = Header(None)
 # ROTAS DO LEITOR DE CÓDIGO DE BARRAS (MOBILE)
 # ==========================================
 
-@app.get("/produto_por_codigo/{cliente_id}/{codigo}")
-def buscar_produto_por_codigo(cliente_id: int, codigo: str, db: Session = Depends(get_db)):
-    """O Detetive: Tenta achar quem é o dono do código lido pela câmera."""
-    produto = db.query(models.Produto).filter(
-        models.Produto.cliente_id == cliente_id,
-        models.Produto.codigo_barras == codigo
-    ).first()
-
-    if not produto:
-        raise HTTPException(status_code=404, detail="Código não reconhecido pelo sistema.")
-        
-    return {
-        "id": produto.id,
-        "nome": produto.nome,
-        "unidade_medida": produto.unidade_medida
-    }
-
 @app.put("/vincular_codigo")
 def vincular_codigo(dados: dict, db: Session = Depends(get_db)):
-    """O Batismo: Salva o código novo no produto selecionado pelo estoquista."""
+    """O Batismo Blindado"""
     produto_id = dados.get("produto_id")
-    codigo = dados.get("codigo_barras")
+    # Força a ser texto e corta qualquer espaço invisível ou quebra de linha!
+    codigo = str(dados.get("codigo_barras")).strip() 
     cliente_id = dados.get("cliente_id")
     
     produto = db.query(models.Produto).filter(
@@ -791,13 +775,33 @@ def vincular_codigo(dados: dict, db: Session = Depends(get_db)):
         
     produto.codigo_barras = codigo
     db.commit()
-    return {"mensagem": "Código de barras vinculado com sucesso ao produto!"}
+    db.refresh(produto) # Força o banco a devolver a prova de que salvou
+    return {"mensagem": "Salvo!", "prova_do_crime": produto.codigo_barras}
 
 @app.get("/produtos_mobile/{cliente_id}")
 def listar_produtos_mobile(cliente_id: int, db: Session = Depends(get_db)):
-    """Puxa a lista real de produtos do restaurante para a tela de Batismo."""
+    """Puxa a lista e agora MOSTRA se tem código salvo ou não."""
     produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
-    return [{"id": p.id, "nome": p.nome, "unidade_medida": p.unidade_medida} for p in produtos]
+    # Adicionamos a gaveta do codigo_barras aqui pra gente auditar
+    return [{"id": p.id, "nome": p.nome, "unidade_medida": p.unidade_medida, "codigo_barras": p.codigo_barras} for p in produtos]
+
+@app.get("/produto_por_codigo/{cliente_id}/{codigo}")
+def buscar_produto_por_codigo(cliente_id: int, codigo: str, db: Session = Depends(get_db)):
+    """O Detetive Blindado"""
+    codigo_limpo = codigo.strip() # Limpa a sujeira aqui também
+    produto = db.query(models.Produto).filter(
+        models.Produto.cliente_id == cliente_id,
+        models.Produto.codigo_barras == codigo_limpo
+    ).first()
+
+    if not produto:
+        raise HTTPException(status_code=404, detail="Código não reconhecido.")
+        
+    return {
+        "id": produto.id,
+        "nome": produto.nome,
+        "unidade_medida": produto.unidade_medida
+    }
 
 @app.post("/movimentar_mobile")
 def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):

@@ -80,7 +80,7 @@ export default function App() {
     }, 4000);
   };
 
-  // Função que atira na sua rota PUT da Render
+  // Função que atira na sua rota PUT da Render e já pula pra quantidade
   const realizarBatismo = async (produto_id) => {
     try {
       const res = await fetch("https://vegastock.onrender.com/vincular_codigo", {
@@ -91,8 +91,13 @@ export default function App() {
 
       if (res.ok) {
         alert("✅ Código vinculado com sucesso! O sistema já aprendeu.");
+        
+        // O PULO DO GATO: Acha qual foi o produto que você clicou na lista
+        const produtoEscolhido = produtosCatalogo.find(p => p.id === produto_id);
+
         setCodigoNovo(null); // Fecha a tela de batismo
-        setScanned(false);   // Libera a câmera pra bipar de novo
+        setProdutoReconhecido(produtoEscolhido); // ABRE A TELA DE QUANTIDADE DIRETO!
+        
       } else {
         alert("Erro da API ao vincular o código.");
       }
