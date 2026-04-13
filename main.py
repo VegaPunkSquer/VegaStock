@@ -814,47 +814,41 @@ def listar_motivos_mobile(cliente_id: int, db: Session = Depends(get_db)):
 
 @app.post("/movimentar_mobile")
 def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
-    """Recebe a ordem do celular, padroniza as letras e aplica a SUA regra de custo."""
     produto_id = dados.get("produto_id")
     cliente_id = dados.get("cliente_id")
     
-    # 1. FORÇA a palavra a ficar em maiúsculo para o Dashboard não bugar!
-    tipo = str(dados.get("tipo_movimento", "")).upper() 
-    
+    # 1. Padroniza para evitar erro no Dashboard
+    tipo = str(dados.get("tipo_movimento", "")).upper()
     qtd = float(dados.get("quantidade", 0))
     custo_digitado = dados.get("custo_unitario")
     motivo_id = dados.get("motivo_baixa_id")
 
-    # Puxa o produto do banco
     produto = db.query(models.Produto).filter(models.Produto.id == produto_id).first()
-    if not produto:
-        raise HTTPException(status_code=404, detail="Produto não encontrado")
+    
+    # 2. Blindagem contra o "vazio" (NULL) do Catálogo
+    q_atual = produto.quantidade_atual if produto.quantidade_atual is not None else 0.0
+    c_medio = produto.custo_medio if produto.custo_medio is not None else 0.0
 
-    # 2. A SUA REGRA DE PREÇO:
-    # Se for ENTRADA: Atualiza o custo médio do produto com o valor digitado.
-    # Se for SAÍDA: O custo final é EXATAMENTE o custo médio que já estava salvo!
-    if tipo == "Entrada":
-        produto.quantidade_atual += qtd
-        produto.custo_medio = float(custo_digitado) if custo_digitado else produto.custo_medio
-        custo_final_movimentacao = float(custo_digitado) if custo_digitado else 0.0
-    elif tipo == "Saida":
-        produto.quantidade_atual -= qtd
-        custo_final_movimentacao = produto.custo_medio # PUXA SOZINHO!
-        # Força o banco a salvar o novo preço médio no cadastro do produto!
-        db.add(produto)
-        db.commit()
+    if tipo == "ENTRADA":
+        produto.quantidade_atual = q_atual + qtd
+        produto.custo_medio = float(custo_digitado)
+        custo_final = float(custo_digitado)
+    else: # SAIDA
+        produto.quantidade_atual = q_atual - qtd
+        custo_final = c_medio
 
-    # 3. Salva a movimentação do jeito que o Dashboard gosta
+    db.add(produto) # Salva a nova realidade do produto
+
+    # 3. Registra o histórico
     nova_mov = models.MovimentacaoEstoque(
         cliente_id=cliente_id,
         produto_id=produto_id,
-        tipo_movimento=tipo, # Agora vai sempre como "ENTRADA" ou "SAIDA"
+        tipo_movimento=tipo,
         quantidade=qtd,
-        custo_unitario=custo_final_movimentacao, # Já vai com o valor certinho!
+        custo_unitario=custo_final,
         motivo_baixa_id=motivo_id if tipo == "SAIDA" else None,
         usuario_id=1 
     )
-    
     db.add(nova_mov)
     db.commit()
-    return {"mensagem": "Movimentação registrada com perfeição e custo debitado!"}
+    return {"mensagem": "Movimentação registrada!"}

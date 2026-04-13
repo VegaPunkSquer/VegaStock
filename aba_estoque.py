@@ -138,7 +138,7 @@ class AbaEstoque(QWidget):
         # --- O BOTÃO ENTRA EXATAMENTE AQUI ---
         self.btn_atualizar = QPushButton("Atualizar Tabela")
         self.btn_atualizar.setCursor(Qt.PointingHandCursor) # Deixa a mãozinha ao passar o mouse
-        self.btn_atualizar.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 5px 15px; border-radius: 4px;")
+        self.btn_atualizar.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 8px; border-radius: 5px; border: 1px solid #0d47a1;")
         self.btn_atualizar.clicked.connect(lambda: self.carregar_dados(atualizar_combos=False))
         
         layout_filtro.addWidget(lbl_historico)
