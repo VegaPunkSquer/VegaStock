@@ -98,13 +98,15 @@ class AbaEstoque(QWidget):
 
         # O SpinBox é perfeito: evita que digitem letras e já formata os números
         self.spin_qtd = QDoubleSpinBox()
-        self.spin_qtd.setRange(0.001, 99999.999)
+        self.spin_qtd.setRange(0.000, 99999.999)
         self.spin_qtd.setDecimals(3) 
+        self.spin_qtd.setValue(0.00)
 
         self.spin_custo = QDoubleSpinBox()
-        self.spin_custo.setRange(0.01, 99999.99)
+        self.spin_custo.setRange(0.00, 99999.99)
         self.spin_custo.setPrefix("R$ ")
         self.spin_custo.setDecimals(2)
+        self.spin_custo.setValue(0.00)
 
         self.combo_motivo = QComboBox()
         self.combo_motivo.setPlaceholderText("Selecione o Motivo da Saída...")
