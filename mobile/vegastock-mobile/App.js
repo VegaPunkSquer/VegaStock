@@ -79,11 +79,6 @@ export default function App() {
     } catch (erro) {
       alert("Falha na conexão! O servidor da Render ainda deve estar reiniciando... tenta de novo em 1 minuto.");
     }
-
-    // Volta pro menu principal depois de 4 segundos
-    setTimeout(() => {
-      setModo(null);
-    }, 4000);
   };
 
   // Função que atira na sua rota PUT da Render e já pula pra quantidade

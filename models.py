@@ -1,5 +1,5 @@
 from sqlalchemy import Column, Integer, String, Float, DateTime, ForeignKey, Boolean
-from datetime import datetime
+from datetime import datetime, timedelta
 from database import Base
 
 class Cliente(Base):
@@ -35,7 +35,7 @@ class MovimentacaoEstoque(Base):
     tipo_movimento = Column(String)  # "ENTRADA" ou "SAIDA"
     quantidade = Column(Float)
     custo_unitario = Column(Float, nullable=True) # Quanto ele pagou na hora da Entrada
-    data_hora = Column(DateTime, default=datetime.utcnow)
+    data_hora = Column(DateTime, default=lambda: datetime.utcnow() - timedelta(hours=3))
     usuario_id = Column(Integer, nullable=True)  # Nullable até termos o módulo de RH/Login de Staff
     
 class Licenca(Base):
