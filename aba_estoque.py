@@ -282,22 +282,37 @@ class AbaEstoque(QWidget):
     def registrar_movimentacao(self):
         dados_produto = self.combo_produto.currentData()
         if not dados_produto:
-            QMessageBox.warning(self, "Aviso", "Cadastre produtos no Catálogo primeiro!")
+            QMessageBox.warning(self, "Aviso", "Selecione um produto primeiro!")
+            return
+
+        # TRAVA 1: Quantidade não pode ser zero
+        qtd_digitada = self.spin_qtd.value()
+        if qtd_digitada <= 0:
+            QMessageBox.warning(self, "Aviso", "A quantidade deve ser maior que zero!")
             return
 
         tipo = "ENTRADA" if self.btn_entrada.isChecked() else "SAIDA"
+        
+        # Puxa os valores dos campos
         payload = {
             "cliente_id": self.cliente_dados['cliente_id'],
             "produto_id": dados_produto["id"],
             "tipo_movimento": tipo,
-            "quantidade": self.spin_qtd.value()
+            "quantidade": qtd_digitada
         }
 
         if tipo == "ENTRADA":
-            payload["custo_unitario"] = self.spin_custo.value()
-        else:
+            # TRAVA 2: Entrada não pode ter custo zero
+            custo_digitado = self.spin_custo.value()
+            if custo_digitado <= 0:
+                QMessageBox.warning(self, "Aviso", "O custo da entrada não pode ser zero!")
+                return
+            payload["custo_unitario"] = custo_digitado
+            
+        else: # Se for SAÍDA
             motivo_id = self.combo_motivo.currentData()
-            if not motivo_id:
+            # TRAVA 3: Saída OBRIGA a escolher um motivo válido
+            if not motivo_id or self.combo_motivo.currentText() == "Selecione o Motivo da Saída...":
                 QMessageBox.warning(self, "Aviso", "Selecione o motivo da saída!")
                 return
             payload["motivo_baixa_id"] = motivo_id
