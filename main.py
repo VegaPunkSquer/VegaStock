@@ -803,34 +803,42 @@ def buscar_produto_por_codigo(cliente_id: int, codigo: str, db: Session = Depend
         "unidade_medida": produto.unidade_medida
     }
 
+@app.get("/motivos_mobile/{cliente_id}")
+def listar_motivos_mobile(cliente_id: int, db: Session = Depends(get_db)):
+    """Envia a lista de motivos cadastrados para o celular."""
+    motivos = db.query(models.MotivoBaixa).filter(models.MotivoBaixa.cliente_id == cliente_id).all()
+    return [{"id": m.id, "descricao": m.descricao} for m in motivos]
+
 @app.post("/movimentar_mobile")
 def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
-    """Recebe a contagem do celular e atualiza o estoque na hora."""
+    """Recebe a contagem, custo e motivo do celular."""
     produto_id = dados.get("produto_id")
     cliente_id = dados.get("cliente_id")
-    tipo = dados.get("tipo_movimento") # "ENTRADA" ou "SAIDA"
+    tipo = dados.get("tipo_movimento") # Vai chegar exato: "Entrada" ou "Saida"
     qtd = float(dados.get("quantidade", 0))
+    custo = dados.get("custo_unitario")
+    motivo_id = dados.get("motivo_baixa_id")
 
-    # Acha o produto no banco
     produto = db.query(models.Produto).filter(models.Produto.id == produto_id).first()
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
 
-    # Faz a matemática do estoque
-    if tipo == "ENTRADA":
+    if tipo == "Entrada":
         produto.quantidade_atual += qtd
-    elif tipo == "SAIDA":
+        produto.custo_medio = float(custo) if custo else produto.custo_medio
+    elif tipo == "Saida":
         produto.quantidade_atual -= qtd
 
-    # Registra no histórico de movimentações para o gerente ver no PC depois
     nova_mov = models.MovimentacaoEstoque(
         cliente_id=cliente_id,
         produto_id=produto_id,
         tipo_movimento=tipo,
         quantidade=qtd,
-        usuario_id=1 # ID temporário do funcionário até termos o Login
+        custo_unitario=float(custo) if custo else None,
+        motivo_baixa_id=motivo_id if tipo == "Saida" else None, # Só salva motivo se for saída
+        usuario_id=1 
     )
     
     db.add(nova_mov)
     db.commit()
-    return {"mensagem": f"{tipo} de {qtd} registrada com sucesso!"}
+    return {"mensagem": "Movimentação registrada com perfeição!"}
