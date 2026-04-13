@@ -37,6 +37,7 @@ class MovimentacaoEstoque(Base):
     custo_unitario = Column(Float, nullable=True) # Quanto ele pagou na hora da Entrada
     data_hora = Column(DateTime, default=lambda: datetime.utcnow() - timedelta(hours=3))
     usuario_id = Column(Integer, nullable=True)  # Nullable até termos o módulo de RH/Login de Staff
+    operador_nome = Column(String, nullable=True) # Nome do funcionário do turno
     
 class Licenca(Base):
     __tablename__ = "licencas"
@@ -82,3 +83,10 @@ class UnidadeMedida(Base):
     id = Column(Integer, primary_key=True, index=True)
     cliente_id = Column(Integer, ForeignKey("clientes.id"))
     nome = Column(String, index=True)
+    
+class OperadorTurno(Base):
+    __tablename__ = "operadores_turno"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id")) # De qual restaurante ele é
+    nome = Column(String, nullable=False)
+    pin = Column(String(4), nullable=False) # A senha de 4 dígitos

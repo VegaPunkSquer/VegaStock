@@ -849,7 +849,8 @@ def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
         quantidade=qtd,
         custo_unitario=custo_final,
         motivo_baixa_id=motivo_id if tipo == "SAIDA" else None,
-        usuario_id=1 
+        usuario_id=1,
+        operador_nome=dados.get("operador_nome", "Desconhecido")
     )
     db.add(nova_mov)
     db.commit()
@@ -870,3 +871,19 @@ async def editar_produto(produto_id: int, request: Request, db: Session = Depend
 
     db.commit()
     return {"mensagem": "Produto atualizado com sucesso!"}
+
+@app.post("/validar_pin")
+def validar_pin(dados: dict, db: Session = Depends(get_db)):
+    cliente_id = dados.get("cliente_id")
+    pin_digitado = str(dados.get("pin"))
+
+    # Procura se existe alguém com esse PIN naquele restaurante
+    operador = db.query(models.OperadorTurno).filter(
+        models.OperadorTurno.cliente_id == cliente_id,
+        models.OperadorTurno.pin == pin_digitado
+    ).first()
+
+    if operador:
+        return {"sucesso": True, "nome": operador.nome}
+    else:
+        raise HTTPException(status_code=401, detail="PIN incorreto ou não encontrado.")

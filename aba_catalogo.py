@@ -185,7 +185,9 @@ class AbaCatalogo(QWidget):
             self.tabela.setItem(i, 3, QTableWidgetItem(prod["unidade_medida"]))
             
             alerta = str(prod["estoque_minimo"]) if prod["estoque_minimo"] > 0 else "Geral"
-            self.tabela.setItem(i, 4, QTableWidgetItem(alerta))
+            item_alerta = QTableWidgetItem(alerta)
+            item_alerta.setFlags(item_alerta.flags() & ~Qt.ItemIsEditable) # <-- BLINDA A CÉLULA
+            self.tabela.setItem(i, 4, item_alerta)
 
         # 4. Aplica o espião na coluna da Unidade (Coluna 3)
         nomes_unidades = [uni["nome"].upper() for uni in dados["unidades"]]
