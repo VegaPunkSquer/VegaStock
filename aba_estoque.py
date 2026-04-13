@@ -135,15 +135,16 @@ class AbaEstoque(QWidget):
         self.combo_filtro.addItems(["Hoje", "Últimos 7 Dias", "Últimos 30 Dias"])
         self.combo_filtro.currentIndexChanged.connect(self.carregar_historico)
         
-        # Cria o botão e liga à função que atualiza a tela
+        # --- O BOTÃO ENTRA EXATAMENTE AQUI ---
         self.btn_atualizar = QPushButton("Atualizar Tabela")
+        self.btn_atualizar.setCursor(Qt.PointingHandCursor) # Deixa a mãozinha ao passar o mouse
         self.btn_atualizar.clicked.connect(lambda: self.carregar_dados(atualizar_combos=False))
-
+        
         layout_filtro.addWidget(lbl_historico)
         layout_filtro.addStretch()
         layout_filtro.addWidget(QLabel("Filtrar por:"))
         layout_filtro.addWidget(self.combo_filtro)
-        layout_filtro.addWidget(self.btn_atualizar) # O novo botão entra aqui!
+        layout_filtro.addWidget(self.btn_atualizar) # O botão é injetado na tela aqui
         layout_principal.addLayout(layout_filtro)
 
         # Tabela

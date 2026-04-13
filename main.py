@@ -1,4 +1,5 @@
 from datetime import timedelta
+from sqlalchemy import desc
 from fastapi import FastAPI, Request, Depends, HTTPException, Header
 from sqlalchemy.orm import Session
 from typing import List
@@ -98,38 +99,41 @@ def registrar_movimentacao(mov: schemas.MovimentacaoCreate, db: Session = Depend
     return {"status": "sucesso", "novo_saldo": produto.quantidade_atual, "novo_custo": produto.custo_medio}
 
 @app.get("/movimentacoes/{cliente_id}")
-def historico_movimentacoes(cliente_id: int, dias: int = 7, db: Session = Depends(get_db)):
-    # O filtro de dias que vai alimentar a tabela de histórico na interface
-    data_limite = datetime.utcnow() - timedelta(days=dias)
+def listar_movimentacoes(cliente_id: int, dias: int = 30, db: Session = Depends(get_db)):
+    """Puxa o histórico forçando a ordem correta e o motivo exato."""
+    # Data de corte ajustada para o fuso correto do Brasil (UTC-3)
+    data_corte = datetime.utcnow() - timedelta(hours=3, days=dias)
     
-    # Busca o histórico e "costura" com o nome do produto e do motivo
-    movs = db.query(
-        models.MovimentacaoEstoque, 
-        models.Produto.nome.label("produto_nome"),
-        models.Produto.unidade_medida,
-        models.MotivoBaixa.descricao.label("motivo_descricao")
-    ).join(
-        models.Produto, models.MovimentacaoEstoque.produto_id == models.Produto.id
-    ).outerjoin(
-        models.MotivoBaixa, models.MovimentacaoEstoque.motivo_baixa_id == models.MotivoBaixa.id
-    ).filter(
+    # O desc() força a trazer o ID mais novo primeiro (ordem cronológica perfeita)
+    movimentacoes = db.query(models.MovimentacaoEstoque).filter(
         models.MovimentacaoEstoque.cliente_id == cliente_id,
-        models.MovimentacaoEstoque.data_hora >= data_limite
-    ).order_by(models.MovimentacaoEstoque.data_hora.desc()).all()
+        models.MovimentacaoEstoque.data_hora >= data_corte
+    ).order_by(desc(models.MovimentacaoEstoque.id)).all()
 
-    resultados = []
-    for mov, prod_nome, un_medida, motivo_desc in movs:
-        resultados.append({
-            "id": mov.id,
-            "tipo": mov.tipo_movimento,
-            "produto": prod_nome,
-            "unidade": un_medida,
-            "quantidade": mov.quantidade,
-            "custo": mov.custo_unitario,
-            "motivo": motivo_desc if mov.tipo_movimento == "SAIDA" else "Nova Entrada",
-            "data": mov.data_hora.strftime("%d/%m/%Y %H:%M")
+    resultado = []
+    for m in movimentacoes:
+        # Puxa o nome do produto
+        produto = db.query(models.Produto).filter(models.Produto.id == m.produto_id).first()
+        nome_produto = produto.nome if produto else "Deletado"
+        unidade = produto.unidade_medida if produto else ""
+
+        # Puxa o nome EXATO do motivo e trava para evitar o erro do "Nova Entrada"
+        nome_motivo = ""
+        if m.motivo_baixa_id and m.tipo_movimento.lower() == "saida":
+            motivo = db.query(models.MotivoBaixa).filter(models.MotivoBaixa.id == m.motivo_baixa_id).first()
+            nome_motivo = motivo.descricao if motivo else ""
+
+        resultado.append({
+            "id": m.id,
+            "data": m.data_hora.strftime("%d/%m/%Y\n%H:%M"),
+            "tipo": m.tipo_movimento.upper(),
+            "produto": nome_produto,
+            "quantidade": m.quantidade,
+            "unidade": unidade,
+            "custo": m.custo_unitario,
+            "motivo": nome_motivo
         })
-    return resultados
+    return resultado
 
 # 4. Endpoint: Relatório de Desperdício (A isca de vendas)
 @app.get("/relatorios/desperdicio/{cliente_id}")
