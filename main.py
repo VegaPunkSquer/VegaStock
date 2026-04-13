@@ -798,3 +798,35 @@ def listar_produtos_mobile(cliente_id: int, db: Session = Depends(get_db)):
     """Puxa a lista real de produtos do restaurante para a tela de Batismo."""
     produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
     return [{"id": p.id, "nome": p.nome, "unidade_medida": p.unidade_medida} for p in produtos]
+
+@app.post("/movimentar_mobile")
+def movimentar_mobile(dados: dict, db: Session = Depends(get_db)):
+    """Recebe a contagem do celular e atualiza o estoque na hora."""
+    produto_id = dados.get("produto_id")
+    cliente_id = dados.get("cliente_id")
+    tipo = dados.get("tipo_movimento") # "ENTRADA" ou "SAIDA"
+    qtd = float(dados.get("quantidade", 0))
+
+    # Acha o produto no banco
+    produto = db.query(models.Produto).filter(models.Produto.id == produto_id).first()
+    if not produto:
+        raise HTTPException(status_code=404, detail="Produto não encontrado")
+
+    # Faz a matemática do estoque
+    if tipo == "ENTRADA":
+        produto.quantidade_atual += qtd
+    elif tipo == "SAIDA":
+        produto.quantidade_atual -= qtd
+
+    # Registra no histórico de movimentações para o gerente ver no PC depois
+    nova_mov = models.MovimentacaoEstoque(
+        cliente_id=cliente_id,
+        produto_id=produto_id,
+        tipo_movimento=tipo,
+        quantidade=qtd,
+        usuario_id=1 # ID temporário do funcionário até termos o Login
+    )
+    
+    db.add(nova_mov)
+    db.commit()
+    return {"mensagem": f"{tipo} de {qtd} registrada com sucesso!"}
