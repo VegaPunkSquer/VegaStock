@@ -12,6 +12,11 @@ class Cliente(Base):
     receber_notificacoes = Column(Boolean, default=True) # Gatilho para a aba de Configurações
     limite_global_notificacao = Column(Float, default=5.0) # Valor padrão global
     validade_pro = Column(DateTime, nullable=True) # Data em que o acesso PRO expira
+    # --- DADOS DO ASAAS E PLANO ---
+    cliente_asaas_id = Column(String, nullable=True) # ID do cliente lá no Asaas (cus_xxxx)
+    assinatura_asaas_id = Column(String, nullable=True) # ID da assinatura (sub_xxxx)
+    plano = Column(String, default="BÁSICO") # BÁSICO ou PRO
+    limite_contas = Column(Integer, default=2) # 2 para Básico, 6 para PRO
 
 class CategoriaProduto(Base):
     __tablename__ = "categorias_produto"

@@ -24,9 +24,19 @@ class TelaCadastro(QDialog):
         lbl_titulo.setObjectName("titulo") # Puxa o estilo global
         layout.addWidget(lbl_titulo)
 
+        # --- COMEÇO DO BLOCO DA LICENÇA ---
+        layout_licenca = QHBoxLayout()
         self.input_licenca = QLineEdit()
         self.input_licenca.setPlaceholderText("Código da Licença (12 dígitos)")
-        layout.addWidget(self.input_licenca)
+        layout_licenca.addWidget(self.input_licenca)
+        
+        self.btn_comprar = QPushButton("Comprar Licença")
+        self.btn_comprar.setStyleSheet("background-color: #4CAF50; color: white; font-weight: bold; padding: 5px;")
+        self.btn_comprar.clicked.connect(self.abrir_vitrine)
+        layout_licenca.addWidget(self.btn_comprar)
+        
+        layout.addLayout(layout_licenca)
+        # --- FIM DO BLOCO DA LICENÇA ---
 
         self.input_cnpj = QLineEdit()
         self.input_cnpj.setInputMask("99.999.999/9999-99")
@@ -176,3 +186,12 @@ class TelaCadastro(QDialog):
                 QMessageBox.warning(self, "Erro no Cadastro", erro)
         except requests.exceptions.ConnectionError:
             QMessageBox.critical(self, "Erro Fatal", "Não foi possível conectar à API.")
+            
+    def abrir_vitrine(self):
+        # Importa e abre a máquina de vendas
+        try:
+            from maquina_vendas import MaquinaVendas
+            self.vitrine = MaquinaVendas(self) # Passa a tela de cadastro como 'pai' para enviar a licença de volta
+            self.vitrine.show()
+        except ImportError:
+            QMessageBox.warning(self, "Erro", "Módulo de vendas não encontrado.")

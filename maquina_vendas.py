@@ -1,107 +1,121 @@
 import sys
 import os
-import hashlib
-import random
-import string
 import re
-from datetime import datetime, timedelta
+import requests
+import webbrowser
 from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
-                               QLineEdit, QPushButton, QMessageBox)
+                               QLineEdit, QPushButton, QMessageBox, QComboBox)
+from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
-from database import engine, Base, SessionLocal
-import models
 
-# Garante que o banco de dados e as tabelas existam
-Base.metadata.create_all(bind=engine)
+API_BASE_URL = "https://vegastock.onrender.com"
 
 class MaquinaVendas(QWidget):
-    def __init__(self):
+    def __init__(self, tela_cadastro_pai=None):
         super().__init__()
+        self.tela_cadastro_pai = tela_cadastro_pai # Para preencher a licença lá automaticamente
+        self.cnpj_limpo_atual = ""
+        
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
         caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
         
         self.setWindowIcon(QIcon(caminho_icone))
-        self.setWindowTitle("Gerador de Licenças B2B")
-        self.setFixedSize(350, 250)
+        self.setWindowTitle("Comprar Licença VegaStock")
+        self.setFixedSize(380, 350)
         
         layout = QVBoxLayout()
         
-        layout.addWidget(QLabel("CNPJ do Cliente (pode usar pontos/barras):"))
-        
+        layout.addWidget(QLabel("CNPJ do Estabelecimento:"))
         self.input_cnpj = QLineEdit()
-        self.input_cnpj.setInputMask("99.999.999/9999-99") # Máscara visual nativa do Qt
+        self.input_cnpj.setInputMask("99.999.999/9999-99")
         layout.addWidget(self.input_cnpj)
-        # Permite apertar Enter para gerar
-        self.input_cnpj.returnPressed.connect(self.gerar_licenca)
         
-        self.btn_gerar = QPushButton("Gerar Licença de 48h")
-        self.btn_gerar.setStyleSheet("background-color: #FFD700; color: #000000; font-weight: bold; padding: 8px;")
-        self.btn_gerar.clicked.connect(self.gerar_licenca)
+        layout.addWidget(QLabel("E-mail do Responsável (Para Nota/Recibo):"))
+        self.input_email = QLineEdit()
+        self.input_email.setPlaceholderText("contato@restaurante.com.br")
+        layout.addWidget(self.input_email)
+
+        layout.addWidget(QLabel("Escolha seu Plano:"))
+        self.combo_plano = QComboBox()
+        self.combo_plano.addItem("Básico - R$ 139/mês (+ R$ 400 Adesão) | 2 Contas", "BASICO")
+        self.combo_plano.addItem("PRO - R$ 289/mês (ZERO Adesão) | 6 Contas", "PRO")
+        layout.addWidget(self.combo_plano)
+        
+        self.btn_gerar = QPushButton("Ir para o Pagamento")
+        self.btn_gerar.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 10px; margin-top: 10px;")
+        self.btn_gerar.clicked.connect(self.iniciar_compra)
         layout.addWidget(self.btn_gerar)
         
-        self.lbl_resultado = QLabel("")
-        self.lbl_resultado.setStyleSheet("font-size: 12px; font-weight: bold; color: green;")
-        layout.addWidget(self.lbl_resultado)
-        
-        from PySide6.QtWidgets import QHBoxLayout # Adiciona o layout horizontal para alinhar o botão
-        layout_copiar = QHBoxLayout()
-        
-        self.input_token_gerado = QLineEdit()
-        self.input_token_gerado.setReadOnly(True)
-        self.input_token_gerado.setPlaceholderText("O código da licença aparecerá aqui")
-        
-        self.btn_copiar = QPushButton("Copiar")
-        self.btn_copiar.setStyleSheet("background-color: #000000; color: #FFFFFF; font-weight: bold;")
-        self.btn_copiar.clicked.connect(self.copiar_licenca)
-        
-        layout_copiar.addWidget(self.input_token_gerado)
-        layout_copiar.addWidget(self.btn_copiar)
-        layout.addLayout(layout_copiar)
+        self.lbl_status = QLabel("")
+        self.lbl_status.setStyleSheet("font-size: 14px; font-weight: bold; color: #ff9800;")
+        layout.addWidget(self.lbl_status)
         
         self.setLayout(layout)
 
-    def limpar_cnpj(self, cnpj_sujo):
-        # Remove tudo que não for número (pontos, barras, traços, espaços)
-        return re.sub(r'[^0-9]', '', cnpj_sujo)
+        # O "Relógio" que vai ficar perguntando pra API se já pagou
+        self.timer_pagamento = QTimer(self)
+        self.timer_pagamento.timeout.connect(self.checar_pagamento)
 
-    def gerar_licenca(self):
+    def iniciar_compra(self):
         cnpj_cru = self.input_cnpj.text().strip()
-        cnpj_limpo = self.limpar_cnpj(cnpj_cru)
+        self.cnpj_limpo_atual = re.sub(r'[^0-9]', '', cnpj_cru)
+        email = self.input_email.text().strip()
+        plano = self.combo_plano.currentData()
         
-        if len(cnpj_limpo) != 14:
-            QMessageBox.warning(self, "Erro", "CNPJ inválido. Precisa ter exatamente 14 números.")
+        if len(self.cnpj_limpo_atual) != 14 or not email:
+            QMessageBox.warning(self, "Erro", "Preencha o CNPJ corretamente e informe um E-mail válido.")
             return
             
-        # Mistura maiúsculas, minúsculas e números
-        caracteres = string.ascii_letters + string.digits
-        token_limpo = ''.join(random.choice(caracteres) for _ in range(12))
-        expiracao = datetime.utcnow() + timedelta(hours=48)
+        self.btn_gerar.setEnabled(False)
+        self.btn_gerar.setText("Gerando cobrança...")
+        
+        dados = {
+            "cnpj": self.cnpj_limpo_atual,
+            "email": email,
+            "plano": plano
+        }
         
         try:
-            db = SessionLocal()
-            nova_licenca = models.Licenca(
-                token=token_limpo, # <--- CORTAMOS O HASH. Salva exatamente os 12 caracteres gerados.
-                usada=False,
-                cnpj_esperado=cnpj_limpo,
-                data_expiracao=expiracao
-            )
-            db.add(nova_licenca)
-            db.commit()
-            db.close()
-            
-            self.lbl_resultado.setText(f"Salvo no banco! Expira em: {expiracao.strftime('%d/%m/%Y %H:%M')}")
-            self.input_token_gerado.setText(token_limpo)
-            QMessageBox.information(self, "Sucesso", "Licença gerada com sucesso! Entregue o código ao cliente.")
-            
-        except Exception as e:
-            QMessageBox.critical(self, "Erro Fatal", f"Erro ao salvar no banco: {str(e)}")
-            
-    def copiar_licenca(self):
-        texto = self.input_token_gerado.text()
-        if texto:
-            QApplication.clipboard().setText(texto)
-            self.btn_copiar.setText("Copiado!")
-            self.btn_copiar.setStyleSheet("background-color: green; color: white; font-weight: bold;")
+            resp = requests.post(f"{API_BASE_URL}/comprar_licenca", json=dados)
+            if resp.status_code == 200:
+                link = resp.json().get("link_pagamento")
+                webbrowser.open(link) # Abre o navegador do cliente!
+                
+                self.lbl_status.setText("⏳ Aguardando pagamento do Pix/Cartão...")
+                self.btn_gerar.setText("Aguardando confirmação...")
+                
+                # Começa a perguntar pra API a cada 5 segundos (5000 ms)
+                self.timer_pagamento.start(5000)
+            else:
+                QMessageBox.critical(self, "Erro", "Não foi possível gerar a cobrança no Asaas.")
+                self.btn_gerar.setEnabled(True)
+                self.btn_gerar.setText("Ir para o Pagamento")
+        except Exception:
+            QMessageBox.critical(self, "Erro", "Sem conexão com o servidor.")
+            self.btn_gerar.setEnabled(True)
+            self.btn_gerar.setText("Ir para o Pagamento")
+
+    def checar_pagamento(self):
+        try:
+            resp = requests.get(f"{API_BASE_URL}/checar_licenca_nova/{self.cnpj_limpo_atual}")
+            if resp.status_code == 200:
+                dados = resp.json()
+                if dados.get("pago"):
+                    self.timer_pagamento.stop() # Para o relógio
+                    token = dados.get("token")
+                    
+                    self.lbl_status.setStyleSheet("font-size: 14px; font-weight: bold; color: green;")
+                    self.lbl_status.setText("✅ Pagamento Confirmado!")
+                    
+                    # Se abriu por dentro da tela de cadastro, já preenche pra ele!
+                    if self.tela_cadastro_pai:
+                        self.tela_cadastro_pai.input_licenca.setText(token)
+                        self.tela_cadastro_pai.input_cnpj.setText(self.input_cnpj.text())
+                        
+                    QMessageBox.information(self, "Sucesso!", f"Pagamento recebido!\nA sua licença foi gerada: {token}")
+                    self.close() # Fecha a vitrine e deixa ele terminar o cadastro
+        except:
+            pass # Se der erro de rede na checagem, só ignora e tenta de novo no próximo 5 segundos
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

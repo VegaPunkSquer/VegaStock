@@ -8,6 +8,8 @@ from datetime import datetime
 
 from database import SessionLocal
 import models
+import random
+import string
 import schemas
 import hashlib
 import requests
@@ -431,44 +433,99 @@ def atualizar_limite_produto(dados: schemas.AtualizarLimiteProdutoRequest, db: S
         db.commit()
     return {"mensagem": "Limite do produto atualizado!"}
 
-@app.post("/gerar_pagamento_pro")
-def gerar_pagamento(dados: schemas.PagamentoPRORequest, db: Session = Depends(get_db)):
-    # Mapa de valores e ciclos do Asaas
-    planos = {
-        "MENSAL": {"ciclo": "MONTHLY", "valor": 95.00},
-        "TRIMESTRAL": {"ciclo": "QUARTERLY", "valor": 256.50}, 
-        "SEMESTRAL": {"ciclo": "SEMIANNUALLY", "valor": 456.00},
-        "ANUAL": {"ciclo": "YEARLY", "valor": 684.00}
+@app.post("/comprar_licenca")
+def comprar_licenca(dados: dict, db: Session = Depends(get_db)):
+    """Cria o cliente e a cobrança no Asaas e devolve o link."""
+    cnpj = dados.get("cnpj")
+    email = dados.get("email") # Asaas exige email
+    plano = dados.get("plano") # "BASICO" ou "PRO"
+
+    # Valores do seu negócio
+    valor = 289.00 if plano == "PRO" else 139.00
+    
+    # 1. Cria o Cliente no Asaas
+    cli_payload = {"name": f"Cliente {cnpj}", "email": email, "cpfCnpj": cnpj, "externalReference": cnpj}
+    res_cli = requests.post(f"{ASAAS_URL}/customers", json=cli_payload, headers=HEADERS)
+    
+    if res_cli.status_code != 200:
+        raise HTTPException(status_code=400, detail="Erro ao criar cliente no gateway de pagamento.")
+    
+    asaas_customer_id = res_cli.json()["id"]
+
+    # 2. Cria a Assinatura no Asaas
+    sub_payload = {
+        "customer": asaas_customer_id,
+        "billingType": "UNDEFINED", # Deixa o cliente escolher Pix, Cartão ou Boleto
+        "value": valor,
+        "nextDueDate": (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d"),
+        "cycle": "MONTHLY",
+        "description": f"Assinatura VegaStock - Plano {plano}",
+        "externalReference": cnpj # A Etiqueta Mágica que o Webhook vai ler!
     }
+    
+    # Se for básico, adiciona a taxa de adesão de 400 reais
+    if plano == "BASICO":
+        sub_payload["setupFee"] = {"value": 400.00, "billingType": "UNDEFINED"}
 
-    plano_chave = dados.plano.split(" ")[0]
-    plano_escolhido = planos.get(plano_chave, planos["MENSAL"])
+    res_sub = requests.post(f"{ASAAS_URL}/subscriptions", json=sub_payload, headers=HEADERS)
+    
+    if res_sub.status_code != 200:
+        raise HTTPException(status_code=400, detail="Erro ao gerar cobrança.")
 
-    # Cria um "Link de Pagamento Recorrente" no Asaas
-    payload = {
-        "name": f"VegaStock PRO - Plano {plano_chave}",
-        "description": "Assinatura do sistema de gestão VegaStock.",
-        "chargeType": "RECURRENT", 
-        "billingType": "UNDEFINED", 
-        "value": plano_escolhido["valor"],
-        "cycle": plano_escolhido["ciclo"],
-        "endDate": None,
-        "dueDateLimitDays": 5,
-        "externalReference": str(dados.cliente_id) # <--- ESSA LINHA NOVA (Etiqueta do cliente)
-    }
-
-    try:
-        response = requests.post(f"{ASAAS_URL}/paymentLinks", json=payload, headers=HEADERS)
+    # O invoiceUrl é o link onde o cliente paga a primeira parcela/adesão
+    invoice_url = res_sub.json().get("invoiceUrl") 
+    if not invoice_url:
+        # Puxa o link de pagamento geral da assinatura caso não venha o invoiceUrl
+        invoice_url = f"https://www.asaas.com/c/{asaas_customer_id}" # Fallback
         
-        if response.status_code == 200:
-            dados_asaas = response.json()
-            # O Asaas devolve a URL limpa do checkout na chave 'url'
-            return {"link_pagamento": dados_asaas["url"]}
-        else:
-            raise HTTPException(status_code=400, detail=f"Erro no Asaas: {response.text}")
+    return {"link_pagamento": invoice_url, "mensagem": "Aguardando pagamento..."}
+
+@app.post("/webhook/asaas")
+async def asaas_webhook(request: Request, asaas_access_token: str = Header(None), db: Session = Depends(get_db)):
+    """Ouve o Asaas. Quando pagarem, gera a licença e salva no banco."""
+    if asaas_access_token != ASAAS_WEBHOOK_TOKEN:
+        raise HTTPException(status_code=403, detail="Acesso Negado.")
+
+    payload = await request.json()
+    evento = payload.get("event")
+
+    # Se a primeira cobrança da assinatura for paga
+    if evento in ["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]:
+        pagamento = payload.get("payment", {})
+        cnpj_pagador = pagamento.get("externalReference") # Lemos a etiqueta mágica!
+
+        if cnpj_pagador:
+            # Verifica se já não geramos licença para esse CNPJ nas últimas horas para não duplicar
+            ja_tem = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_pagador, models.Licenca.usada == False).first()
             
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+            if not ja_tem:
+                # Gera o código de 12 dígitos
+                caracteres = string.ascii_letters + string.digits
+                token_limpo = ''.join(random.choice(caracteres) for _ in range(12))
+                expiracao = datetime.utcnow() + timedelta(hours=48)
+                
+                nova_licenca = models.Licenca(
+                    token=token_limpo,
+                    usada=False,
+                    cnpj_esperado=cnpj_pagador,
+                    data_expiracao=expiracao
+                )
+                db.add(nova_licenca)
+                db.commit()
+
+    return {"status": "recebido"}
+
+@app.get("/checar_licenca_nova/{cnpj}")
+def checar_licenca(cnpj: str, db: Session = Depends(get_db)):
+    """O App fica batendo aqui a cada 5 segundos perguntando: Já pagou?"""
+    licenca = db.query(models.Licenca).filter(
+        models.Licenca.cnpj_esperado == cnpj, 
+        models.Licenca.usada == False
+    ).order_by(models.Licenca.id.desc()).first()
+    
+    if licenca:
+        return {"pago": True, "token": licenca.token}
+    return {"pago": False}
     
 @app.get("/forcar_pro/{cliente_id}")
 def forcar_pro(cliente_id: int, db: Session = Depends(get_db)):
@@ -478,29 +535,6 @@ def forcar_pro(cliente_id: int, db: Session = Depends(get_db)):
         db.commit()
         return {"status": "SUCESSO", "mensagem": f"O cliente {cliente.nome_fantasia} agora é PRO!"}
     return {"status": "ERRO", "mensagem": "Cliente não encontrado"}
-    
-@app.post("/webhook_asaas")
-async def webhook_asaas(request: Request, db: Session = Depends(get_db)):
-    # O Asaas manda um JSON avisando o que aconteceu
-    payload = await request.json()
-    
-    # Verifica se a fofoca é sobre um pagamento confirmado/recebido
-    evento = payload.get("event")
-    if evento in ["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]:
-        
-        pagamento = payload.get("payment", {})
-        cliente_id_str = pagamento.get("externalReference") # Pega a etiqueta que mandamos
-        
-        if cliente_id_str:
-            cliente_id = int(cliente_id_str)
-            
-            # Atualiza o banco do VegaStock! O cliente agora é PRO.
-            cliente = db.query(models.Cliente).filter(models.Cliente.id == cliente_id).first()
-            if cliente:
-                cliente.status_assinatura = "PRO"
-                db.commit()
-
-    return {"status": "recebido"}
 
 @app.post("/produtos")
 def criar_produto(dados: schemas.ProdutoCreate, db: Session = Depends(get_db)):
