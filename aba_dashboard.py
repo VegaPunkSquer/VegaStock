@@ -135,9 +135,8 @@ class AbaDashboard(QWidget):
         self.val_patri.setText(f"R$ {dados.get('patrimonio_rs', 0):.2f}".replace('.', ','))
         
         tipos = dados.get('total_produtos', 0)
-        qtd = dados.get('quantidade_fisica', 0)
-        # Formata bonitinho: Ex: "45 Tipos | 120.5 Qtd"
-        self.val_itens.setText(f"{tipos} Tipos\n{qtd} Qtd")
+        self.val_itens.setText(f"{tipos} SKUs") # "SKU" é o termo técnico para tipos de produto
+        self.val_itens.setStyleSheet("font-size: 28px; font-weight: bold; color: #333; border: none;") # Volta o tamanho grande
         self.val_itens.setStyleSheet("font-size: 18px; font-weight: bold; color: #333; border: none;") # Ajusta o tamanho da fonte para caber
         
         qtd_alerta = dados.get('alertas_criticos_qtd', 0)

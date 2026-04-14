@@ -1,8 +1,9 @@
 import sys
 import os
+import requests
 import ctypes
 from datetime import datetime
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, 
+from PySide6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
                                QLabel, QHBoxLayout, QStackedWidget,QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout) # ADICIONADO QFrame
 from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QBrush, QIcon
 from PySide6.QtCore import Qt, QSize
@@ -174,6 +175,10 @@ class MainWindow(QMainWindow):
         self.aba_eqp = AbaEquipe(self.cliente_dados)
         self.aba_cnt = AbaConta(self.cliente_dados, self)
         self.aba_cfg = AbaConfiguracoes(self.cliente_dados)
+        self.btn_sync = QPushButton(" 🔄 Sincronizar")
+        self.btn_sync.setStyleSheet("background-color: #444; color: white; text-align: left; padding: 10px; border: none; font-weight: bold;")
+        self.btn_sync.clicked.connect(self.sincronizar_dados_nuvem)
+        self.layout_menu.addWidget(self.btn_sync)
 
         self.area_central.addWidget(self.aba_dash)
         self.area_central.addWidget(self.aba_cat)
@@ -253,6 +258,18 @@ class MainWindow(QMainWindow):
     def atualizar_nome_restaurante(self, novo_nome):
         self.lbl_nome.setText(novo_nome.upper())
         self.lbl_nome.repaint() # Chute na tela para o nome
+        
+    def sincronizar_dados_nuvem(self):
+        try:
+            resp = requests.get(f"https://vegastock.onrender.com/config/{self.cliente_dados['cliente_id']}")
+            if resp.status_code == 200:
+                self.cliente_dados = resp.json()
+                # Avisa as abas que os dados mudaram (especialmente Equipe e Config)
+                self.aba_config.cliente_dados = self.cliente_dados
+                self.aba_equipe.cliente_dados = self.cliente_dados
+                QMessageBox.information(self, "Sucesso", "Dados atualizados com a nuvem!")
+        except:
+            QMessageBox.warning(self, "Erro", "Falha ao sincronizar.")
 
 def iniciar_app():
     app = QApplication(sys.argv)

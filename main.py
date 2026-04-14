@@ -649,10 +649,9 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
     patrimonio_total = 0.0
     itens_abaixo_minimo = []
     total_itens_estoque = len(produtos)
-    quantidade_total_fisica = 0.0 # <--- NOVO
-
+    
+    # NUNCA DELETA ESSE FOR:
     for p in produtos:
-        quantidade_total_fisica += p.quantidade_atual # <--- NOVO
         # Soma o valor total parado (Qtd Atual * Custo Médio)
         valor_produto = p.quantidade_atual * p.custo_medio
         patrimonio_total += valor_produto
@@ -701,7 +700,6 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
     return {
         "patrimonio_rs": round(patrimonio_total, 2),
         "total_produtos": total_itens_estoque,
-        "quantidade_fisica": round(quantidade_total_fisica, 2), # <--- NOVO
         "alertas_criticos_qtd": len(itens_abaixo_minimo),
         "lista_compras": itens_abaixo_minimo,
         "movimento_hoje": {
