@@ -3,7 +3,7 @@ import os
 import re
 import requests
 import webbrowser
-from PySide6.QtWidgets import (QApplication, QDialog, QVBoxLayout, QLabel, 
+from PySide6.QtWidgets import (QApplication, QDialog, QVBoxLayout, QLabel, QFrame, 
                                QLineEdit, QPushButton, QMessageBox, QComboBox)
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
@@ -21,28 +21,50 @@ class MaquinaVendas(QDialog):
         
         self.setWindowIcon(QIcon(caminho_icone))
         self.setWindowTitle("Comprar Licença VegaStock")
-        self.setFixedSize(380, 350)
+        self.setFixedSize(420, 350)
         
         layout = QVBoxLayout()
         
-        layout.addWidget(QLabel("CNPJ do Estabelecimento:"))
+        # --- O SEU PADRÃO REAL (QFrame com borda e fundo claro) ---
+        frame_compra = QFrame()
+        frame_compra.setStyleSheet("background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px;")
+        layout_form = QVBoxLayout(frame_compra)
+        
+        lbl_cnpj = QLabel("CNPJ do Estabelecimento:")
+        lbl_cnpj.setStyleSheet("font-weight: bold; border: none;")
+        layout_form.addWidget(lbl_cnpj)
+        
         self.input_cnpj = QLineEdit()
         self.input_cnpj.setInputMask("99.999.999/9999-99")
-        layout.addWidget(self.input_cnpj)
+        self.input_cnpj.setStyleSheet("padding: 5px; border: 1px solid #ccc; background-color: #fff;")
+        layout_form.addWidget(self.input_cnpj)
         
-        layout.addWidget(QLabel("E-mail do Responsável (Para Nota/Recibo):"))
+        lbl_email = QLabel("E-mail do Responsável (Para Nota/Recibo):")
+        lbl_email.setStyleSheet("font-weight: bold; border: none; margin-top: 10px;")
+        layout_form.addWidget(lbl_email)
+        
         self.input_email = QLineEdit()
         self.input_email.setPlaceholderText("contato@restaurante.com.br")
-        layout.addWidget(self.input_email)
-
-        layout.addWidget(QLabel("Escolha seu Plano:"))
-        self.combo_plano = QComboBox()
-        self.combo_plano.addItem("Básico - R$ 139/mês (+ R$ 400 Adesão) | 2 Contas", "BASICO")
-        self.combo_plano.addItem("PRO - R$ 289/mês (ZERO Adesão) | 6 Contas", "PRO")
-        layout.addWidget(self.combo_plano)
+        self.input_email.setStyleSheet("padding: 5px; border: 1px solid #ccc; background-color: #fff;")
+        layout_form.addWidget(self.input_email)
         
-        self.btn_gerar = QPushButton("Ir para o Pagamento")
-        self.btn_gerar.setStyleSheet("background-color: #2196F3; color: white; font-weight: bold; padding: 10px; margin-top: 10px;")
+        lbl_plano = QLabel("Escolha seu Plano:")
+        lbl_plano.setStyleSheet("font-weight: bold; border: none; margin-top: 10px;")
+        layout_form.addWidget(lbl_plano)
+        
+        self.combo_plano = QComboBox()
+        self.combo_plano.addItem("Básico (Mensal) - R$ 139/mês + R$ 400 Adesão", "BASICO_MENSAL")
+        self.combo_plano.addItem("Básico (Semestral) - 6x R$ 99 (R$ 594 total) + Adesão", "BASICO_SEMESTRAL")
+        self.combo_plano.addItem("PRO (Mensal) - R$ 289/mês | ZERO Adesão", "PRO_MENSAL")
+        self.combo_plano.addItem("PRO (Semestral) - 6x R$ 189 (R$ 1134 total) | ZERO Adesão", "PRO_SEMESTRAL")
+        self.combo_plano.setStyleSheet("padding: 5px; border: 1px solid #ccc; background-color: #fff;")
+        layout_form.addWidget(self.combo_plano)
+        
+        layout.addWidget(frame_compra)
+        
+        # O Botão de Venda
+        self.btn_gerar = QPushButton("Ir para o Pagamento Seguro")
+        self.btn_gerar.setStyleSheet("background-color: #009EE3; color: white; font-weight: bold; padding: 12px; margin-top: 10px; border-radius: 5px;")
         self.btn_gerar.clicked.connect(self.iniciar_compra)
         layout.addWidget(self.btn_gerar)
         

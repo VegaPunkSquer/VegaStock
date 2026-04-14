@@ -437,12 +437,27 @@ def atualizar_limite_produto(dados: schemas.AtualizarLimiteProdutoRequest, db: S
 def comprar_licenca(dados: dict, db: Session = Depends(get_db)):
     """Cria o cliente e a cobrança no Asaas e devolve o link."""
     cnpj = dados.get("cnpj")
-    email = dados.get("email") # Asaas exige email
-    plano = dados.get("plano") # "BASICO" ou "PRO"
+    email = dados.get("email") 
+    plano = dados.get("plano") # Agora chega como "BASICO_MENSAL", "PRO_SEMESTRAL", etc.
 
-    # Valores do seu negócio
-    valor = 289.00 if plano == "PRO" else 139.00
-    
+    # 0. A Matemática do Negócio (Evitando o prejuízo no Asaas)
+    if plano == "PRO_SEMESTRAL":
+        valor = 1134.00 # (189 * 6 meses) cobrado a cada semestre
+        ciclo = "SEMIANNUALLY"
+        nome_bonito = "PRO (Semestral)"
+    elif plano == "PRO_MENSAL":
+        valor = 289.00
+        ciclo = "MONTHLY"
+        nome_bonito = "PRO (Mensal)"
+    elif plano == "BASICO_SEMESTRAL":
+        valor = 594.00 # (99 * 6 meses) cobrado a cada semestre
+        ciclo = "SEMIANNUALLY"
+        nome_bonito = "Básico (Semestral)"
+    else: # BASICO_MENSAL
+        valor = 139.00
+        ciclo = "MONTHLY"
+        nome_bonito = "Básico (Mensal)"
+
     # 1. Cria o Cliente no Asaas
     cli_payload = {"name": f"Cliente {cnpj}", "email": email, "cpfCnpj": cnpj, "externalReference": cnpj}
     res_cli = requests.post(f"{ASAAS_URL}/customers", json=cli_payload, headers=HEADERS)
@@ -455,16 +470,16 @@ def comprar_licenca(dados: dict, db: Session = Depends(get_db)):
     # 2. Cria a Assinatura no Asaas
     sub_payload = {
         "customer": asaas_customer_id,
-        "billingType": "UNDEFINED", # Deixa o cliente escolher Pix, Cartão ou Boleto
-        "value": valor,
+        "billingType": "UNDEFINED", 
+        "value": valor, # Agora vai o valor calculado correto!
         "nextDueDate": (datetime.utcnow() + timedelta(days=1)).strftime("%Y-%m-%d"),
-        "cycle": "MONTHLY",
-        "description": f"Assinatura VegaStock - Plano {plano}",
-        "externalReference": cnpj # A Etiqueta Mágica que o Webhook vai ler!
+        "cycle": ciclo, # MONTHLY ou SEMIANNUALLY
+        "description": f"Assinatura VegaStock - Plano {nome_bonito}",
+        "externalReference": cnpj 
     }
     
-    # Se for básico, adiciona a taxa de adesão de 400 reais
-    if plano == "BASICO":
+    # Se for básico (Mensal ou Semestral), adiciona a cacetada da adesão
+    if "BASICO" in plano:
         sub_payload["setupFee"] = {"value": 400.00, "billingType": "UNDEFINED"}
 
     res_sub = requests.post(f"{ASAAS_URL}/subscriptions", json=sub_payload, headers=HEADERS)
