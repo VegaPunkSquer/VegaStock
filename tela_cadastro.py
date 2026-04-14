@@ -192,6 +192,6 @@ class TelaCadastro(QDialog):
         try:
             from maquina_vendas import MaquinaVendas
             self.vitrine = MaquinaVendas(self) # Passa a tela de cadastro como 'pai' para enviar a licença de volta
-            self.vitrine.show()
+            self.vitrine.exec()
         except ImportError:
             QMessageBox.warning(self, "Erro", "Módulo de vendas não encontrado.")

@@ -3,16 +3,16 @@ import os
 import re
 import requests
 import webbrowser
-from PySide6.QtWidgets import (QApplication, QWidget, QVBoxLayout, QLabel, 
+from PySide6.QtWidgets import (QApplication, QDialog, QVBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QComboBox)
 from PySide6.QtCore import QTimer
 from PySide6.QtGui import QIcon
 
 API_BASE_URL = "https://vegastock.onrender.com"
 
-class MaquinaVendas(QWidget):
+class MaquinaVendas(QDialog):
     def __init__(self, tela_cadastro_pai=None):
-        super().__init__()
+        super().__init__(tela_cadastro_pai)
         self.tela_cadastro_pai = tela_cadastro_pai # Para preencher a licença lá automaticamente
         self.cnpj_limpo_atual = ""
         
