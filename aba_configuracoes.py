@@ -43,8 +43,8 @@ class DialogUpgradePRO(QDialog):
         layout = QVBoxLayout(self)
         
         lbl_titulo = QLabel("VegaStock - Sistema de Estoque - Upgrade PRO")
-        lbl_titulo.setStyleSheet("font-size: 20px; font-weight: bold; border: none; margin-bottom: 10px; align-self: center;")
-        layout.addWidget(lbl_titulo)
+        lbl_titulo.setStyleSheet("font-size: 20px; font-weight: bold; border: none; margin-bottom: 10px;")
+        layout.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
 
         # Layout horizontal para os 4 cartões
         layout_cards = QHBoxLayout()
@@ -85,7 +85,7 @@ class DialogUpgradePRO(QDialog):
             rb = QRadioButton(titulo)
             # CSS avançado para pintar a bolinha de amarelo por dentro e por fora
             rb.setStyleSheet("""
-                QRadioButton { font-size: 15px; font-weight: bold; border: none; padding-bottom: 5px; }
+                QRadioButton { background: transparent; font-size: 15px; font-weight: bold; border: none; padding-bottom: 5px; }
                 QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 2px solid #aaa; background-color: transparent; }
                 QRadioButton::indicator:checked { border: 2px solid #FFD700; background-color: #FFD700; }
             """)
@@ -133,27 +133,31 @@ class DialogUpgradePRO(QDialog):
 
     def abrir_pagamento(self):
         id_selecionado = self.grupo_planos.checkedId()
-        plano_txt = self.chaves_api[id_selecionado] # Pega "MENSAL", "ANUAL", etc.
+        plano_txt = self.chaves_api[id_selecionado] # "MENSAL", "ANUAL", etc.
         
-        try:
-            resp = requests.post(f"{API_BASE_URL}/gerar_pagamento_pro", 
-                                 json={"cliente_id": self.cliente_id, "plano": plano_txt})
+        confirmar = QMessageBox.question(self, "Confirmar Upgrade", 
+            f"Deseja fazer o upgrade para o PRO ({plano_txt}) agora?\n\nO Asaas atualizará sua assinatura e a diferença será cobrada na sua próxima fatura.",
+            QMessageBox.Yes | QMessageBox.No)
             
-            if resp.status_code == 200:
-                link = resp.json().get("link_pagamento")
-                webbrowser.open(link)
+        if confirmar == QMessageBox.Yes:
+            self.btn_pagar.setText("⏳ PROCESSANDO UPGRADE...")
+            self.btn_pagar.setEnabled(False)
+            try:
+                # Dispara a ordem pro seu backend
+                resp = requests.post(f"{API_BASE_URL}/fazer_upgrade", 
+                                     json={"cliente_id": self.cliente_id, "novo_plano": f"PRO_{plano_txt}"})
                 
-                # Muda a cara do botão e trava ele
-                self.btn_pagar.setText("⏳ AGUARDANDO PAGAMENTO...")
-                self.btn_pagar.setStyleSheet("background-color: #555; color: white; font-weight: bold; padding: 15px; font-size: 14px; border-radius: 5px;")
-                self.btn_pagar.setEnabled(False)
-                
-                # LIGA O RADAR: Bate na sua API a cada 3 segundos (3000 ms)
-                self.timer_pagamento.start(3000)
-            else:
-                QMessageBox.warning(self, "Erro na API", f"Status: {resp.status_code}\nDetalhe: {resp.text}")
-        except Exception as e:
-            QMessageBox.critical(self, "Erro de Conexão", f"Servidor inacessível.\n{e}")
+                if resp.status_code == 200:
+                    QMessageBox.information(self, "Sucesso!", "Upgrade realizado com sucesso! O sistema foi destrancado.\nPor favor, feche e abra a tela para atualizar.")
+                    self.accept()
+                else:
+                    QMessageBox.warning(self, "Erro no Asaas", f"Recusado: {resp.text}")
+                    self.btn_pagar.setText("GERAR PAGAMENTO SEGURO")
+                    self.btn_pagar.setEnabled(True)
+            except Exception as e:
+                QMessageBox.critical(self, "Erro de Conexão", f"Servidor inacessível.\n{e}")
+                self.btn_pagar.setText("GERAR PAGAMENTO SEGURO")
+                self.btn_pagar.setEnabled(True)
             
     def checar_se_ficou_pro(self):
         try:
@@ -186,6 +190,14 @@ class AbaConfiguracoes(QWidget):
         lbl_titulo = QLabel("Configurações do Sistema")
         lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333;")
         layout_principal.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
+
+        # --- NOVO: MOSTRAR O PLANO ATUAL ---
+        plano_atual = self.cliente_dados.get('plano', 'BÁSICO').replace('_', ' ').upper()
+        cor_plano = "#d84315" if "PRO" in plano_atual else "#777"
+        
+        self.lbl_plano_info = QLabel(f"💎 PLANO ATUAL: {plano_atual}")
+        self.lbl_plano_info.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {cor_plano}; margin-bottom: 10px;")
+        layout_principal.addWidget(self.lbl_plano_info, alignment=Qt.AlignCenter)
 
         # ==========================================
         # 1. NOTIFICAÇÕES (Global e PRO)

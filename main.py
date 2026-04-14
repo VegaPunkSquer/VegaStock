@@ -936,3 +936,50 @@ def validar_pin(dados: dict, db: Session = Depends(get_db)):
         return {"sucesso": True, "nome": operador.nome}
     else:
         raise HTTPException(status_code=401, detail="PIN incorreto ou não encontrado.")
+    
+@app.post("/fazer_upgrade")
+def fazer_upgrade(dados: dict, db: Session = Depends(get_db)):
+    cliente_id = dados.get("cliente_id")
+    novo_plano = dados.get("novo_plano") # Vem como "PRO_MENSAL", "PRO_ANUAL", etc.
+    
+    cliente = db.query(models.Cliente).filter(models.Cliente.id == cliente_id).first()
+    
+    # Se o cliente não tem o ID do Asaas salvo (ex: foi feito na mão), ele tem que assinar do zero
+    if not cliente or not cliente.assinatura_asaas_id:
+        raise HTTPException(status_code=400, detail="Assinatura não encontrada no banco de dados para ser alterada.")
+
+    # A matemática do Upgrade (Baseado na sua tela do PySide)
+    if "ANUAL" in novo_plano:
+        novo_valor = 684.00
+        ciclo = "YEARLY"
+    elif "SEMESTRAL" in novo_plano:
+        novo_valor = 456.00
+        ciclo = "SEMIANNUALLY"
+    elif "TRIMESTRAL" in novo_plano:
+        novo_valor = 256.50
+        ciclo = "QUARTERLY"
+    else:
+        novo_valor = 95.00 # Mensal normal do Upgrade
+        ciclo = "MONTHLY"
+    
+    # Payload que altera o valor do plano e cobra a diferença
+    payload_asaas = {
+        "value": novo_valor, 
+        "cycle": ciclo,
+        "description": f"Assinatura VegaStock - Upgrade para {novo_plano}",
+        "updatePendingPayments": True # O Asaas já recalcula os boletos/pix em aberto
+    }
+    
+    # Dispara a mudança na assinatura ESPECÍFICA dele
+    sub_id = cliente.assinatura_asaas_id
+    res = requests.post(f"{ASAAS_URL}/subscriptions/{sub_id}", json=payload_asaas, headers=HEADERS)
+    
+    if res.status_code == 200:
+        # Tudo certo no Asaas! Agora destranca o PRO no seu banco de dados
+        cliente.plano = novo_plano
+        cliente.status_assinatura = "PRO"
+        cliente.limite_contas = 6 # Libera as 5 extras + 1 do admin
+        db.commit()
+        return {"status": "Upgrade realizado com sucesso!"}
+    
+    raise HTTPException(status_code=400, detail=f"Erro ao comunicar upgrade com o Asaas: {res.text}")

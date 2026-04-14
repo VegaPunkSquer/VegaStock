@@ -253,6 +253,19 @@ class AbaEquipe(QWidget):
             QMessageBox.warning(self, "Aviso", "O campo Login é obrigatório.")
             return
 
+        # --- NOVA TRAVA: Limite de Contas ---
+        # Só barra se for um NOVO usuário (se estiver editando, deixa passar)
+        if not self.usuario_selecionado_id: 
+            limite = self.cliente_dados.get('limite_contas', 2) # Padrão Básico
+            total_atual = self.tabela.rowCount()
+            
+            if total_atual >= limite:
+                QMessageBox.warning(self, "Limite Atingido", 
+                    f"Você atingiu o limite de {limite} contas do seu plano atual.\n\n"
+                    "Faça o upgrade para o PRO para liberar mais 5 acessos e controle total!")
+                return
+        # ------------------------------------
+
         # Monta a lista de permissões
         permissoes = ["dashboard"] # Dashboard sempre vai
         if self.chk_catalogo.isChecked(): permissoes.append("catalogo")
