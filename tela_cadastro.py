@@ -80,15 +80,21 @@ class TelaCadastro(QDialog):
         self.lbl_regra_tamanho = QLabel("❌ Mínimo de 8 caracteres")
         self.lbl_regra_letra = QLabel("❌ Pelo menos 1 letra")
         self.lbl_regra_numero = QLabel("❌ Pelo menos 1 número")
+        self.lbl_regra_igual = QLabel("❌ Senhas iguais") # <-- NOVO
         
         estilo_invalido = "color: gray; font-size: 11px;"
         self.lbl_regra_tamanho.setStyleSheet(estilo_invalido)
         self.lbl_regra_letra.setStyleSheet(estilo_invalido)
         self.lbl_regra_numero.setStyleSheet(estilo_invalido)
+        self.lbl_regra_igual.setStyleSheet(estilo_invalido)
         
         layout.addWidget(self.lbl_regra_tamanho)
         layout.addWidget(self.lbl_regra_letra)
         layout.addWidget(self.lbl_regra_numero)
+        layout.addWidget(self.lbl_regra_igual) # <-- NOVO
+        
+        # Faz o segundo campo também acionar a verificação
+        self.input_senha_confirma.textChanged.connect(self.validar_senha_tempo_real)
         # --- FIM: FEEDBACK VISUAL DA SENHA ---
 
         self.btn_cadastrar = QPushButton("Finalizar Cadastro")
@@ -113,7 +119,10 @@ class TelaCadastro(QDialog):
             self.lbl_caminho_logo.setText(nome_arquivo) # Mostra só o nome pra não poluir a tela
             self.lbl_caminho_logo.setStyleSheet("color: green; font-size: 10px; font-weight: bold;")
 
-    def validar_senha_tempo_real(self, texto):
+    def validar_senha_tempo_real(self, _=""):
+        texto = self.input_senha.text()
+        confirma = self.input_senha_confirma.text()
+        
         estilo_ok = "color: green; font-size: 11px; font-weight: bold;"
         estilo_erro = "color: gray; font-size: 11px;"
 
@@ -137,6 +146,13 @@ class TelaCadastro(QDialog):
         else:
             self.lbl_regra_numero.setText("❌ Pelo menos 1 número")
             self.lbl_regra_numero.setStyleSheet(estilo_erro)
+            
+        if texto == confirma and len(texto) > 0:
+            self.lbl_regra_igual.setText("✅ Senhas iguais")
+            self.lbl_regra_igual.setStyleSheet(estilo_ok)
+        else:
+            self.lbl_regra_igual.setText("❌ Senhas iguais")
+            self.lbl_regra_igual.setStyleSheet(estilo_erro)
 
     def fazer_cadastro(self):
         licenca = self.input_licenca.text().strip()

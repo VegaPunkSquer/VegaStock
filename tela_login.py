@@ -67,6 +67,7 @@ class TelaLogin(QDialog):
         self.btn_olho.setFixedWidth(40)
         # Tira a borda para não parecer um botão feio colado no campo
         self.btn_olho.setStyleSheet("border: 1px solid #ccc; background-color: #f0f0f0; border-radius: 4px;")
+        self.btn_olho.setFocusPolicy(Qt.NoFocus) # <-- Proíbe o olho de roubar o "Enter"
 
         def alternar_senha():
             if self.input_senha.echoMode() == QLineEdit.Password:
@@ -90,6 +91,7 @@ class TelaLogin(QDialog):
         self.btn_entrar = QPushButton("Entrar")
         self.btn_entrar.setObjectName("btn_destaque") # Botão Amarelo
         self.btn_entrar.clicked.connect(self.fazer_login)
+        self.btn_entrar.setDefault(True) # <-- Força o Enter a acionar este botão
         layout.addWidget(self.btn_entrar)
 
         self.btn_cadastrar = QPushButton("Cadastrar-se")

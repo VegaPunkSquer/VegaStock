@@ -253,16 +253,15 @@ class AbaEquipe(QWidget):
             QMessageBox.warning(self, "Aviso", "O campo Login é obrigatório.")
             return
 
-        # --- NOVA TRAVA: Limite de Contas ---
         # Só barra se for um NOVO usuário (se estiver editando, deixa passar)
         if not self.usuario_selecionado_id: 
-            limite = self.cliente_dados.get('limite_contas', 2) # Padrão Básico
+            # Na aba de Equipe, ele JÁ É PRO. O limite total é 6 (Admin + 5 contas)
             total_atual = self.tabela.rowCount()
             
-            if total_atual >= limite:
-                QMessageBox.warning(self, "Limite Atingido", 
-                    f"Você atingiu o limite de {limite} contas do seu plano atual.\n\n"
-                    "Faça o upgrade para o PRO para liberar mais 5 acessos e controle total!")
+            if total_atual >= 6:
+                QMessageBox.warning(self, "Limite PRO Atingido", 
+                    "Você já cadastrou os 5 usuários extras permitidos no Plano PRO.\n\n"
+                    "Para adicionar contas adicionais (R$ 25,00/mês cada), entre em contato com o suporte.")
                 return
         # ------------------------------------
 

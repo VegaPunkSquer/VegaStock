@@ -112,7 +112,42 @@ class AbaConta(QWidget):
         layout_senha.addWidget(btn_salvar_senha)
 
         layout_principal.addWidget(frame_senha)
-        layout_principal.addStretch() # Empurra tudo para cima
+        # --- BLOCO 3: ACESSO MOBILE (PIN OPERACIONAL) ---
+        frame_mobile = QFrame()
+        frame_mobile.setStyleSheet("background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px;")
+        layout_mobile = QVBoxLayout(frame_mobile)
+        layout_mobile.setContentsMargins(15, 15, 15, 15)
+
+        lbl_mobile_tit = QLabel("Acesso Mobile (Aplicativo do Estoque)")
+        lbl_mobile_tit.setStyleSheet("font-weight: bold; font-size: 16px; border: none;")
+        layout_mobile.addWidget(lbl_mobile_tit)
+
+        layout_pin = QHBoxLayout()
+        self.input_nome_operador = QLineEdit()
+        self.input_nome_operador.setPlaceholderText("Nome do Operador (Ex: João)")
+        self.input_nome_operador.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        
+        self.input_pin = QLineEdit()
+        self.input_pin.setPlaceholderText("PIN de 4 dígitos (Ex: 1234)")
+        self.input_pin.setEchoMode(QLineEdit.Password)
+        self.input_pin.setMaxLength(4)
+        self.input_pin.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        
+        btn_salvar_pin = QPushButton("Salvar PIN Operacional")
+        btn_salvar_pin.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px; border-radius: 3px;")
+        btn_salvar_pin.clicked.connect(self.salvar_pin_mobile)
+
+        layout_pin.addWidget(self.input_nome_operador)
+        layout_pin.addWidget(self.input_pin)
+        layout_pin.addWidget(btn_salvar_pin)
+        
+        layout_mobile.addLayout(layout_pin)
+        layout_principal.addWidget(frame_mobile)
+
+        layout_principal.addStretch() # Agora sim empurra tudo pra cima!
+        
+        # Puxa o PIN atual da nuvem
+        self.carregar_pin_atual() # Empurra tudo para cima
 
         # ==========================================
         # TRAVA DE HIERARQUIA (O PPOREEEEM GIGANTE)
@@ -228,3 +263,27 @@ class AbaConta(QWidget):
                     QMessageBox.warning(self, "Erro", response.json().get("detail", "Erro ao atualizar."))
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Sem conexão com a API.\n{e}")
+                
+    def carregar_pin_atual(self):
+        try:
+            resp = requests.get(f"{API_BASE_URL}/operador/{self.cliente_dados['cliente_id']}")
+            if resp.status_code == 200:
+                dados = resp.json()
+                self.input_nome_operador.setText(dados.get("nome", ""))
+                self.input_pin.setText(dados.get("pin", ""))
+        except: pass
+
+    def salvar_pin_mobile(self):
+        nome = self.input_nome_operador.text().strip()
+        pin = self.input_pin.text().strip()
+        if not nome or len(pin) != 4 or not pin.isdigit():
+            QMessageBox.warning(self, "Aviso", "Preencha o nome e um PIN numérico de exatos 4 dígitos.")
+            return
+            
+        dados = {"cliente_id": self.cliente_dados['cliente_id'], "nome": nome, "pin": pin}
+        try:
+            resp = requests.post(f"{API_BASE_URL}/operador", json=dados)
+            if resp.status_code == 200:
+                QMessageBox.information(self, "Sucesso", "PIN do Mobile configurado com sucesso!")
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", "Erro ao salvar PIN.")

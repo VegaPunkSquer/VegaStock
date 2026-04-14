@@ -54,10 +54,8 @@ class DialogUpgradePRO(QDialog):
         
         # Dados: (Chave API, Título, Total, Por Mês, Economia, Destaque)
         planos_info = [
-            ("MENSAL", "Mensal", "R$ 95,00", "R$ 95,00 /mês", "", False),
-            ("TRIMESTRAL", "Trimestral", "R$ 256,50", "R$ 85,50 /mês", "Economize R$ 28,50", False),
-            ("SEMESTRAL", "Semestral", "R$ 456,00", "R$ 76,00 /mês", "Economize R$ 114,00", False),
-            ("ANUAL", "Anual\n⭐️ MELHOR PREÇO", "R$ 684,00", "R$ 57,00 /mês", "Economize R$ 456,00", True)
+            ("PRO_MENSAL", "PRO Mensal", "R$ 289,00", "R$ 289,00 /mês", "", False),
+            ("PRO_SEMESTRAL", "PRO Semestral\n⭐️ MELHOR PREÇO", "R$ 1.134,00", "R$ 189,00 /mês", "Economize R$ 600,00", True)
         ]
         
         self.chaves_api = []
@@ -65,25 +63,18 @@ class DialogUpgradePRO(QDialog):
         for i, (chave, titulo, total, por_mes, economia, destaque) in enumerate(planos_info):
             frame = QFrame()
             
-            # Condicionais de estilo para o cartão "Melhor Preço"
             borda = "2px solid #5c85d6" if destaque else "1px solid #333"
             bg_color = "#2b2b36" if destaque else "#25252c"
             
             frame.setStyleSheet(f"""
-                QFrame {{
-                    background-color: {bg_color};
-                    border: {borda};
-                    border-radius: 12px;
-                }}
+                QFrame {{ background-color: {bg_color}; border: {borda}; border-radius: 12px; }}
             """)
             
             card_layout = QVBoxLayout(frame)
             card_layout.setContentsMargins(15, 20, 15, 20)
             card_layout.setSpacing(10)
             
-            # O RadioButton fica no topo do cartão
             rb = QRadioButton(titulo)
-            # CSS avançado para pintar a bolinha de amarelo por dentro e por fora
             rb.setStyleSheet("""
                 QRadioButton { background: transparent; font-size: 15px; font-weight: bold; border: none; padding-bottom: 5px; }
                 QRadioButton::indicator { width: 14px; height: 14px; border-radius: 8px; border: 2px solid #aaa; background-color: transparent; }
@@ -94,26 +85,24 @@ class DialogUpgradePRO(QDialog):
             card_layout.addWidget(rb, alignment=Qt.AlignHCenter)
             
             lbl_sub = QLabel("Total do pacote:")
-            lbl_sub.setStyleSheet("color: #aaa; font-size: 11px; border: none;")
+            lbl_sub.setStyleSheet("color: #aaa; font-size: 11px; border: none; background: transparent;")
             card_layout.addWidget(lbl_sub, alignment=Qt.AlignHCenter)
             
             lbl_total = QLabel(total)
-            lbl_total.setStyleSheet("font-size: 22px; font-weight: bold; border: none;")
+            lbl_total.setStyleSheet("font-size: 22px; font-weight: bold; border: none; background: transparent;")
             card_layout.addWidget(lbl_total, alignment=Qt.AlignHCenter)
             
             lbl_mes = QLabel(por_mes)
-            lbl_mes.setStyleSheet("color: #aaa; font-size: 12px; border: none; margin-top: 15px;")
+            lbl_mes.setStyleSheet("color: #aaa; font-size: 12px; border: none; margin-top: 15px; background: transparent;")
             card_layout.addWidget(lbl_mes, alignment=Qt.AlignHCenter)
             
-            # Rótulo verde de economia (só aparece se existir)
             if economia:
                 lbl_eco = QLabel(economia)
-                lbl_eco.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold; border: none;")
+                lbl_eco.setStyleSheet("color: #4CAF50; font-size: 11px; font-weight: bold; border: none; background: transparent;")
                 card_layout.addWidget(lbl_eco, alignment=Qt.AlignHCenter)
             else:
-                # Espaçador invisível para manter os cartões alinhados
                 lbl_vazio = QLabel()
-                lbl_vazio.setStyleSheet("border: none;")
+                lbl_vazio.setStyleSheet("border: none; background: transparent;")
                 card_layout.addWidget(lbl_vazio)
                 
             layout_cards.addWidget(frame)

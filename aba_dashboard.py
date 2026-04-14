@@ -133,7 +133,12 @@ class AbaDashboard(QWidget):
     def atualizar_tela(self, dados):
         # O trabalhador voltou. Hora de preencher a tela!
         self.val_patri.setText(f"R$ {dados.get('patrimonio_rs', 0):.2f}".replace('.', ','))
-        self.val_itens.setText(str(dados.get('total_produtos', 0)))
+        
+        tipos = dados.get('total_produtos', 0)
+        qtd = dados.get('quantidade_fisica', 0)
+        # Formata bonitinho: Ex: "45 Tipos | 120.5 Qtd"
+        self.val_itens.setText(f"{tipos} Tipos\n{qtd} Qtd")
+        self.val_itens.setStyleSheet("font-size: 18px; font-weight: bold; color: #333; border: none;") # Ajusta o tamanho da fonte para caber
         
         qtd_alerta = dados.get('alertas_criticos_qtd', 0)
         self.val_alerta.setText(str(qtd_alerta))

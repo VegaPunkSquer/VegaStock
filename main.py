@@ -152,12 +152,24 @@ def relatorio_desperdicio(cliente_id: int, dias: int = 30, categoria_id: int = N
     else:
         data_corte = hoje_brasil - timedelta(days=dias)
 
-    # 2. Busca apenas as SAÍDAS
+    # 2. Busca o ID da palavra "USO" para IGNORAR nas contas de prejuízo
+    motivo_uso = db.query(models.MotivoBaixa).filter(
+        models.MotivoBaixa.cliente_id == cliente_id,
+        models.MotivoBaixa.tipo == "USO"
+    ).first()
+    uso_id = motivo_uso.id if motivo_uso else None
+
+    # Busca apenas as SAÍDAS que não são "USO" e que possuem um motivo definido
     query = db.query(models.MovimentacaoEstoque).filter(
         models.MovimentacaoEstoque.cliente_id == cliente_id,
         models.MovimentacaoEstoque.tipo_movimento == "SAIDA",
+        models.MovimentacaoEstoque.motivo_baixa_id.isnot(None),
         models.MovimentacaoEstoque.data_hora >= data_corte
     )
+    
+    if uso_id:
+        query = query.filter(models.MovimentacaoEstoque.motivo_baixa_id != uso_id)
+
     if motivo_id:
         query = query.filter(models.MovimentacaoEstoque.motivo_baixa_id == motivo_id)
         
@@ -637,8 +649,10 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
     patrimonio_total = 0.0
     itens_abaixo_minimo = []
     total_itens_estoque = len(produtos)
+    quantidade_total_fisica = 0.0 # <--- NOVO
 
     for p in produtos:
+        quantidade_total_fisica += p.quantidade_atual # <--- NOVO
         # Soma o valor total parado (Qtd Atual * Custo Médio)
         valor_produto = p.quantidade_atual * p.custo_medio
         patrimonio_total += valor_produto
@@ -687,6 +701,7 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
     return {
         "patrimonio_rs": round(patrimonio_total, 2),
         "total_produtos": total_itens_estoque,
+        "quantidade_fisica": round(quantidade_total_fisica, 2), # <--- NOVO
         "alertas_criticos_qtd": len(itens_abaixo_minimo),
         "lista_compras": itens_abaixo_minimo,
         "movimento_hoje": {
@@ -948,18 +963,12 @@ def fazer_upgrade(dados: dict, db: Session = Depends(get_db)):
     if not cliente or not cliente.assinatura_asaas_id:
         raise HTTPException(status_code=400, detail="Assinatura não encontrada no banco de dados para ser alterada.")
 
-    # A matemática do Upgrade (Baseado na sua tela do PySide)
-    if "ANUAL" in novo_plano:
-        novo_valor = 684.00
-        ciclo = "YEARLY"
-    elif "SEMESTRAL" in novo_plano:
-        novo_valor = 456.00
+    # A matemática do Upgrade (Alinhado com a vitrine de Vendas)
+    if "SEMESTRAL" in novo_plano:
+        novo_valor = 1134.00
         ciclo = "SEMIANNUALLY"
-    elif "TRIMESTRAL" in novo_plano:
-        novo_valor = 256.50
-        ciclo = "QUARTERLY"
     else:
-        novo_valor = 95.00 # Mensal normal do Upgrade
+        novo_valor = 289.00 # PRO Mensal normal
         ciclo = "MONTHLY"
     
     # Payload que altera o valor do plano e cobra a diferença
@@ -983,3 +992,22 @@ def fazer_upgrade(dados: dict, db: Session = Depends(get_db)):
         return {"status": "Upgrade realizado com sucesso!"}
     
     raise HTTPException(status_code=400, detail=f"Erro ao comunicar upgrade com o Asaas: {res.text}")
+
+@app.get("/operador/{cliente_id}")
+def obter_operador(cliente_id: int, db: Session = Depends(get_db)):
+    op = db.query(models.OperadorTurno).filter(models.OperadorTurno.cliente_id == cliente_id).first()
+    if op:
+        return {"nome": op.nome, "pin": op.pin}
+    return {}
+
+@app.post("/operador")
+def salvar_operador(dados: dict, db: Session = Depends(get_db)):
+    op = db.query(models.OperadorTurno).filter(models.OperadorTurno.cliente_id == dados["cliente_id"]).first()
+    if op:
+        op.nome = dados["nome"]
+        op.pin = dados["pin"]
+    else:
+        novo_op = models.OperadorTurno(cliente_id=dados["cliente_id"], nome=dados["nome"], pin=dados["pin"])
+        db.add(novo_op)
+    db.commit()
+    return {"mensagem": "Operador salvo!"}
