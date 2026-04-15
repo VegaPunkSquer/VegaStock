@@ -666,10 +666,12 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
                 "unidade": p.unidade_medida
             })
 
-    # 2. Busca movimentações de HOJE agrupadas pela unidade de medida do produto
-    hoje_inicio = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    # 2. Busca movimentações de HOJE (Blindado contra o fuso horário UTC)
+    agora_br = datetime.utcnow() - timedelta(hours=3)
+    inicio_dia_br = datetime(agora_br.year, agora_br.month, agora_br.day, 0, 0, 0)
+    hoje_inicio_utc = inicio_dia_br + timedelta(hours=3) # Volta pra linguagem do banco
     
-    # Faz uma "costura" (JOIN) com a tabela de Produtos para descobrir a unidade de medida na mesma viagem
+    # Faz uma "costura" (JOIN) com a tabela de Produtos para descobrir a unidade de medida
     movs_hoje = db.query(
         models.MovimentacaoEstoque.tipo_movimento,
         models.MovimentacaoEstoque.quantidade,
@@ -678,7 +680,7 @@ def resumo_dashboard(cliente_id: int, db: Session = Depends(get_db)):
         models.Produto, models.MovimentacaoEstoque.produto_id == models.Produto.id
     ).filter(
         models.MovimentacaoEstoque.cliente_id == cliente_id,
-        models.MovimentacaoEstoque.data_hora >= hoje_inicio
+        models.MovimentacaoEstoque.data_hora >= hoje_inicio_utc # <--- Usa a data corrigida
     ).all()
 
     # Cria os potinhos vazios

@@ -155,6 +155,13 @@ class MainWindow(QMainWindow):
             self.botoes_abas.append(btn)
 
         self.botoes_abas[0].setChecked(True)
+        
+        # --- BOTÃO DE SINCRONIZAR NO MENU ---
+        self.btn_sync = QPushButton(" 🔄 SINCRONIZAR DADOS")
+        self.btn_sync.setStyleSheet("background-color: #2b2b36; color: #FFD700; text-align: center; padding: 15px; border: 1px solid #444; font-weight: bold; border-radius: 5px; margin-top: 20px;")
+        self.btn_sync.clicked.connect(self.sincronizar_dados_nuvem)
+        self.layout_abas.addWidget(self.btn_sync) # <--- AQUI ESTÁ O NOME CERTO!
+        
         layout_principal.addWidget(self.frame_menu, 1, 0)
 
         # ==========================================
@@ -175,10 +182,7 @@ class MainWindow(QMainWindow):
         self.aba_eqp = AbaEquipe(self.cliente_dados)
         self.aba_cnt = AbaConta(self.cliente_dados, self)
         self.aba_cfg = AbaConfiguracoes(self.cliente_dados)
-        self.btn_sync = QPushButton(" 🔄 Sincronizar")
-        self.btn_sync.setStyleSheet("background-color: #444; color: white; text-align: left; padding: 10px; border: none; font-weight: bold;")
-        self.btn_sync.clicked.connect(self.sincronizar_dados_nuvem)
-        self.layout_menu.addWidget(self.btn_sync)
+        self.area_central.addWidget(self.aba_dash)
 
         self.area_central.addWidget(self.aba_dash)
         self.area_central.addWidget(self.aba_cat)
@@ -261,15 +265,30 @@ class MainWindow(QMainWindow):
         
     def sincronizar_dados_nuvem(self):
         try:
-            resp = requests.get(f"https://vegastock.onrender.com/config/{self.cliente_dados['cliente_id']}")
+            url = f"https://vegastock.onrender.com/config/{self.cliente_dados['cliente_id']}"
+            resp = requests.get(url, timeout=10) # Impede o app de travar esperando
+            
             if resp.status_code == 200:
-                self.cliente_dados = resp.json()
-                # Avisa as abas que os dados mudaram (especialmente Equipe e Config)
+                dados_nuvem = resp.json()
+                
+                # Puxa APENAS as coisas do plano, sem destruir quem está logado
+                self.cliente_dados['status_assinatura'] = dados_nuvem.get('status_assinatura', self.cliente_dados.get('status_assinatura'))
+                self.cliente_dados['plano'] = dados_nuvem.get('plano', self.cliente_dados.get('plano', 'BÁSICO'))
+                self.cliente_dados['limite_contas'] = dados_nuvem.get('limite_contas', self.cliente_dados.get('limite_contas', 2))
+                
+                # Avisa as abas
                 self.aba_config.cliente_dados = self.cliente_dados
                 self.aba_equipe.cliente_dados = self.cliente_dados
+                
+                from PySide6.QtWidgets import QMessageBox
                 QMessageBox.information(self, "Sucesso", "Dados atualizados com a nuvem!")
-        except:
-            QMessageBox.warning(self, "Erro", "Falha ao sincronizar.")
+            else:
+                from PySide6.QtWidgets import QMessageBox
+                QMessageBox.warning(self, "Erro", f"A API recusou: Erro {resp.status_code}")
+                
+        except Exception as e:
+            from PySide6.QtWidgets import QMessageBox
+            QMessageBox.critical(self, "Falha de Conexão", f"O erro foi: {str(e)}")
 
 def iniciar_app():
     app = QApplication(sys.argv)
