@@ -16,6 +16,11 @@ build/
 *.manifest
 *.dll
 
+# Ignora arquivos de dados locais e segredos
+config_local.json
+secrets.json
+data/*.json
+
 # Ignora o banco de dados local (cada cliente terá o seu, não vai pro código)
 *.db
 
