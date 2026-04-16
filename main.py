@@ -53,8 +53,8 @@ def get_config(cliente_id: int, db: Session = Depends(get_db)):
         "nome_fantasia": cliente.nome_fantasia,
         "cnpj": cliente.cnpj,                                  # <--- O APP PRECISA DISSO AQUI!
         "status_assinatura": cliente.status_assinatura,
-        "plano": getattr(cliente, 'plano', 'BÁSICO'),
-        "limite_contas": getattr(cliente, 'limite_contas', 2),
+        "plano": cliente.plano if cliente.plano else "BÁSICO",
+        "limite_contas": cliente.limite_contas if cliente.limite_contas is not None else 2,
         "limite_global_notificacao": getattr(cliente, 'limite_global_notificacao', 5.0),
         "logo_url": cliente.logo_url
     }
@@ -318,8 +318,8 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
         "cargo": getattr(usuario, 'cargo', 'Admin'),                
         "logo_url": cliente.logo_url,          
         "status_assinatura": cliente.status_assinatura, 
-        "plano": getattr(cliente, 'plano', 'BÁSICO'),               # <--- PLANO INJETADO AQUI!
-        "limite_contas": getattr(cliente, 'limite_contas', 2),      # <--- LIMITE INJETADO AQUI!
+        "plano": cliente.plano if cliente.plano else "BÁSICO",               
+        "limite_contas": cliente.limite_contas if cliente.limite_contas is not None else 2,
         "limite_global": cliente.limite_global_notificacao,
         "permissoes": usuario.permissoes.split(",") if getattr(usuario, 'permissoes', None) else [] 
     }

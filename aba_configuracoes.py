@@ -181,7 +181,9 @@ class AbaConfiguracoes(QWidget):
         layout_principal.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
 
         # --- NOVO: MOSTRAR O PLANO ATUAL ---
-        plano_atual = self.cliente_dados.get('plano', 'BÁSICO').replace('_', ' ').upper()
+        # Blinda contra dados nulos vindo do banco
+        plano_banco = self.cliente_dados.get('plano')
+        plano_atual = (plano_banco if plano_banco else 'BÁSICO').replace('_', ' ').upper()
         cor_plano = "#d84315" if "PRO" in plano_atual else "#777"
         
         self.lbl_plano_info = QLabel(f"💎 PLANO ATUAL: {plano_atual}")
