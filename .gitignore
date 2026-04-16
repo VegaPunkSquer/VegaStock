@@ -16,6 +16,8 @@ build/
 *.manifest
 *.dll
 
+simulador.py
+
 # Ignora arquivos de dados locais e segredos
 config_local.json
 secrets.json

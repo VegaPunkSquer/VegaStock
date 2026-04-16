@@ -794,30 +794,42 @@ def checar_status_assinatura(cliente_id: int, db: Session = Depends(get_db)):
 # ==========================================
 @app.post("/webhook/asaas")
 async def asaas_webhook(request: Request, asaas_access_token: str = Header(None), db: Session = Depends(get_db)):
-    
-    # 1. Barreira de Segurança: Verifica se foi o Asaas mesmo que mandou
     if asaas_access_token != ASAAS_WEBHOOK_TOKEN:
-        raise HTTPException(status_code=403, detail="Token de Webhook inválido. Acesso Negado.")
+        raise HTTPException(status_code=403, detail="Acesso Negado.")
 
-    # 2. Lê a mensagem JSON que o Asaas mandou
     payload = await request.json()
     evento = payload.get("event")
 
-    # 3. Se for um evento de dinheiro na conta
     if evento in ["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]:
         pagamento = payload.get("payment", {})
-        
-        # Pega a identificação de qual cliente pagou (vem do externalReference)
-        cliente_id_str = pagamento.get("externalReference")
+        cnpj_pagador = pagamento.get("externalReference")
 
-        if cliente_id_str:
-            cliente = db.query(models.Cliente).filter(models.Cliente.id == int(cliente_id_str)).first()
+        if cnpj_pagador:
+            # --- NOVO: ATUALIZA O CLIENTE LOGADO (Upgrade Automático) ---
+            cliente = db.query(models.Cliente).filter(models.Cliente.cnpj == cnpj_pagador).first()
             if cliente:
-                # A MÁGICA ACONTECE AQUI: Carimba o banco de dados como PRO
-                cliente.status_assinatura = "PRO"
+                cliente.plano = "PRO_MENSAL"
+                cliente.limite_contas = 6
+                cliente.status_assinatura = "Ativo"
+                db.commit()
+                # -----------------------------------------------------------
+
+            # Mantém a geração de licença para casos de novos cadastros
+            ja_tem = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_pagador, models.Licenca.usada == False).first()
+            if not ja_tem:
+                caracteres = string.ascii_letters + string.digits
+                token_limpo = ''.join(random.choice(caracteres) for _ in range(12))
+                expiracao = datetime.utcnow() + timedelta(hours=48)
+                
+                nova_licenca = models.Licenca(
+                    token=token_limpo,
+                    usada=False,
+                    cnpj_esperado=cnpj_pagador,
+                    data_expiracao=expiracao
+                )
+                db.add(nova_licenca)
                 db.commit()
 
-    # O Asaas exige que a gente responda algo para ele saber que a mensagem chegou, senão ele fica reenviando
     return {"status": "recebido"}
 
 # ==========================================

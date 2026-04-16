@@ -266,28 +266,25 @@ class MainWindow(QMainWindow):
     def sincronizar_dados_nuvem(self):
         try:
             url = f"https://vegastock.onrender.com/config/{self.cliente_dados['cliente_id']}"
-            resp = requests.get(url, timeout=10) # Impede o app de travar esperando
+            resp = requests.get(url, timeout=10)
             
             if resp.status_code == 200:
                 dados_nuvem = resp.json()
                 
-                # Puxa APENAS as coisas do plano, sem destruir quem está logado
+                # Atualiza os dados de plano no dicionário global
                 self.cliente_dados['status_assinatura'] = dados_nuvem.get('status_assinatura', self.cliente_dados.get('status_assinatura'))
                 self.cliente_dados['plano'] = dados_nuvem.get('plano', self.cliente_dados.get('plano', 'BÁSICO'))
                 self.cliente_dados['limite_contas'] = dados_nuvem.get('limite_contas', self.cliente_dados.get('limite_contas', 2))
                 
-                # Avisa as abas
-                self.aba_config.cliente_dados = self.cliente_dados
-                self.aba_equipe.cliente_dados = self.cliente_dados
+                # ATUALIZA AS ABAS COM OS NOMES CERTOS:
+                self.aba_cfg.cliente_dados = self.cliente_dados
+                self.aba_eqp.cliente_dados = self.cliente_dados
                 
-                from PySide6.QtWidgets import QMessageBox
-                QMessageBox.information(self, "Sucesso", "Dados atualizados com a nuvem!")
+                QMessageBox.information(self, "Sucesso", "Dados sincronizados com a nuvem!")
             else:
-                from PySide6.QtWidgets import QMessageBox
                 QMessageBox.warning(self, "Erro", f"A API recusou: Erro {resp.status_code}")
                 
         except Exception as e:
-            from PySide6.QtWidgets import QMessageBox
             QMessageBox.critical(self, "Falha de Conexão", f"O erro foi: {str(e)}")
 
 def iniciar_app():
