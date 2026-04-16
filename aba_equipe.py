@@ -102,9 +102,10 @@ class AbaEquipe(QWidget):
         self.tabela.itemClicked.connect(self.selecionar_funcionario)
         layout_esq.addWidget(self.tabela)
 
-        btn_novo = QPushButton("Limpar Seleção (Novo Funcionário)")
-        btn_novo.clicked.connect(self.limpar_formulario)
-        layout_esq.addWidget(btn_novo)
+        self.btn_novo = QPushButton("+ ADICIONAR MEMBRO")
+        self.btn_novo.setStyleSheet("background-color: #009EE3; color: white; font-weight: bold; padding: 10px; border-radius: 5px; margin-top: 10px;")
+        self.btn_novo.clicked.connect(self.limpar_formulario)
+        layout_esq.addWidget(self.btn_novo)
 
         layout_livre.addWidget(frame_tabela, stretch=6)
 
@@ -152,10 +153,16 @@ class AbaEquipe(QWidget):
         self.btn_salvar.clicked.connect(self.salvar_funcionario)
         layout_dir.addWidget(self.btn_salvar)
 
+        self.btn_cancelar = QPushButton("CANCELAR EDIÇÃO")
+        self.btn_cancelar.setStyleSheet("background-color: #777; color: white; font-weight: bold; padding: 10px; margin-top: 5px;")
+        self.btn_cancelar.clicked.connect(self.limpar_formulario)
+        self.btn_cancelar.hide()
+        layout_dir.addWidget(self.btn_cancelar)
+
         self.btn_excluir = QPushButton("EXCLUIR FUNCIONÁRIO")
         self.btn_excluir.setStyleSheet("background-color: transparent; color: red; text-decoration: underline; border: none; margin-top: 5px;")
         self.btn_excluir.clicked.connect(self.excluir_funcionario)
-        self.btn_excluir.hide() # Só aparece se estiver editando alguém
+        self.btn_excluir.hide() 
         layout_dir.addWidget(self.btn_excluir)
 
         layout_livre.addWidget(frame_form, stretch=4)
@@ -220,33 +227,81 @@ class AbaEquipe(QWidget):
     def limpar_formulario(self):
         self.usuario_selecionado_id = None
         self.lbl_form_tit.setText("Cadastrar Novo Membro")
-        self.input_login.clear()
-        self.input_senha.clear()
-        self.input_cargo.clear()
+        
+        self.input_login.setText("")
+        
+        # Destranca a senha
+        self.input_senha.setEnabled(True)
+        self.input_senha.setText("")
+        self.input_senha.setPlaceholderText("Digite a senha do novo membro")
+        
+        self.input_cargo.setText("")
+        
+        # Destranca e zera as permissões
+        self.chk_catalogo.setEnabled(True)
+        self.chk_estoque.setEnabled(True)
+        self.chk_relatorios.setEnabled(True)
+        self.chk_config.setEnabled(True)
+        
         self.chk_catalogo.setChecked(False)
         self.chk_estoque.setChecked(False)
         self.chk_relatorios.setChecked(False)
         self.chk_config.setChecked(False)
+        
         self.btn_salvar.setText("SALVAR FUNCIONÁRIO")
         self.btn_excluir.hide()
+        self.btn_cancelar.hide() # Esconde o Cancelar
 
     def selecionar_funcionario(self, item):
         linha = item.row()
         self.usuario_selecionado_id = int(self.tabela.item(linha, 0).text())
-        self.lbl_form_tit.setText(f"Editando: {self.tabela.item(linha, 1).text()}")
+        nome_selecionado = self.tabela.item(linha, 1).text()
+        
+        self.lbl_form_tit.setText(f"Editando: {nome_selecionado}")
         self.btn_salvar.setText("ATUALIZAR DADOS")
-        self.btn_excluir.show()
+        self.btn_cancelar.show() # Mostra o Cancelar
 
-        self.input_login.setText(self.tabela.item(linha, 1).text())
-        self.input_senha.clear() # Deixa em branco por segurança
+        self.input_login.setText(nome_selecionado)
+        self.input_senha.clear()
         self.input_cargo.setText(self.tabela.item(linha, 2).text())
 
-        # Recupera e marca as checkboxes
         permissoes = self.tabela.item(linha, 3).data(Qt.UserRole)
         self.chk_catalogo.setChecked("catalogo" in permissoes)
         self.chk_estoque.setChecked("estoque" in permissoes)
         self.chk_relatorios.setChecked("relatorios" in permissoes)
         self.chk_config.setChecked("configuracoes" in permissoes)
+
+        # ========================================================
+        # A BLINDAGEM DO ADMIN: Compara o ID clicado com o ID logado
+        # ========================================================
+        if self.usuario_selecionado_id == self.cliente_dados.get('usuario_id'):
+            # É O CHEFE! Trava tudo que é perigoso.
+            self.input_senha.setEnabled(False)
+            self.input_senha.setPlaceholderText("Altere a senha do Admin na Aba Conta")
+            
+            self.chk_catalogo.setEnabled(False)
+            self.chk_estoque.setEnabled(False)
+            self.chk_relatorios.setEnabled(False)
+            self.chk_config.setEnabled(False)
+            
+            # Força o visual de "Tenho todas as permissões"
+            self.chk_catalogo.setChecked(True)
+            self.chk_estoque.setChecked(True)
+            self.chk_relatorios.setChecked(True)
+            self.chk_config.setChecked(True)
+            
+            self.btn_excluir.hide() # Imortal!
+        else:
+            # É FUNCIONÁRIO NORMAL. Libera tudo.
+            self.input_senha.setEnabled(True)
+            self.input_senha.setPlaceholderText("Deixe em branco para não alterar")
+            
+            self.chk_catalogo.setEnabled(True)
+            self.chk_estoque.setEnabled(True)
+            self.chk_relatorios.setEnabled(True)
+            self.chk_config.setEnabled(True)
+            
+            self.btn_excluir.show() # Pode ser demitido!
 
     def salvar_funcionario(self):
         if not self.input_login.text().strip():
