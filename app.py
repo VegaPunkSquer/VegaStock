@@ -284,9 +284,20 @@ class MainWindow(QMainWindow):
                 
                 # Se a aba equipe tiver uma função de recarregar, chame-a aqui
                 if hasattr(self.aba_eqp, 'carregar_equipe'):
-                    self.aba_eqp.carregar_equipe() # <--- ATUALIZA A ABA CONTA TAMBÉM
+                    self.aba_eqp.carregar_equipe()
                 
-                # CHAMA O REFRESH DA INTERFACE
+                # =======================================================
+                # O CHOQUE VISUAL: Força o texto na tela a mudar na hora!
+                # =======================================================
+                plano_bonito = self.cliente_dados.get('plano', 'BÁSICO').replace('_', ' ').upper()
+                self.aba_cfg.lbl_plano_info.setText(f"💎 PLANO ATUAL: {plano_bonito}")
+                
+                # Se for PRO, muda a cor pra dourado/laranja, se não, volta pro cinza
+                cor = "#d84315" if "PRO" in plano_bonito else "#777"
+                self.aba_cfg.lbl_plano_info.setStyleSheet(f"font-size: 14px; font-weight: bold; color: {cor}; margin-bottom: 10px;")
+                # =======================================================
+                
+                # CHAMA O REFRESH DA INTERFACE (Libera o menu lateral)
                 self.atualizar_bloqueios_interface()
                 
                 QMessageBox.information(self, "Sucesso", "Dados sincronizados! O modo PRO foi ativado.")
