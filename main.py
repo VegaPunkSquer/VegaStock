@@ -822,8 +822,12 @@ async def asaas_webhook(request: Request, asaas_access_token: str = Header(None)
             cnpj_limpo = "".join(filter(str.isdigit, cnpj_pagador))
             print(f"DEBUG: Webhook recebeu pagamento para CNPJ: {cnpj_limpo}") # <--- OLHE ISSO NO LOG DA RENDER
 
-            # Busca flexível
-            cliente = db.query(models.Cliente).filter(models.Cliente.cnpj.contains(cnpj_limpo)).first()
+            # Busca ignorando a formatação (Pontos, traços e barras)
+            # Usamos o replace do SQL para comparar apenas os números
+            from sqlalchemy import func
+            cliente = db.query(models.Cliente).filter(
+                func.replace(func.replace(func.replace(models.Cliente.cnpj, '.', ''), '-', ''), '/', '') == cnpj_limpo
+            ).first()
             
             if cliente:
                 print(f"✅ SUCESSO: Cliente {cliente.nome_fantasia} (ID: {cliente.id}) promovido a PRO!")
