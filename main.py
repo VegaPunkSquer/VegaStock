@@ -818,18 +818,21 @@ async def asaas_webhook(request: Request, asaas_access_token: str = Header(None)
 
         if cnpj_pagador:
             # --- ATUALIZA O CLIENTE (Garante o match mesmo com formatação diferente) ---
-            # Remove qualquer coisa que não seja número do CNPJ que veio do Asaas
+            # Remove formatação do CNPJ que veio do Asaas
             cnpj_limpo = "".join(filter(str.isdigit, cnpj_pagador))
-            
-            # Busca clientes que contenham esses números no CNPJ
+            print(f"DEBUG: Webhook recebeu pagamento para CNPJ: {cnpj_limpo}") # <--- OLHE ISSO NO LOG DA RENDER
+
+            # Busca flexível
             cliente = db.query(models.Cliente).filter(models.Cliente.cnpj.contains(cnpj_limpo)).first()
             
             if cliente:
-                print(f"✅ Webhook: Cliente {cliente.nome_fantasia} promovido a PRO!")
+                print(f"✅ SUCESSO: Cliente {cliente.nome_fantasia} (ID: {cliente.id}) promovido a PRO!")
                 cliente.plano = "PRO_MENSAL"
-                cliente.status_assinatura = "PRO" # Garante que o status mude para o IF do app
+                cliente.status_assinatura = "PRO"
                 cliente.limite_contas = 6
                 db.commit()
+            else:
+                print(f"❌ ERRO: Nenhum cliente encontrado com o CNPJ {cnpj_limpo} no banco.")
             if cliente:
                 cliente.plano = "PRO_MENSAL"
                 cliente.limite_contas = 6

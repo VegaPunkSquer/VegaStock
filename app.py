@@ -280,7 +280,11 @@ class MainWindow(QMainWindow):
                 # ATUALIZA TODAS AS ABAS:
                 self.aba_cfg.cliente_dados = self.cliente_dados
                 self.aba_eqp.cliente_dados = self.cliente_dados
-                self.aba_cnt.cliente_dados = self.cliente_dados # <--- ATUALIZA A ABA CONTA TAMBÉM
+                self.aba_cnt.cliente_dados = self.cliente_dados
+                
+                # Se a aba equipe tiver uma função de recarregar, chame-a aqui
+                if hasattr(self.aba_eqp, 'carregar_equipe'):
+                    self.aba_eqp.carregar_equipe() # <--- ATUALIZA A ABA CONTA TAMBÉM
                 
                 # CHAMA O REFRESH DA INTERFACE
                 self.atualizar_bloqueios_interface()
