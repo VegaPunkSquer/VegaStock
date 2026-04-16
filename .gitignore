@@ -16,6 +16,7 @@ build/
 *.manifest
 *.dll
 
+cnpj.py
 simulador.py
 
 # Ignora arquivos de dados locais e segredos

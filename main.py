@@ -43,12 +43,21 @@ def get_db():
         db.close()
 
 # 1. Endpoint: White-Label (Cor e Logo)
-@app.get("/config/{cliente_id}", response_model=schemas.ClienteConfig)
+@app.get("/config/{cliente_id}") # <--- REMOVIDO O 'response_model' QUE CENSURAVA OS DADOS
 def get_config(cliente_id: int, db: Session = Depends(get_db)):
     cliente = db.query(models.Cliente).filter(models.Cliente.id == cliente_id).first()
     if not cliente:
         raise HTTPException(status_code=404, detail="Cliente não encontrado")
-    return cliente
+        
+    return {
+        "nome_fantasia": cliente.nome_fantasia,
+        "cnpj": cliente.cnpj,                                  # <--- O APP PRECISA DISSO AQUI!
+        "status_assinatura": cliente.status_assinatura,
+        "plano": getattr(cliente, 'plano', 'BÁSICO'),
+        "limite_contas": getattr(cliente, 'limite_contas', 2),
+        "limite_global_notificacao": getattr(cliente, 'limite_global_notificacao', 5.0),
+        "logo_url": cliente.logo_url
+    }
 
 # 2. Endpoint: Listar Estoque do Cliente
 @app.get("/produtos", response_model=List[schemas.ProdutoResponse])
@@ -301,15 +310,18 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     return {
         "status": "sucesso",
         "cliente_id": cliente.id,
-        "usuario_id": usuario.id,              # <-- NOVO: ID do funcionário logado
+        "usuario_id": usuario.id,              
+        "cnpj": cliente.cnpj,                  # <--- CNPJ INJETADO AQUI!
         "nome_fantasia": cliente.nome_fantasia,
         "login_usuario": usuario.login,
-        "nivel_acesso": getattr(usuario, 'nivel_acesso', 'normal'), # Mantido (com getattr pra não quebrar se o banco ainda não tiver)
-        "cargo": getattr(usuario, 'cargo', 'Admin'),                # <-- NOVO: Cargo
-        "logo_url": cliente.logo_url,          # <-- MANTIDO: O que salva a sua imagem
+        "nivel_acesso": getattr(usuario, 'nivel_acesso', 'normal'), 
+        "cargo": getattr(usuario, 'cargo', 'Admin'),                
+        "logo_url": cliente.logo_url,          
         "status_assinatura": cliente.status_assinatura, 
+        "plano": getattr(cliente, 'plano', 'BÁSICO'),               # <--- PLANO INJETADO AQUI!
+        "limite_contas": getattr(cliente, 'limite_contas', 2),      # <--- LIMITE INJETADO AQUI!
         "limite_global": cliente.limite_global_notificacao,
-        "permissoes": usuario.permissoes.split(",") if getattr(usuario, 'permissoes', None) else [] # <-- NOVO: Lista de travas
+        "permissoes": usuario.permissoes.split(",") if getattr(usuario, 'permissoes', None) else [] 
     }
     
 @app.post("/verificar_licenca")

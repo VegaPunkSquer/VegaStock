@@ -275,10 +275,12 @@ class MainWindow(QMainWindow):
                 self.cliente_dados['status_assinatura'] = dados_nuvem.get('status_assinatura', self.cliente_dados.get('status_assinatura'))
                 self.cliente_dados['plano'] = dados_nuvem.get('plano', self.cliente_dados.get('plano', 'BÁSICO'))
                 self.cliente_dados['limite_contas'] = dados_nuvem.get('limite_contas', self.cliente_dados.get('limite_contas', 2))
+                self.cliente_dados['cnpj'] = dados_nuvem.get('cnpj', self.cliente_dados.get('cnpj')) # <--- PEGA O CNPJ DA NUVEM
                 
-                # ATUALIZA AS ABAS COM OS NOMES CERTOS:
+                # ATUALIZA TODAS AS ABAS:
                 self.aba_cfg.cliente_dados = self.cliente_dados
                 self.aba_eqp.cliente_dados = self.cliente_dados
+                self.aba_cnt.cliente_dados = self.cliente_dados # <--- ATUALIZA A ABA CONTA TAMBÉM
                 
                 # CHAMA O REFRESH DA INTERFACE
                 self.atualizar_bloqueios_interface()

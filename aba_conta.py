@@ -286,4 +286,10 @@ class AbaConta(QWidget):
             if resp.status_code == 200:
                 QMessageBox.information(self, "Sucesso", "PIN do Mobile configurado com sucesso!")
         except Exception as e:
-            QMessageBox.critical(self, "Erro", "Erro ao salvar PIN.")
+            QMessageBox.critical(self, "Erro", "Erro ao salvar PIN."),
+            
+    def refresh_ui(self):
+        """Atualiza os textos da tela com os novos dados sincronizados."""
+        # Se você tiver um label de CNPJ, atualize ele aqui. 
+        # Exemplo: self.lbl_cnpj_valor.setText(self.cliente_dados.get('cnpj', 'Não informado'))
+        pass
