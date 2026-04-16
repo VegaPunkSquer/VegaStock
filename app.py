@@ -280,12 +280,36 @@ class MainWindow(QMainWindow):
                 self.aba_cfg.cliente_dados = self.cliente_dados
                 self.aba_eqp.cliente_dados = self.cliente_dados
                 
-                QMessageBox.information(self, "Sucesso", "Dados sincronizados com a nuvem!")
+                # CHAMA O REFRESH DA INTERFACE
+                self.atualizar_bloqueios_interface()
+                
+                QMessageBox.information(self, "Sucesso", "Dados sincronizados! O modo PRO foi ativado.")
             else:
                 QMessageBox.warning(self, "Erro", f"A API recusou: Erro {resp.status_code}")
                 
         except Exception as e:
             QMessageBox.critical(self, "Falha de Conexão", f"O erro foi: {str(e)}")
+            
+    def atualizar_bloqueios_interface(self):
+        """Reavalia quais abas o usuário pode clicar baseado no novo plano."""
+        status = self.cliente_dados.get('status_assinatura', 'BÁSICO')
+        
+        # Percorre os botões do menu lateral (assumindo que Equipe é o índice 4)
+        for i, btn in enumerate(self.botoes_abas):
+            texto = btn.text().strip()
+            if "Equipe" in texto:
+                if status == "PRO" or "PRO" in self.cliente_dados.get('plano', ''):
+                    btn.setEnabled(True)
+                    btn.setToolTip("Acesso Liberado")
+                else:
+                    btn.setEnabled(False)
+                    btn.setToolTip("Aba exclusiva para assinantes PRO")
+        
+        # Avisa a aba de configurações para mudar o texto do plano lá em cima
+        if hasattr(self, 'aba_cfg'):
+            # Se você criou a lbl_plano_info como self, atualizamos o texto
+            plano = self.cliente_dados.get('plano', 'BÁSICO').replace('_', ' ').upper()
+            self.aba_cfg.lbl_plano_info.setText(f"💎 PLANO ATUAL: {plano}")
 
 def iniciar_app():
     app = QApplication(sys.argv)

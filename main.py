@@ -805,8 +805,19 @@ async def asaas_webhook(request: Request, asaas_access_token: str = Header(None)
         cnpj_pagador = pagamento.get("externalReference")
 
         if cnpj_pagador:
-            # --- NOVO: ATUALIZA O CLIENTE LOGADO (Upgrade Automático) ---
-            cliente = db.query(models.Cliente).filter(models.Cliente.cnpj == cnpj_pagador).first()
+            # --- ATUALIZA O CLIENTE (Garante o match mesmo com formatação diferente) ---
+            # Remove qualquer coisa que não seja número do CNPJ que veio do Asaas
+            cnpj_limpo = "".join(filter(str.isdigit, cnpj_pagador))
+            
+            # Busca clientes que contenham esses números no CNPJ
+            cliente = db.query(models.Cliente).filter(models.Cliente.cnpj.contains(cnpj_limpo)).first()
+            
+            if cliente:
+                print(f"✅ Webhook: Cliente {cliente.nome_fantasia} promovido a PRO!")
+                cliente.plano = "PRO_MENSAL"
+                cliente.status_assinatura = "PRO" # Garante que o status mude para o IF do app
+                cliente.limite_contas = 6
+                db.commit()
             if cliente:
                 cliente.plano = "PRO_MENSAL"
                 cliente.limite_contas = 6
