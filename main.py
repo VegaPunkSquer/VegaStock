@@ -705,18 +705,32 @@ def listar_equipe(cliente_id: int, db: Session = Depends(get_db)):
 # 2. Adicionar/Editar Funcionário
 @app.post("/equipe")
 def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
-    # Se tiver ID, edita. Se não, cria novo.
+    cliente_id = dados.get("cliente_id")
     user_id = dados.get("id")
+
+    # ========================================================
+    # A BARREIRA DA NUVEM: Só bloqueia se for cadastro NOVO
+    # ========================================================
+    if not user_id: 
+        cliente = db.query(models.Cliente).filter(models.Cliente.id == cliente_id).first()
+        qtd_atual = db.query(models.Usuario).filter(models.Usuario.cliente_id == cliente_id).count()
+        
+        if cliente and qtd_atual >= cliente.limite_contas:
+            raise HTTPException(status_code=400, detail=f"Limite de {cliente.limite_contas} contas atingido.")
+    # ========================================================
+
+    # Se passou da barreira e tem ID, edita. Se não, cria novo.
     if user_id:
         usuario = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
     else:
-        usuario = models.Usuario(cliente_id=dados["cliente_id"])
+        usuario = models.Usuario(cliente_id=cliente_id)
         db.add(usuario)
     
     usuario.login = dados["login"]
     if dados.get("senha"): # Só muda a senha se enviar uma nova
         usuario.senha = dados["senha"]
     usuario.cargo = dados["cargo"]
+    
     # Transforma a lista do front ['estoque', 'relatorios'] em string "estoque,relatorios"
     usuario.permissoes = ",".join(dados["permissoes"])
     

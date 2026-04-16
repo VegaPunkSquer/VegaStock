@@ -225,6 +225,23 @@ class AbaEquipe(QWidget):
             self.tabela.setItem(i, 3, item_acessos)
 
     def limpar_formulario(self):
+        # ========================================================
+        # O LEÃO DE CHÁCARA: Conta as linhas da tabela vs Limite do Plano
+        # ========================================================
+        limite = self.cliente_dados.get('limite_contas', 2)
+        qtd_atual = self.tabela.rowCount()
+        
+        if qtd_atual >= limite:
+            mensagem = (f"Você atingiu o limite de {limite} contas do seu plano atual!\n\n"
+                        "O VegaStock acompanha o crescimento do seu negócio. "
+                        "Para adicionar mais funcionários (R$ 25,00/mês por vaga extra), "
+                        "entre em contato com o nosso suporte.")
+            
+            QMessageBox.information(self, "Expanda sua Equipe", mensagem)
+            return # Aborta a missão! O código para de ler aqui e não libera o formulário.
+        # ========================================================
+
+        # Se passou da barreira, continua normal:
         self.usuario_selecionado_id = None
         self.lbl_form_tit.setText("Cadastrar Novo Membro")
         
