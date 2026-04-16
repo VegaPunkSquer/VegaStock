@@ -519,41 +519,6 @@ def comprar_licenca(dados: dict, db: Session = Depends(get_db)):
         
     return {"link_pagamento": invoice_url, "mensagem": "Aguardando pagamento..."}
 
-@app.post("/webhook/asaas")
-async def asaas_webhook(request: Request, asaas_access_token: str = Header(None), db: Session = Depends(get_db)):
-    """Ouve o Asaas. Quando pagarem, gera a licença e salva no banco."""
-    if asaas_access_token != ASAAS_WEBHOOK_TOKEN:
-        raise HTTPException(status_code=403, detail="Acesso Negado.")
-
-    payload = await request.json()
-    evento = payload.get("event")
-
-    # Se a primeira cobrança da assinatura for paga
-    if evento in ["PAYMENT_RECEIVED", "PAYMENT_CONFIRMED"]:
-        pagamento = payload.get("payment", {})
-        cnpj_pagador = pagamento.get("externalReference") # Lemos a etiqueta mágica!
-
-        if cnpj_pagador:
-            # Verifica se já não geramos licença para esse CNPJ nas últimas horas para não duplicar
-            ja_tem = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_pagador, models.Licenca.usada == False).first()
-            
-            if not ja_tem:
-                # Gera o código de 12 dígitos
-                caracteres = string.ascii_letters + string.digits
-                token_limpo = ''.join(random.choice(caracteres) for _ in range(12))
-                expiracao = datetime.utcnow() + timedelta(hours=48)
-                
-                nova_licenca = models.Licenca(
-                    token=token_limpo,
-                    usada=False,
-                    cnpj_esperado=cnpj_pagador,
-                    data_expiracao=expiracao
-                )
-                db.add(nova_licenca)
-                db.commit()
-
-    return {"status": "recebido"}
-
 @app.get("/checar_licenca_nova/{cnpj}")
 def checar_licenca(cnpj: str, db: Session = Depends(get_db)):
     """O App fica batendo aqui a cada 5 segundos perguntando: Já pagou?"""
@@ -817,13 +782,11 @@ async def asaas_webhook(request: Request, asaas_access_token: str = Header(None)
         cnpj_pagador = pagamento.get("externalReference")
 
         if cnpj_pagador:
-            # --- ATUALIZA O CLIENTE (Garante o match mesmo com formatação diferente) ---
-            # Remove formatação do CNPJ que veio do Asaas
+            # 1. Limpa o CNPJ que veio do Asaas
             cnpj_limpo = "".join(filter(str.isdigit, cnpj_pagador))
-            print(f"DEBUG: Webhook recebeu pagamento para CNPJ: {cnpj_limpo}") # <--- OLHE ISSO NO LOG DA RENDER
+            print(f"DEBUG: Webhook recebeu pagamento para CNPJ: {cnpj_limpo}")
 
-            # Busca ignorando a formatação (Pontos, traços e barras)
-            # Usamos o replace do SQL para comparar apenas os números
+            # 2. Busca o cliente ignorando pontos, traços e barras do banco
             from sqlalchemy import func
             cliente = db.query(models.Cliente).filter(
                 func.replace(func.replace(func.replace(models.Cliente.cnpj, '.', ''), '-', ''), '/', '') == cnpj_limpo
@@ -837,14 +800,8 @@ async def asaas_webhook(request: Request, asaas_access_token: str = Header(None)
                 db.commit()
             else:
                 print(f"❌ ERRO: Nenhum cliente encontrado com o CNPJ {cnpj_limpo} no banco.")
-            if cliente:
-                cliente.plano = "PRO_MENSAL"
-                cliente.limite_contas = 6
-                cliente.status_assinatura = "Ativo"
-                db.commit()
-                # -----------------------------------------------------------
 
-            # Mantém a geração de licença para casos de novos cadastros
+            # 3. Mantém a geração de licença para casos de novos cadastros
             ja_tem = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_pagador, models.Licenca.usada == False).first()
             if not ja_tem:
                 caracteres = string.ascii_letters + string.digits
