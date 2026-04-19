@@ -347,9 +347,9 @@ class MainWindow(QMainWindow):
         # Pega a lista de permissões (se vier None/Null do banco, vira lista vazia [])
         permissoes_usuario = self.cliente_dados.get('permissoes') or []
         
-        # Pega o cargo (se vier None/Null do banco, vira texto vazio "")
-        cargo_bruto = self.cliente_dados.get('cargo') or ""
-        cargo = cargo_bruto.upper()
+        # Puxa os DOIS campos. O dono tem 'nivel', o funcionário tem 'cargo'.
+        cargo = (self.cliente_dados.get('cargo') or "").upper()
+        nivel = (self.cliente_dados.get('nivel_acesso') or "").upper()
 
         # Mapa para ligar o texto do botão à chave da permissão
         mapa = {
@@ -365,8 +365,8 @@ class MainWindow(QMainWindow):
             texto_botao = btn.text().replace(" 🔒", "").strip().upper()
             chave = mapa.get(texto_botao, "livre")
 
-            # REGRA 1: Se for ADMIN, libera TUDO.
-            if cargo == "ADMIN":
+            # REGRA 1: Se for o Dono (nivel) OU tiver cargo de ADMIN, libera TUDO.
+            if nivel == "ADMIN" or cargo == "ADMIN":
                 btn.show()
                 btn.setEnabled(True)
                 continue
