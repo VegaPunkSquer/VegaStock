@@ -341,17 +341,26 @@ class MainWindow(QMainWindow):
             
     def atualizar_bloqueios_interface(self):
         """Varre os botões e aplica as travas de permissão e plano PRO."""
-        status_assinatura = self.cliente_dados.get('status_assinatura', 'BÁSICO')
-        is_pro = status_assinatura == "PRO"
         
-        # Pega a lista de permissões (se vier None/Null do banco, vira lista vazia [])
-        permissoes_usuario = self.cliente_dados.get('permissoes') or []
+        # --- PREPARAÇÃO DOS DADOS ---
+        cargo = str(self.cliente_dados.get('cargo') or "").upper().strip()
+        nivel = str(self.cliente_dados.get('nivel_acesso') or "").upper().strip()
         
-        # Puxa os DOIS campos. O dono tem 'nivel', o funcionário tem 'cargo'.
-        cargo = (self.cliente_dados.get('cargo') or "").upper()
-        nivel = (self.cliente_dados.get('nivel_acesso') or "").upper()
+        # Puxa as permissões (ex: "dashboard,estoque")
+        permissoes_str = str(self.cliente_dados.get('permissoes') or "")
 
-        # Mapa para ligar o texto do botão à chave da permissão
+        # ==========================================================
+        # O DETETOR DE DONO (A Grande Sacada)
+        # A API envia nivel="ADMIN" para todo mundo por causa do Restaurante.
+        # Como separar o Dono do Funcionário? 
+        # O funcionário SEMPRE tem a palavra "dashboard" salva no banco.
+        # Se a lista de permissões vier vazia, é a conta MATRIZ (O Dono Supremo).
+        # ==========================================================
+        is_admin = False
+        if cargo == "ADMIN" or (nivel == "ADMIN" and not permissoes_str):
+            is_admin = True
+
+        # Mapa que liga o nome do botão com a palavra salva no banco
         mapa = {
             "DASHBOARD": "dashboard",
             "CATÁLOGO DE PRODUTOS": "catalogo",
@@ -361,26 +370,28 @@ class MainWindow(QMainWindow):
             "CONFIGURAÇÕES": "configuracoes"
         }
 
+        # --- APLICAÇÃO DAS REGRAS (A Guilhotina) ---
         for btn in self.botoes_abas:
             texto_botao = btn.text().replace(" 🔒", "").strip().upper()
             chave = mapa.get(texto_botao, "livre")
 
-            # REGRA 1: Se for o Dono (nivel) OU tiver cargo de ADMIN, libera TUDO.
-            if nivel == "ADMIN" or cargo == "ADMIN":
+            # REGRA 1: O Dono Supremo ou Gerente 'ADMIN' vê TUDO.
+            if is_admin:
                 btn.show()
-                btn.setEnabled(True)
                 continue
 
-            # REGRA 2: Se for aba de EQUIPE, só o Admin vê (já tratado acima, mas por garantia:)
+            # ====== REGRAS PARA FUNCIONÁRIOS BÁSICOS ======
+            
+            # Aba de Equipe NUNCA aparece para funcionário
             if chave == "admin":
                 btn.hide()
                 continue
 
-            # REGRA 3: Checagem de permissões para funcionários normais
-            if chave != "livre" and chave not in permissoes_usuario:
-                btn.hide() # Esconde o que ele não pode ver
+            # Se a aba não for "livre" (Minha Conta) E a chave não estiver no pacote dele, SOME COM ELA!
+            if chave != "livre" and chave not in permissoes_str:
+                btn.hide()
             else:
-                btn.show() # Mostra o que ele pode ver
+                btn.show()
 
 def iniciar_app():
     app = QApplication(sys.argv)
