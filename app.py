@@ -336,53 +336,76 @@ class MainWindow(QMainWindow):
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
-        """Reavalia quais abas o usuário pode clicar e ajusta o visual baseado no novo plano."""
+        """Reavalia quais abas o usuário pode clicar com base no plano e nas permissões."""
         status = self.cliente_dados.get('status_assinatura', 'BÁSICO')
         plano = self.cliente_dados.get('plano', 'BÁSICO')
         is_pro = status == "PRO" or "PRO" in plano
         
-        # 1. ARRANCA A FERRUGEM DO BOTÃO EQUIPE NO MENU LATERAL
-        for btn in self.botoes_abas:
-            texto = btn.text().strip()
-            if "Equipe" in texto:
-                if is_pro:
-                    btn.setEnabled(True)
-                    btn.setToolTip("Acesso Liberado")
-                    # Tira o visual de bloqueado e devolve a cor branca com o hover nativo
-                    btn.setStyleSheet("""
-                        QPushButton {
-                            color: white; text-align: left; padding: 15px; border: none; font-size: 16px;
-                        }
-                        QPushButton:hover {
-                            background-color: #444; border-radius: 5px;
-                        }
-                        QPushButton:checked {
-                            background-color: #555; font-weight: bold; border-left: 4px solid #FFD700;
-                        }
-                    """)
-                else:
-                    btn.setEnabled(False)
-                    btn.setToolTip("Aba exclusiva para assinantes PRO")
-                    # Visual cinza/apagado
-                    btn.setStyleSheet("color: #666; text-align: left; padding: 15px; border: none; font-size: 16px;")
+        # 1. Pega a lista de acessos do banco (ex: ['dashboard', 'estoque'])
+        permissoes = self.cliente_dados.get('permissoes', [])
+        if not permissoes:
+            permissoes = ['dashboard'] # Garante que ninguém fique olhando pro vazio
 
-        # 2. ARRUMA O TEXTO E O BLOQUEIO DO CHECKBOX DE NOTIFICAÇÃO NA ABA CONFIGURAÇÕES
-        if hasattr(self, 'aba_cfg'):
-            # (Mantém a atualização do texto do plano que já fizemos)
-            plano_bonito = plano.replace('_', ' ').upper()
-            if hasattr(self.aba_cfg, 'lbl_plano_info'):
-                self.aba_cfg.lbl_plano_info.setText(f"💎 PLANO ATUAL: {plano_bonito}")
+        # 2. O MODO DEUS: Se for o Dono (Admin), ignora as travas e libera tudo
+        if self.cliente_dados.get('cargo', '').upper() == 'ADMIN':
+            permissoes = ['dashboard', 'catalogo', 'estoque', 'relatorios', 'configuracoes']
+
+        # 3. Varre todos os botões do menu e aplica as travas
+        for btn in self.botoes_abas:
+            texto = btn.text().strip().upper()
+            tem_permissao = True
             
-            # --- ATENÇÃO VEGA: TROQUE O NOME DA VARIÁVEL ABAIXO PELO NOME REAL DO SEU CHECKBOX ---
-            nome_da_variavel_do_checkbox = getattr(self.aba_cfg, 'NOME_DO_SEU_CHECKBOX_AQUI', None) 
-            
-            if nome_da_variavel_do_checkbox:
-                if is_pro:
-                    nome_da_variavel_do_checkbox.setText("Habilitar limites individuais por produto")
-                    nome_da_variavel_do_checkbox.setEnabled(True)
+            # Compara o nome do botão com a regra de permissão
+            if "CATÁLOGO" in texto and "catalogo" not in permissoes:
+                tem_permissao = False
+            elif "ESTOQUE" in texto and "estoque" not in permissoes:
+                tem_permissao = False
+            elif "DESPERDÍCIO" in texto and "relatorios" not in permissoes:
+                tem_permissao = False
+            elif "CONFIGURAÇÕES" in texto and "configuracoes" not in permissoes:
+                tem_permissao = False
+            elif "EQUIPE" in texto:
+                # Equipe tem trava DUPLA: Precisa ser PRO *E* ter permissão de configurações
+                if not is_pro or "configuracoes" not in permissoes:
+                    tem_permissao = False
+
+            # --- APLICANDO O VISUAL ---
+            if tem_permissao:
+                btn.setEnabled(True)
+                btn.setToolTip("")
+                # Devolve o seu CSS nativo e bonitão (Menu Claro)
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #EAEAEA; border: 1px solid #CCCCCC;
+                        text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; color: #333;
+                        border-radius: 5px;
+                    }
+                    QPushButton:hover { background-color: #DCDCDC; }
+                    QPushButton:checked { background-color: #FFD700; border: 1px solid #E6C200; color: #000; }
+                """)
+            else:
+                btn.setEnabled(False)
+                if "EQUIPE" in texto and not is_pro:
+                    btn.setToolTip("Aba exclusiva para assinantes PRO")
                 else:
-                    nome_da_variavel_do_checkbox.setText("Habilitar limites individuais por produto (PRO)")
-                    nome_da_variavel_do_checkbox.setEnabled(False)
+                    btn.setToolTip("Você não tem permissão para acessar esta aba.")
+                
+                # CSS de Bloqueado (Fundo cinza claro, borda tracejada e texto apagado)
+                btn.setStyleSheet("""
+                    QPushButton {
+                        background-color: #F5F5F5; border: 1px dashed #DDD;
+                        text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; color: #AAA;
+                        border-radius: 5px;
+                    }
+                """)
+
+        # 4. ARRUMA O TEXTO DO BOTÃO PRO NA ABA CONFIGURAÇÕES (Mantido)
+        if hasattr(self, 'aba_cfg'):
+            if hasattr(self.aba_cfg, 'btn_toggle_pro'):
+                if is_pro:
+                    self.aba_cfg.btn_toggle_pro.setText("Habilitar limites individuais por Produto")
+                else:
+                    self.aba_cfg.btn_toggle_pro.setText("Habilitar limites individuais por Produto (PRO 👑)")
 
 def iniciar_app():
     app = QApplication(sys.argv)
