@@ -76,11 +76,13 @@ def registrar_movimentacao(mov: schemas.MovimentacaoCreate, db: Session = Depend
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
 
+    # Usamos getattr para não quebrar a API caso o app antigo ainda não envie esse dado
     nova_movimentacao = models.MovimentacaoEstoque(
         cliente_id=mov.cliente_id,
         produto_id=mov.produto_id,
         tipo_movimento=mov.tipo_movimento,
-        quantidade=mov.quantidade
+        quantidade=mov.quantidade,
+        operador_nome=getattr(mov, 'operador_nome', 'Desconhecido') # <--- SALVA O NOME AQUI
     )
 
     if mov.tipo_movimento == "ENTRADA":
@@ -219,6 +221,7 @@ def relatorio_desperdicio(cliente_id: int, dias: int = 30, categoria_id: int = N
             "unidade": produto.unidade_medida if produto else "",
             "motivo": nome_motivo,
             "custo_total_perdido_rs": prejuizo_linha,
+            "responsavel": m.operador_nome if m.operador_nome else "Desconhecido", # <--- PUXA O NOME AQUI
             "data": m.data_hora.strftime("%d/%m/%Y")
         })
 

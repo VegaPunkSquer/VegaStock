@@ -153,12 +153,13 @@ class AbaConta(QWidget):
         # TRAVA DE HIERARQUIA (O PPOREEEEM GIGANTE)
         # ==========================================
         if self.cliente_dados.get("nivel_acesso", "Normal") != "Admin":
-            frame_info.hide() # Somem os dados do restaurante e logo
+            frame_info.hide() 
+            frame_mobile.hide() # <--- ADICIONE ESTA LINHA PARA ESCONDER O ACESSO MOBILE
             lbl_senha_titulo.setText("Segurança: Alterar Minhas Credenciais")
-            self.input_senha_atual.hide() # Funcionário não precisa validar a atual na nossa rota simplificada
+            self.input_senha_atual.hide() 
             btn_salvar_senha.setText("Atualizar Minha Conta")
         else:
-            self.input_novo_login.hide() # Admin não muda login por aqui, mantemos o visual original dele
+            self.input_novo_login.hide()
 
     def alterar_logo(self):
         arquivo, _ = QFileDialog.getOpenFileName(self, "Selecionar Nova Logo", "", "Imagens (*.png *.jpg *.jpeg)")

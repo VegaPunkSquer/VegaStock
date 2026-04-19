@@ -128,8 +128,8 @@ class AbaRelatorios(QWidget):
         # 3. A TABELA INVESTIGATIVA (RAIO-X)
         # ==========================================
         self.tabela = QTableWidget()
-        self.tabela.setColumnCount(6)
-        self.tabela.setHorizontalHeaderLabels(["Produto", "Categoria", "Qtd Perdida", "Motivo da Baixa", "Prejuízo (R$)", "Data"])
+        self.tabela.setColumnCount(7) # <--- Aumentou pra 7
+        self.tabela.setHorizontalHeaderLabels(["Produto", "Categoria", "Qtd Perdida", "Motivo da Baixa", "Prejuízo (R$)", "Responsável", "Data"]) # <--- Nova coluna
         self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -178,6 +178,7 @@ class AbaRelatorios(QWidget):
         self.tabela.setItem(0, 3, QTableWidgetItem("Puxando relatório dos EUA..."))
         self.tabela.setItem(0, 4, QTableWidgetItem("..."))
         self.tabela.setItem(0, 5, QTableWidgetItem("..."))
+        self.tabela.setItem(0, 6, QTableWidgetItem("...")) # <--- Coluna 6 (Data) pulou pra cá
 
         # 3. Constrói a URL lendo os filtros
         txt_tempo = self.combo_tempo.currentText()
@@ -244,4 +245,7 @@ class AbaRelatorios(QWidget):
             item_valor = QTableWidgetItem(f"R$ {linha['custo_total_perdido_rs']:.2f}")
             item_valor.setForeground(Qt.darkRed)
             self.tabela.setItem(i, 4, item_valor)
-            self.tabela.setItem(i, 5, QTableWidgetItem(linha["data"]))
+            
+            # Puxa o nome do responsável e joga na coluna 5
+            self.tabela.setItem(i, 5, QTableWidgetItem(linha.get("responsavel", "Desconhecido")))
+            self.tabela.setItem(i, 6, QTableWidgetItem(linha["data"])) # A data vai pra última (6)

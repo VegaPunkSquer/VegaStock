@@ -43,6 +43,7 @@ class MovimentacaoEstoque(Base):
     data_hora = Column(DateTime, default=lambda: datetime.utcnow() - timedelta(hours=3))
     usuario_id = Column(Integer, nullable=True)  # Nullable até termos o módulo de RH/Login de Staff
     operador_nome = Column(String, nullable=True) # Nome do funcionário do turno
+    usuario_nome = Column(String, nullable=True) # Guarda o login de quem fez a entrada/saída
     
 class Licenca(Base):
     __tablename__ = "licencas"
