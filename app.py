@@ -197,7 +197,6 @@ class MainWindow(QMainWindow):
         self.aba_eqp = AbaEquipe(self.cliente_dados)
         self.aba_cnt = AbaConta(self.cliente_dados, self)
         self.aba_cfg = AbaConfiguracoes(self.cliente_dados)
-        self.area_central.addWidget(self.aba_dash)
 
         self.area_central.addWidget(self.aba_dash)
         self.area_central.addWidget(self.aba_cat)
@@ -219,7 +218,12 @@ class MainWindow(QMainWindow):
         layout_dir.addLayout(layout_rodape)
 
         layout_principal.addWidget(self.frame_conteudo, 1, 1)
-        # --- FIM DO LAYOUT GRID DEFINITIVO ---
+        
+        # ========================================================
+        # O CADEADO DE INICIALIZAÇÃO: 
+        # Chama a função que tranca tudo logo que o app abre!
+        # ========================================================
+        self.atualizar_bloqueios_interface()
         
     def mudar_aba(self, index):
         self.area_central.setCurrentIndex(index)
@@ -336,76 +340,45 @@ class MainWindow(QMainWindow):
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
-        """Reavalia quais abas o usuário pode clicar com base no plano e nas permissões."""
-        status = self.cliente_dados.get('status_assinatura', 'BÁSICO')
-        plano = self.cliente_dados.get('plano', 'BÁSICO')
-        is_pro = status == "PRO" or "PRO" in plano
+        """Varre os botões e aplica as travas de permissão e plano PRO."""
+        status_assinatura = self.cliente_dados.get('status_assinatura', 'BÁSICO')
+        is_pro = status_assinatura == "PRO"
         
-        # 1. Pega a lista de acessos do banco (ex: ['dashboard', 'estoque'])
-        permissoes = self.cliente_dados.get('permissoes', [])
-        if not permissoes:
-            permissoes = ['dashboard'] # Garante que ninguém fique olhando pro vazio
+        # Pega a lista de permissões que veio da API (ex: ['estoque'])
+        permissoes_usuario = self.cliente_dados.get('permissoes', [])
+        # Pega o cargo (ADMIN ou FUNCIONARIO)
+        cargo = self.cliente_dados.get('cargo', '').upper()
 
-        # 2. O MODO DEUS: Se for o Dono (Admin), ignora as travas e libera tudo
-        if self.cliente_dados.get('cargo', '').upper() == 'ADMIN':
-            permissoes = ['dashboard', 'catalogo', 'estoque', 'relatorios', 'configuracoes']
+        # Mapa para ligar o texto do botão à chave da permissão
+        mapa = {
+            "DASHBOARD": "dashboard",
+            "CATÁLOGO DE PRODUTOS": "catalogo",
+            "OPERAÇÃO DE ESTOQUE": "estoque",
+            "ANÁLISE DE DESPERDÍCIO": "relatorios",
+            "EQUIPE E PERMISSÕES": "admin", 
+            "CONFIGURAÇÕES": "configuracoes"
+        }
 
-        # 3. Varre todos os botões do menu e aplica as travas
         for btn in self.botoes_abas:
-            texto = btn.text().strip().upper()
-            tem_permissao = True
-            
-            # Compara o nome do botão com a regra de permissão
-            if "CATÁLOGO" in texto and "catalogo" not in permissoes:
-                tem_permissao = False
-            elif "ESTOQUE" in texto and "estoque" not in permissoes:
-                tem_permissao = False
-            elif "DESPERDÍCIO" in texto and "relatorios" not in permissoes:
-                tem_permissao = False
-            elif "CONFIGURAÇÕES" in texto and "configuracoes" not in permissoes:
-                tem_permissao = False
-            elif "EQUIPE" in texto:
-                # Equipe tem trava DUPLA: Precisa ser PRO *E* ter permissão de configurações
-                if not is_pro or "configuracoes" not in permissoes:
-                    tem_permissao = False
+            texto_botao = btn.text().replace(" 🔒", "").strip().upper()
+            chave = mapa.get(texto_botao, "livre")
 
-            # --- APLICANDO O VISUAL ---
-            if tem_permissao:
+            # REGRA 1: Se for ADMIN, libera TUDO.
+            if cargo == "ADMIN":
+                btn.show()
                 btn.setEnabled(True)
-                btn.setToolTip("")
-                # Devolve o seu CSS nativo e bonitão (Menu Claro)
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #EAEAEA; border: 1px solid #CCCCCC;
-                        text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; color: #333;
-                        border-radius: 5px;
-                    }
-                    QPushButton:hover { background-color: #DCDCDC; }
-                    QPushButton:checked { background-color: #FFD700; border: 1px solid #E6C200; color: #000; }
-                """)
-            else:
-                btn.setEnabled(False)
-                if "EQUIPE" in texto and not is_pro:
-                    btn.setToolTip("Aba exclusiva para assinantes PRO")
-                else:
-                    btn.setToolTip("Você não tem permissão para acessar esta aba.")
-                
-                # CSS de Bloqueado (Fundo cinza claro, borda tracejada e texto apagado)
-                btn.setStyleSheet("""
-                    QPushButton {
-                        background-color: #F5F5F5; border: 1px dashed #DDD;
-                        text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; color: #AAA;
-                        border-radius: 5px;
-                    }
-                """)
+                continue
 
-        # 4. ARRUMA O TEXTO DO BOTÃO PRO NA ABA CONFIGURAÇÕES (Mantido)
-        if hasattr(self, 'aba_cfg'):
-            if hasattr(self.aba_cfg, 'btn_toggle_pro'):
-                if is_pro:
-                    self.aba_cfg.btn_toggle_pro.setText("Habilitar limites individuais por Produto")
-                else:
-                    self.aba_cfg.btn_toggle_pro.setText("Habilitar limites individuais por Produto (PRO 👑)")
+            # REGRA 2: Se for aba de EQUIPE, só o Admin vê (já tratado acima, mas por garantia:)
+            if chave == "admin":
+                btn.hide()
+                continue
+
+            # REGRA 3: Checagem de permissões para funcionários normais
+            if chave != "livre" and chave not in permissoes_usuario:
+                btn.hide() # Esconde o que ele não pode ver
+            else:
+                btn.show() # Mostra o que ele pode ver
 
 def iniciar_app():
     app = QApplication(sys.argv)
