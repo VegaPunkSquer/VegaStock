@@ -728,7 +728,7 @@ def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
     
     usuario.login = dados["login"]
     if dados.get("senha"): # Só muda a senha se enviar uma nova
-        usuario.senha = dados["senha"]
+        usuario.senha = gerar_hash(dados["senha"]) # <--- AGORA ELE CRIPTOGRAFA A SENHA DO FUNCIONÁRIO
     usuario.cargo = dados["cargo"]
     
     # Transforma a lista do front ['estoque', 'relatorios'] em string "estoque,relatorios"

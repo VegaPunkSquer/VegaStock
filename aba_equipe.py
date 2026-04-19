@@ -448,17 +448,26 @@ class AbaEquipe(QWidget):
             QMessageBox.critical(self, "Erro", "Falha de conexão com o servidor.")
 
     def excluir_funcionario(self):
-        # Constrói a caixa peça por peça para o Windows não bugar os botões
         msg = QMessageBox(self)
         msg.setWindowTitle("Confirmar Exclusão")
         msg.setText("Tem certeza que deseja demitir/remover este acesso?")
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        msg.setDefaultButton(QMessageBox.No) # Deixa o "Não" focado por segurança
-        resposta = msg.exec()
         
-        if resposta == QMessageBox.Yes and self.usuario_selecionado_id:
+        # Cria os botões na marra e obriga o PySide a mostrá-los com cor!
+        btn_sim = msg.addButton("Sim, Excluir", QMessageBox.ActionRole)
+        btn_sim.setStyleSheet("background-color: #f44336; color: white; padding: 5px 15px; font-weight: bold; border-radius: 3px;")
+        
+        btn_nao = msg.addButton("Não, Cancelar", QMessageBox.RejectRole)
+        btn_nao.setStyleSheet("background-color: #777; color: white; padding: 5px 15px; font-weight: bold; border-radius: 3px;")
+        
+        msg.setDefaultButton(btn_nao) # Deixa o Não selecionado por segurança
+        
+        msg.exec() # Mostra a caixa
+        
+        # Verifica se o cara clicou no nosso botão vermelho criado na mão
+        if msg.clickedButton() == btn_sim and self.usuario_selecionado_id:
             try:
                 requests.delete(f"{API_BASE_URL}/equipe/{self.usuario_selecionado_id}")
                 self.limpar_formulario()
                 self.carregar_equipe()
-            except: pass
+            except: 
+                pass
