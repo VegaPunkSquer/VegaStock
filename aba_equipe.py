@@ -161,7 +161,11 @@ class AbaEquipe(QWidget):
         layout_dir.addWidget(lbl_perm)
 
         # Checkboxes de Permissão (Dashboard é padrão, nem precisa marcar)
+        # Checkboxes de Permissão (NADA É PADRÃO, VOCÊ ESCOLHE TUDO)
+        self.chk_dashboard = QCheckBox("Dashboard Geral")
         self.chk_catalogo = QCheckBox("Catálogo de Produtos")
+        
+        layout_dir.addWidget(self.chk_dashboard)
         self.chk_estoque = QCheckBox("Operação de Estoque")
         self.chk_relatorios = QCheckBox("Análise de Desperdício (Financeiro)")
         self.chk_config = QCheckBox("Configurações do Sistema")
@@ -414,8 +418,9 @@ class AbaEquipe(QWidget):
                 return
         # -----------------------------------------
 
-        # Monta a lista de permissões
-        permissoes = ["dashboard"] # Dashboard sempre vai
+        # Monta a lista de permissões estritamente com o que você marcou na tela
+        permissoes = [] 
+        if self.chk_dashboard.isChecked(): permissoes.append("dashboard")
         if self.chk_catalogo.isChecked(): permissoes.append("catalogo")
         if self.chk_estoque.isChecked(): permissoes.append("estoque")
         if self.chk_relatorios.isChecked(): permissoes.append("relatorios")
