@@ -1,9 +1,11 @@
 import requests
+import re
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QFrame, 
                                QTableWidget, QTableWidgetItem, QHeaderView, 
                                QCheckBox, QFormLayout, QAbstractItemView)
 import os
+import re
 from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtGui import QMovie
 
@@ -122,12 +124,35 @@ class AbaEquipe(QWidget):
         form_inputs = QFormLayout()
         self.input_login = QLineEdit()
         self.input_senha = QLineEdit()
+        self.input_senha.setEchoMode(QLineEdit.Password) # <--- A MÁGICA DOS ASTERISCOS (***) AQUI
         self.input_senha.setPlaceholderText("Deixe em branco para não alterar")
         self.input_cargo = QLineEdit()
         self.input_cargo.setPlaceholderText("Ex: Estoquista, Gerente")
 
         form_inputs.addRow("Login:", self.input_login)
         form_inputs.addRow("Senha:", self.input_senha)
+        
+        # --- INÍCIO: FEEDBACK VISUAL DA SENHA (NOVO) ---
+        self.input_senha.textChanged.connect(self.validar_senha_tempo_real)
+        self.lbl_regra_tamanho = QLabel("❌ Mínimo de 8 caracteres")
+        self.lbl_regra_letra = QLabel("❌ Pelo menos 1 letra")
+        self.lbl_regra_numero = QLabel("❌ Pelo menos 1 número")
+        
+        estilo_invalido = "color: gray; font-size: 11px;"
+        self.lbl_regra_tamanho.setStyleSheet(estilo_invalido)
+        self.lbl_regra_letra.setStyleSheet(estilo_invalido)
+        self.lbl_regra_numero.setStyleSheet(estilo_invalido)
+        
+        # Ficam escondidos até ele começar a digitar a senha
+        self.lbl_regra_tamanho.hide()
+        self.lbl_regra_letra.hide()
+        self.lbl_regra_numero.hide()
+        
+        form_inputs.addRow("", self.lbl_regra_tamanho)
+        form_inputs.addRow("", self.lbl_regra_letra)
+        form_inputs.addRow("", self.lbl_regra_numero)
+        # --- FIM: FEEDBACK VISUAL DA SENHA ---
+        
         form_inputs.addRow("Cargo:", self.input_cargo)
         layout_dir.addLayout(form_inputs)
 
@@ -223,6 +248,41 @@ class AbaEquipe(QWidget):
             item_acessos = QTableWidgetItem(", ".join(func["permissoes"]))
             item_acessos.setData(Qt.UserRole, func["permissoes"]) 
             self.tabela.setItem(i, 3, item_acessos)
+            
+    def validar_senha_tempo_real(self, texto=""):
+        if not texto:
+            self.lbl_regra_tamanho.hide()
+            self.lbl_regra_letra.hide()
+            self.lbl_regra_numero.hide()
+            return
+        else:
+            self.lbl_regra_tamanho.show()
+            self.lbl_regra_letra.show()
+            self.lbl_regra_numero.show()
+            
+        estilo_ok = "color: green; font-size: 11px; font-weight: bold;"
+        estilo_erro = "color: gray; font-size: 11px;"
+
+        if len(texto) >= 8:
+            self.lbl_regra_tamanho.setText("✅ Mínimo de 8 caracteres")
+            self.lbl_regra_tamanho.setStyleSheet(estilo_ok)
+        else:
+            self.lbl_regra_tamanho.setText("❌ Mínimo de 8 caracteres")
+            self.lbl_regra_tamanho.setStyleSheet(estilo_erro)
+            
+        if re.search(r'[A-Za-z]', texto):
+            self.lbl_regra_letra.setText("✅ Pelo menos 1 letra")
+            self.lbl_regra_letra.setStyleSheet(estilo_ok)
+        else:
+            self.lbl_regra_letra.setText("❌ Pelo menos 1 letra")
+            self.lbl_regra_letra.setStyleSheet(estilo_erro)
+            
+        if re.search(r'\d', texto):
+            self.lbl_regra_numero.setText("✅ Pelo menos 1 número")
+            self.lbl_regra_numero.setStyleSheet(estilo_ok)
+        else:
+            self.lbl_regra_numero.setText("❌ Pelo menos 1 número")
+            self.lbl_regra_numero.setStyleSheet(estilo_erro)
 
     def limpar_formulario(self):
         # ========================================================
@@ -251,6 +311,10 @@ class AbaEquipe(QWidget):
         self.input_senha.setEnabled(True)
         self.input_senha.setText("")
         self.input_senha.setPlaceholderText("Digite a senha do novo membro")
+        
+        self.lbl_regra_tamanho.hide()
+        self.lbl_regra_letra.hide()
+        self.lbl_regra_numero.hide()
         
         self.input_cargo.setText("")
         
@@ -335,7 +399,20 @@ class AbaEquipe(QWidget):
                     "Você já cadastrou os 5 usuários extras permitidos no Plano PRO.\n\n"
                     "Para adicionar contas adicionais (R$ 25,00/mês cada), entre em contato com o suporte.")
                 return
-        # ------------------------------------
+        
+        # --- TRAVA DE SEGURANÇA DA SENHA FORTE ---
+        senha_digitada = self.input_senha.text()
+        login_digitado = self.input_login.text().strip()
+        
+        # Se for novo cadastro, ou se for edição e ele resolveu digitar uma senha nova
+        if not self.usuario_selecionado_id or senha_digitada:
+            if senha_digitada.lower() == login_digitado.lower():
+                QMessageBox.warning(self, "Segurança", "A senha não pode ser igual ao login.")
+                return
+            if len(senha_digitada) < 8 or not re.search(r'[A-Za-z]', senha_digitada) or not re.search(r'\d', senha_digitada):
+                QMessageBox.warning(self, "Senha Fraca", "A senha precisa seguir as regras de segurança (Mínimo de 8 caracteres, 1 letra e 1 número).")
+                return
+        # -----------------------------------------
 
         # Monta a lista de permissões
         permissoes = ["dashboard"] # Dashboard sempre vai
