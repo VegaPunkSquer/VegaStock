@@ -101,6 +101,21 @@ class MainWindow(QMainWindow):
             QPushButton:checked { background-color: #FFD700; border: 1px solid #E6C200; color: #000; }
         """
         
+        # --- BOTÃO LOGOFF ---
+        self.btn_logoff = QPushButton("🚪 TROCAR CONTA")
+        self.btn_logoff.setStyleSheet("""
+            QPushButton {
+                background-color: transparent; color: #f44336; padding: 12px;
+                border: 1px solid #f44336; border-radius: 5px; font-weight: bold; font-size: 14px;
+            }
+            QPushButton:hover { background-color: #f44336; color: white; }
+        """)
+        self.btn_logoff.clicked.connect(self.fazer_logoff)
+        
+        # Coloque o botão no layout do seu menu lateral. 
+        # (Se o seu layout lateral se chamar 'layout_menu' ou 'layout_botoes', use o nome dele aqui)
+        self.layout_abas.addWidget(self.btn_logoff)
+        
         # --- MAPA DE PERMISSÕES (NOVO) ---
         # Relaciona o nome do botão com a palavra salva no banco de dados
         mapa_permissoes = {
@@ -392,3 +407,16 @@ def iniciar_app():
 
 if __name__ == "__main__":
     iniciar_app()
+    
+def fazer_logoff(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Trocar de Conta")
+        msg.setText("Deseja encerrar a sessão atual e voltar para a tela de Login?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        resposta = msg.exec()
+        
+        if resposta == QMessageBox.Yes:
+            import os, sys
+            # Reinicia o aplicativo inteiro do zero, limpando a memória
+            os.execl(sys.executable, sys.executable, *sys.argv)

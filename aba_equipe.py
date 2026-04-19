@@ -448,7 +448,14 @@ class AbaEquipe(QWidget):
             QMessageBox.critical(self, "Erro", "Falha de conexão com o servidor.")
 
     def excluir_funcionario(self):
-        resposta = QMessageBox.question(self, "Confirmar Exclusão", "Tem certeza que deseja demitir/remover este acesso?", QMessageBox.Yes | QMessageBox.No)
+        # Constrói a caixa peça por peça para o Windows não bugar os botões
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Confirmar Exclusão")
+        msg.setText("Tem certeza que deseja demitir/remover este acesso?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No) # Deixa o "Não" focado por segurança
+        resposta = msg.exec()
+        
         if resposta == QMessageBox.Yes and self.usuario_selecionado_id:
             try:
                 requests.delete(f"{API_BASE_URL}/equipe/{self.usuario_selecionado_id}")
