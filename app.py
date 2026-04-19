@@ -344,10 +344,12 @@ class MainWindow(QMainWindow):
         status_assinatura = self.cliente_dados.get('status_assinatura', 'BÁSICO')
         is_pro = status_assinatura == "PRO"
         
-        # Pega a lista de permissões que veio da API (ex: ['estoque'])
-        permissoes_usuario = self.cliente_dados.get('permissoes', [])
-        # Pega o cargo (ADMIN ou FUNCIONARIO)
-        cargo = self.cliente_dados.get('cargo', '').upper()
+        # Pega a lista de permissões (se vier None/Null do banco, vira lista vazia [])
+        permissoes_usuario = self.cliente_dados.get('permissoes') or []
+        
+        # Pega o cargo (se vier None/Null do banco, vira texto vazio "")
+        cargo_bruto = self.cliente_dados.get('cargo') or ""
+        cargo = cargo_bruto.upper()
 
         # Mapa para ligar o texto do botão à chave da permissão
         mapa = {
