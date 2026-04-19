@@ -141,7 +141,6 @@ class MainWindow(QMainWindow):
             btn.setStyleSheet(estilo_btn)
             btn.clicked.connect(lambda _, idx=i: self.mudar_aba(idx))
             
-            # Lógica do PRO dinâmica (que já funcionava)
             if "🔒" in nome:
                 if self.cliente_dados.get('status_assinatura') == "PRO":
                     btn.setText(nome.replace(" 🔒", ""))
@@ -154,7 +153,7 @@ class MainWindow(QMainWindow):
                         QPushButton:checked { background-color: #e0e0e0; color: #555; border: 1px solid #ccc; }
                     """
                     btn.setStyleSheet(estilo_bloqueado)
-
+                    
             self.layout_abas.addWidget(btn)
             self.botoes_abas.append(btn)
 
@@ -329,19 +328,26 @@ class MainWindow(QMainWindow):
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
-        # 1. Descobre se é o DONO (O cadastro original salva nivel_acesso = "Admin")
+        # 1. PEGA TODOS OS DADOS DA CONTA LOGADA
+        cargo = str(self.cliente_dados.get('cargo', '')).upper().strip()
         nivel = str(self.cliente_dados.get('nivel_acesso', '')).upper().strip()
-        is_admin = (nivel == "ADMIN")
-
-        # 2. Pega a lista exata de permissões (ex: ['dashboard', 'estoque'])
         permissoes_lista = self.cliente_dados.get('permissoes', [])
+
+        # 2. O DETETOR INFALÍVEL DO DONO
+        # A sua conta original pode estar com os campos antigos nulos.
+        # Mas uma coisa é certa: TODO funcionário tem ao menos o 'dashboard' na lista.
+        # A conta Master é a única que vem do banco com a lista 100% vazia, OU com cargo/nivel "ADMIN".
+        is_admin = False
+        if cargo == "ADMIN" or nivel == "ADMIN" or len(permissoes_lista) == 0:
+            is_admin = True
 
         mapa = {
             "DASHBOARD": "dashboard",
             "CATÁLOGO DE PRODUTOS": "catalogo",
             "OPERAÇÃO DE ESTOQUE": "estoque",
             "ANÁLISE DE DESPERDÍCIO": "relatorios",
-            "EQUIPE E PERMISSÕES": "admin", 
+            "EQUIPE E PERMISSÕES": "admin",
+            "MINHA CONTA": "livre",
             "CONFIGURAÇÕES": "configuracoes"
         }
 
@@ -350,23 +356,23 @@ class MainWindow(QMainWindow):
             chave = mapa.get(texto_botao, "livre")
 
             # ===============================================
-            # REGRA 1: É O DONO (ADMIN)? Libera tudo.
+            # REGRA 1: É A CONTA MASTER (DONO)? LIBERA TUDO
             # ===============================================
             if is_admin:
                 btn.show()
                 continue
 
             # ===============================================
-            # REGRA 2: É FUNCIONÁRIO? Aplica a regra exata.
+            # REGRA 2: É CONTA DE EQUIPE?
             # ===============================================
             if chave == "admin":
-                btn.hide()
+                btn.hide() # Funcionário NUNCA vê a aba Equipe
             elif chave == "livre":
-                btn.show()
+                btn.show() # Aba 'Minha Conta' é sempre livre
             elif chave in permissoes_lista:
-                btn.show()
+                btn.show() # A caixinha foi marcada, libera!
             else:
-                btn.hide()
+                btn.hide() # Caixinha não foi marcada, bloqueia!
 
 def iniciar_app():
     app = QApplication(sys.argv)
