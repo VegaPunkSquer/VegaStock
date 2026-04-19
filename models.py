@@ -59,7 +59,7 @@ class Usuario(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id")) # O usuário fica trancado dentro do bloco do restaurante dele
     login = Column(String, unique=True, index=True)
     senha = Column(String) 
-    nivel_acesso = Column(String, default="Admin") # Para futuramente separar o Dono do Almoxarife
+    nivel_acesso = Column(String, default="Equipe") # Para futuramente separar o Dono do Almoxarife
     cnpj_esperado = Column(String, index=True) # Trava o token a este CNPJ
     data_expiracao = Column(DateTime) # Janela de 48h
     permissoes = Column(String, default="dashboard") # Dashboard é o acesso mínimo

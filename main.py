@@ -727,9 +727,10 @@ def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
         db.add(usuario)
     
     usuario.login = dados["login"]
-    if dados.get("senha"): # Só muda a senha se enviar uma nova
-        usuario.senha = gerar_hash(dados["senha"]) # <--- AGORA ELE CRIPTOGRAFA A SENHA DO FUNCIONÁRIO
+    if dados.get("senha"): 
+        usuario.senha = gerar_hash(dados["senha"]) 
     usuario.cargo = dados["cargo"]
+    usuario.nivel_acesso = "Equipe" # <--- A BALA DE PRATA: Garante que a API não vai inventar de ser Admin
     
     # Transforma a lista do front ['estoque', 'relatorios'] em string "estoque,relatorios"
     usuario.permissoes = ",".join(dados["permissoes"])
