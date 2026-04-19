@@ -322,6 +322,19 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Falha de Conexão", f"O erro foi: {str(e)}")
             
+    def fazer_logoff(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Trocar de Conta")
+        msg.setText("Deseja encerrar a sessão atual e voltar para a tela de Login?")
+        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
+        msg.setDefaultButton(QMessageBox.No)
+        resposta = msg.exec()
+        
+        if resposta == QMessageBox.Yes:
+            import os, sys
+            # Reinicia o aplicativo inteiro do zero, limpando a memória
+            os.execl(sys.executable, sys.executable, *sys.argv)
+            
     def atualizar_bloqueios_interface(self):
         """Reavalia quais abas o usuário pode clicar e ajusta o visual baseado no novo plano."""
         status = self.cliente_dados.get('status_assinatura', 'BÁSICO')
@@ -407,16 +420,3 @@ def iniciar_app():
 
 if __name__ == "__main__":
     iniciar_app()
-    
-def fazer_logoff(self):
-        msg = QMessageBox(self)
-        msg.setWindowTitle("Trocar de Conta")
-        msg.setText("Deseja encerrar a sessão atual e voltar para a tela de Login?")
-        msg.setStandardButtons(QMessageBox.Yes | QMessageBox.No)
-        msg.setDefaultButton(QMessageBox.No)
-        resposta = msg.exec()
-        
-        if resposta == QMessageBox.Yes:
-            import os, sys
-            # Reinicia o aplicativo inteiro do zero, limpando a memória
-            os.execl(sys.executable, sys.executable, *sys.argv)
