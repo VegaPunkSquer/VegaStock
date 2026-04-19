@@ -154,17 +154,6 @@ class MainWindow(QMainWindow):
                         QPushButton:checked { background-color: #e0e0e0; color: #555; border: 1px solid #ccc; }
                     """
                     btn.setStyleSheet(estilo_bloqueado)
-                    
-            # ==========================================
-            # O GRAN FINALE: TRAVA DE VISIBILIDADE
-            # ==========================================
-            chave = mapa_permissoes.get(nome, "livre")
-
-            # Se NÃO for o dono (Admin) e a aba não for "livre"
-            if self.cliente_dados.get("nivel_acesso") != "Admin" and chave != "livre":
-                # Esconde se for aba de Admin ou se ele não tiver a permissão na carteira
-                if chave == "admin" or chave not in permissoes_usuario:
-                    btn.hide() # O botão fica invisível e intocável!
 
             self.layout_abas.addWidget(btn)
             self.botoes_abas.append(btn)
@@ -340,24 +329,12 @@ class MainWindow(QMainWindow):
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
-        """Regra de Ouro: Dono vê tudo. Funcionário vê só o que tá na lista."""
-        
-        # 1. Pega a lista real de permissões que veio do banco
-        permissoes_banco = self.cliente_dados.get('permissoes')
-        cargo = str(self.cliente_dados.get('cargo') or "").upper().strip()
+        # 1. Descobre se é o DONO (O cadastro original salva nivel_acesso = "Admin")
+        nivel = str(self.cliente_dados.get('nivel_acesso', '')).upper().strip()
+        is_admin = (nivel == "ADMIN")
 
-        # ========================================================
-        # O DETETOR DE DONO DEFINITIVO
-        # Como a API manda 'Admin' pra todo mundo, nós mudamos a regra:
-        # Se NÃO TEM lista de permissões no banco, é a conta Matriz (Dono).
-        # Se TEM lista (mesmo que seja só "dashboard"), é Funcionário.
-        # ========================================================
-        is_admin = False
-        if not permissoes_banco or cargo == "ADMIN":
-            is_admin = True
-
-        # Prepara a lista para as travas
-        permissoes_lista = permissoes_banco or []
+        # 2. Pega a lista exata de permissões (ex: ['dashboard', 'estoque'])
+        permissoes_lista = self.cliente_dados.get('permissoes', [])
 
         mapa = {
             "DASHBOARD": "dashboard",
@@ -373,24 +350,23 @@ class MainWindow(QMainWindow):
             chave = mapa.get(texto_botao, "livre")
 
             # ===============================================
-            # REGRA 1: É DONO? Libera TUDO e ignora o resto.
+            # REGRA 1: É O DONO (ADMIN)? Libera tudo.
             # ===============================================
             if is_admin:
                 btn.show()
                 continue
 
             # ===============================================
-            # REGRA 2: É FUNCIONÁRIO? Passa a tesoura!
+            # REGRA 2: É FUNCIONÁRIO? Aplica a regra exata.
             # ===============================================
             if chave == "admin":
-                btn.hide() # Funcionário nunca mexe na equipe
-                continue
-
-            # Se a aba não for a "Minha Conta" (livre) E ele não tiver a permissão marcadinha
-            if chave != "livre" and chave not in permissoes_lista:
-                btn.hide() # Tranca!
+                btn.hide()
+            elif chave == "livre":
+                btn.show()
+            elif chave in permissoes_lista:
+                btn.show()
             else:
-                btn.show() # Libera!
+                btn.hide()
 
 def iniciar_app():
     app = QApplication(sys.argv)
