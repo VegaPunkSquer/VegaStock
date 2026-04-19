@@ -328,46 +328,50 @@ class MainWindow(QMainWindow):
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
-        # A ÚNICA diferença verdadeira entre a Conta Master e a Equipe:
-        # A Conta Master NUNCA tem permissões salvas na tabela (lista vazia).
-        # A Equipe SEMPRE tem (porque o 'dashboard' é forçado no aba_equipe.py).
-        permissoes_lista = self.cliente_dados.get('permissoes', [])
-        
-        # O DETETOR INFALÍVEL: Se a lista for zero, é o SÉRGIO (Master).
-        is_master = (len(permissoes_lista) == 0)
+        # 1. QUEM É O CARA LOGADO? É O CHEFE DA PORRA TODA?
+        # Usando a exata variável que vem do seu login:
+        e_o_chefe = (self.cliente_dados.get("nivel_acesso") == "Admin")
 
-        mapa = {
+        # 2. SE NÃO FOR O CHEFE, QUAIS CAIXINHAS ELE TEM?
+        caixinhas_marcadas = self.cliente_dados.get("permissoes", [])
+        if not isinstance(caixinhas_marcadas, list):
+            caixinhas_marcadas = []
+
+        # 3. LIGAR O NOME DO BOTÃO COM A PALAVRA NO BANCO
+        dicionario_banco = {
             "DASHBOARD": "dashboard",
             "CATÁLOGO DE PRODUTOS": "catalogo",
             "OPERAÇÃO DE ESTOQUE": "estoque",
             "ANÁLISE DE DESPERDÍCIO": "relatorios",
-            "EQUIPE E PERMISSÕES": "admin",
+            "EQUIPE E PERMISSÕES": "aba_equipe", # <-- Mudei o nome aqui! Pra não ter mais confusão com o chefe.
             "MINHA CONTA": "livre",
             "CONFIGURAÇÕES": "configuracoes"
         }
 
+        # 4. O APP OLHA BOTÃO POR BOTÃO
         for btn in self.botoes_abas:
-            texto_botao = btn.text().replace(" 🔒", "").strip().upper()
-            chave = mapa.get(texto_botao, "livre")
+            nome_do_botao = btn.text().replace(" 🔒", "").strip().upper()
+            palavra_no_banco = dicionario_banco.get(nome_do_botao, "livre")
 
-            # ===============================================
-            # REGRA 1: É A CONTA MASTER (SÉRGIO)? LIBERA TUDO
-            # ===============================================
-            if is_master:
-                btn.show()
-                continue
+            # ======================================================
+            # REGRA 1 ABSOLUTA: É O CHEFE?
+            # ======================================================
+            if e_o_chefe:
+                btn.show() # MOSTRA TUDO PRA ELE
+                continue   # Pula pro próximo botão
 
-            # ===============================================
-            # REGRA 2: É CONTA DE EQUIPE (JONAS)?
-            # ===============================================
-            if chave == "admin":
-                btn.hide() # Funcionário NUNCA MAIS vai ver a aba Equipe
-            elif chave == "livre":
-                btn.show() # Aba 'Minha Conta' é sempre livre
-            elif chave in permissoes_lista:
-                btn.show() # A caixinha foi marcada, libera!
+            # ======================================================
+            # REGRA 2: NÃO É O CHEFE? (Ex: Conta do Jonas)
+            # O app vai ver qual é o botão e o que tá liberado pra ele
+            # ======================================================
+            if palavra_no_banco == "livre":
+                btn.show() # A aba de conta é padrão, mostra sempre
+            elif palavra_no_banco == "aba_equipe":
+                btn.hide() # Vagabundo NUNCA vê a aba equipe
+            elif palavra_no_banco in caixinhas_marcadas:
+                btn.show() # A caixinha do Estoque tava marcada no banco? Então mostra!
             else:
-                btn.hide() # Caixinha não foi marcada, bloqueia!
+                btn.hide() # Não tava marcada? Esconde a porra do botão e acabou.
 
 def iniciar_app():
     app = QApplication(sys.argv)
