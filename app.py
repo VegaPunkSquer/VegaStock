@@ -340,17 +340,24 @@ class MainWindow(QMainWindow):
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
-        """Regra de Ouro: Admin vê tudo. Funcionário vê só o que tem permissão."""
+        """Regra de Ouro: Dono vê tudo. Funcionário vê só o que tá na lista."""
         
-        # 1. Puxa as informações da conta
+        # 1. Pega a lista real de permissões que veio do banco
+        permissoes_banco = self.cliente_dados.get('permissoes')
         cargo = str(self.cliente_dados.get('cargo') or "").upper().strip()
-        nivel = str(self.cliente_dados.get('nivel_acesso') or "").upper().strip()
-        
-        # Puxa a lista real de permissões que veio do banco (ex: ['dashboard', 'estoque'])
-        permissoes_lista = self.cliente_dados.get('permissoes') or []
 
-        # 2. O DETETOR ABSOLUTO: É admin? (Pelo cadastro original ou pelo cargo)
-        is_admin = (nivel == "ADMIN") or (cargo == "ADMIN")
+        # ========================================================
+        # O DETETOR DE DONO DEFINITIVO
+        # Como a API manda 'Admin' pra todo mundo, nós mudamos a regra:
+        # Se NÃO TEM lista de permissões no banco, é a conta Matriz (Dono).
+        # Se TEM lista (mesmo que seja só "dashboard"), é Funcionário.
+        # ========================================================
+        is_admin = False
+        if not permissoes_banco or cargo == "ADMIN":
+            is_admin = True
+
+        # Prepara a lista para as travas
+        permissoes_lista = permissoes_banco or []
 
         mapa = {
             "DASHBOARD": "dashboard",
@@ -366,22 +373,20 @@ class MainWindow(QMainWindow):
             chave = mapa.get(texto_botao, "livre")
 
             # ===============================================
-            # REGRA 1: É ADMIN? Libera TUDO e foda-se o resto.
+            # REGRA 1: É DONO? Libera TUDO e ignora o resto.
             # ===============================================
             if is_admin:
                 btn.show()
                 continue
 
             # ===============================================
-            # REGRA 2: NÃO É ADMIN? (Funcionário Normal)
+            # REGRA 2: É FUNCIONÁRIO? Passa a tesoura!
             # ===============================================
-            
-            # Aba de equipe nunca aparece para funcionário
             if chave == "admin":
-                btn.hide()
+                btn.hide() # Funcionário nunca mexe na equipe
                 continue
 
-            # Se a aba não for a "Minha Conta" E ele não tiver permissão
+            # Se a aba não for a "Minha Conta" (livre) E ele não tiver a permissão marcadinha
             if chave != "livre" and chave not in permissoes_lista:
                 btn.hide() # Tranca!
             else:
