@@ -328,18 +328,13 @@ class MainWindow(QMainWindow):
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
-        # 1. PEGA TODOS OS DADOS DA CONTA LOGADA
-        cargo = str(self.cliente_dados.get('cargo', '')).upper().strip()
-        nivel = str(self.cliente_dados.get('nivel_acesso', '')).upper().strip()
+        # A ÚNICA diferença verdadeira entre a Conta Master e a Equipe:
+        # A Conta Master NUNCA tem permissões salvas na tabela (lista vazia).
+        # A Equipe SEMPRE tem (porque o 'dashboard' é forçado no aba_equipe.py).
         permissoes_lista = self.cliente_dados.get('permissoes', [])
-
-        # 2. O DETETOR INFALÍVEL DO DONO
-        # A sua conta original pode estar com os campos antigos nulos.
-        # Mas uma coisa é certa: TODO funcionário tem ao menos o 'dashboard' na lista.
-        # A conta Master é a única que vem do banco com a lista 100% vazia, OU com cargo/nivel "ADMIN".
-        is_admin = False
-        if cargo == "ADMIN" or nivel == "ADMIN" or len(permissoes_lista) == 0:
-            is_admin = True
+        
+        # O DETETOR INFALÍVEL: Se a lista for zero, é o SÉRGIO (Master).
+        is_master = (len(permissoes_lista) == 0)
 
         mapa = {
             "DASHBOARD": "dashboard",
@@ -356,17 +351,17 @@ class MainWindow(QMainWindow):
             chave = mapa.get(texto_botao, "livre")
 
             # ===============================================
-            # REGRA 1: É A CONTA MASTER (DONO)? LIBERA TUDO
+            # REGRA 1: É A CONTA MASTER (SÉRGIO)? LIBERA TUDO
             # ===============================================
-            if is_admin:
+            if is_master:
                 btn.show()
                 continue
 
             # ===============================================
-            # REGRA 2: É CONTA DE EQUIPE?
+            # REGRA 2: É CONTA DE EQUIPE (JONAS)?
             # ===============================================
             if chave == "admin":
-                btn.hide() # Funcionário NUNCA vê a aba Equipe
+                btn.hide() # Funcionário NUNCA MAIS vai ver a aba Equipe
             elif chave == "livre":
                 btn.show() # Aba 'Minha Conta' é sempre livre
             elif chave in permissoes_lista:
