@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, Image } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, Image, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 
 export default function App() {
@@ -9,6 +9,7 @@ export default function App() {
   // ESTADOS DE AUTENTICAÇÃO (O SEU FLUXO ORIGINAL)
   // ==========================================
   const [etapaAuth, setEtapaAuth] = useState('INICIO'); // INICIO, PIN, SENHA, LOGADO
+  const [carregando, setCarregando] = useState(false);
   
   // Dados do Restaurante/Login
   const [clienteIdContexto, setClienteIdContexto] = useState(1); // Fixo em 1 pro PIN até você fazer o QR Code
@@ -51,6 +52,7 @@ export default function App() {
   // --- LOGIN VIA SENHA (EQUIPE PRO) ---
   const handleLoginSenha = async () => {
     if(!loginUsuario || !senhaUsuario) { Alert.alert("Erro", "Preencha login e senha."); return; }
+    setCarregando(true);
     try {
       let res = await fetch(`${API_URL}/login`, {
         method: 'POST',
@@ -70,11 +72,13 @@ export default function App() {
         Alert.alert("Acesso Negado", "Usuário ou senha incorretos.");
       }
     } catch(e) { Alert.alert("Conexão", "Servidor offline."); }
+    finally { setCarregando(false); }
   };
 
   // --- LOGIN VIA PIN (OPERADOR BÁSICO) ---
   const handleLoginPin = async () => {
     if(pinDigitado.length !== 4) { Alert.alert("Erro", "O PIN deve ter 4 dígitos."); return; }
+    setCarregando(true);
     try {
       let res = await fetch(`${API_URL}/validar_pin`, {
         method: 'POST',
@@ -91,6 +95,7 @@ export default function App() {
         setPinDigitado('');
       }
     } catch(e) { Alert.alert("Conexão", "Servidor offline."); }
+    finally { setCarregando(false); }
   };
 
   // --- FUNÇÕES DA CÂMERA E ESTOQUE ---
@@ -190,12 +195,12 @@ export default function App() {
         <TextInput style={styles.inputAuth} placeholder="Login" placeholderTextColor="#777" value={loginUsuario} onChangeText={setLoginUsuario} />
         <TextInput style={styles.inputAuth} placeholder="Senha" placeholderTextColor="#777" secureTextEntry value={senhaUsuario} onChangeText={setSenhaUsuario} />
         
-        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginSenha}>
-          <Text style={styles.btnTextEscuro}>ENTRAR</Text>
-        </TouchableOpacity>
-        
-        <TouchableOpacity style={{marginTop: 30}} onPress={() => setEtapaAuth('INICIO')}>
-          <Text style={{color: '#aaa'}}>Voltar</Text>
+        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginSenha} disabled={carregando}>
+          {carregando ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : (
+            <Text style={styles.btnTextEscuro}>ENTRAR</Text>
+          )}
         </TouchableOpacity>
       </View>
     );
@@ -210,8 +215,12 @@ export default function App() {
         
         <TextInput style={styles.inputPin} placeholder="****" placeholderTextColor="#777" keyboardType="numeric" secureTextEntry maxLength={4} value={pinDigitado} onChangeText={setPinDigitado} />
         
-        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginPin}>
-          <Text style={styles.btnTextEscuro}>ACESSAR</Text>
+        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginPin}  disabled={carregando}>
+          {carregando ? (
+            <ActivityIndicator size="small" color="#000" />
+          ) : ( 
+            <Text style={styles.btnTextEscuro}>ACESSAR</Text>
+          )}
         </TouchableOpacity>
 
         <TouchableOpacity style={{marginTop: 30}} onPress={() => setEtapaAuth('INICIO')}>
