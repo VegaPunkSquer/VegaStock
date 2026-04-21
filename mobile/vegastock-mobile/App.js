@@ -233,10 +233,16 @@ export default function App() {
           <Text style={[styles.tituloMaior, { color: modo === 'Entrada' ? '#4CAF50' : '#F44336' }]}>{modo.toUpperCase()}</Text>
           <Text style={{fontSize: 22, fontWeight: 'bold', marginVertical: 15, textAlign: 'center'}}>{produtoReconhecido.nome}</Text>
           
-          <TextInput style={styles.inputEstoque} keyboardType="numeric" placeholder={`Quantidade (${produtoReconhecido.unidade_medida})`} value={quantidade} onChangeText={setQuantidade} />
+          <View style={{width: '90%', marginBottom: 5}}>
+            <Text style={{fontSize: 16, fontWeight: 'bold', color: '#555', marginBottom: 5}}>Quantidade ({produtoReconhecido.unidade_medida}):</Text>
+            <TextInput style={[styles.inputEstoque, {width: '100%'}]} keyboardType="numeric" placeholder="Ex: 10" value={quantidade} onChangeText={setQuantidade} />
+          </View>
 
           {modo === 'Entrada' && (
-            <TextInput style={styles.inputEstoque} keyboardType="numeric" placeholder="Custo (R$)" value={custo} onChangeText={setCusto} />
+            <View style={{width: '90%', marginBottom: 5}}>
+              <Text style={{fontSize: 16, fontWeight: 'bold', color: '#555', marginBottom: 5}}>Custo Unitário (R$):</Text>
+              <TextInput style={[styles.inputEstoque, {width: '100%'}]} keyboardType="numeric" placeholder="Ex: 50.00" value={custo} onChangeText={setCusto} />
+            </View>
           )}
 
           {modo === 'Saida' && (

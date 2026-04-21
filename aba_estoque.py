@@ -152,8 +152,8 @@ class AbaEstoque(QWidget):
 
         # Tabela
         self.tabela = QTableWidget()
-        self.tabela.setColumnCount(7)
-        self.tabela.setHorizontalHeaderLabels(["ID", "Data/Hora", "Tipo", "Produto", "Qtd", "Custo (R$)", "Motivo"])
+        self.tabela.setColumnCount(8)
+        self.tabela.setHorizontalHeaderLabels(["ID", "Data/Hora", "Tipo", "Produto", "Qtd", "Custo (R$)", "Responsável", "Motivo"])
         self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
@@ -277,9 +277,12 @@ class AbaEstoque(QWidget):
             custo_str = f"R$ {mov['custo']:.2f}" if mov['custo'] else "-"
             self.tabela.setItem(i, 5, QTableWidgetItem(custo_str))
             
-            # 2. Force o Motivo a ficar vazio na Entrada
+            # Joga o nome do Operador na nova coluna (6)
+            self.tabela.setItem(i, 6, QTableWidgetItem(mov.get("responsavel", "Desconhecido")))
+
+            # Empurra o Motivo para a última coluna (7)
             texto_motivo = mov.get("motivo", "") if tipo_mov_lower == "saida" else ""
-            self.tabela.setItem(i, 6, QTableWidgetItem(texto_motivo))
+            self.tabela.setItem(i, 7, QTableWidgetItem(texto_motivo))
 
     def registrar_movimentacao(self):
         dados_produto = self.combo_produto.currentData()

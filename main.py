@@ -147,6 +147,7 @@ def listar_movimentacoes(cliente_id: int, dias: int = 30, db: Session = Depends(
             "quantidade": m.quantidade,
             "unidade": unidade,
             "custo": m.custo_unitario,
+            "responsavel": m.operador_nome if m.operador_nome else "Desconhecido",
             "motivo": nome_motivo
         })
     return resultado
