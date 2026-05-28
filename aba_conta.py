@@ -4,8 +4,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QLineEdit, QPushButton, QMessageBox, QFileDialog, QFrame)
 from PySide6.QtCore import Qt
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class AbaConta(QWidget):
     def __init__(self, cliente_dados, main_window):
         super().__init__()

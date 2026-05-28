@@ -4,8 +4,7 @@ from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButt
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QIcon
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerLogin(QThread):
     # O "telefone" para avisar a tela se deu bom ou ruim
     resultado = Signal(dict)
@@ -107,7 +106,7 @@ class TelaLogin(QDialog):
         self.setLayout(layout)
         
         # Assinatura Vega
-        texto_assinatura = '<a href="https://wa.me/5512981194607" style="color: #aaa; text-decoration: none;">Desenvolvido por Vega | Suporte: (12) 98119-4607</a>'
+        texto_assinatura = '<a style="color: black; font-weight: bold;  text-decoration: none;">Desenvolvido por Vega | <a href="https://wa.me/5512981194607" style="color: black; font-weight: bold;  text-decoration: underline;"><a border: 1px solid #ccc; background-color: black; border-radius: 4px;>🔧</a> Suporte: (12) 98119-4607</a></a>'
         lbl_assinatura = QLabel(texto_assinatura)
         lbl_assinatura.setOpenExternalLinks(True) # Permite clicar no link e abrir no navegador
         lbl_assinatura.setAlignment(Qt.AlignCenter)

@@ -12,7 +12,7 @@ from PySide6.QtGui import QMovie
 # IMPORTANTE: Importa a janela de vendas lá do seu arquivo de configurações!
 from aba_configuracoes import DialogUpgradePRO 
 
-API_BASE_URL = "https://vegastock.onrender.com"
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 
 class WorkerEquipe(QThread):
     resultado = Signal(list)

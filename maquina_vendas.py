@@ -8,8 +8,7 @@ from PySide6.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QIcon
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class MaquinaVendas(QDialog):
     def __init__(self, tela_cadastro_pai=None):
         super().__init__(tela_cadastro_pai)

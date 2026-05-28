@@ -5,7 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineE
                                QStyledItemDelegate)
 from PySide6.QtCore import Qt, QThread, Signal
 
-API_BASE_URL = "https://vegastock.onrender.com"
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 
 class WorkerCatalogo(QThread):
     resultado = Signal(dict)

@@ -19,6 +19,7 @@ from aba_relatorios import AbaRelatorios
 from aba_equipe import AbaEquipe
 from aba_conta import AbaConta
 from aba_configuracoes import AbaConfiguracoes
+from aba_sobre import AbaSobre
 
 myappid = 'vegasotck.versao1' # Pode ser qualquer string única
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
@@ -86,7 +87,7 @@ class MainWindow(QMainWindow):
 
         self.nomes_abas = [
             "DASHBOARD", "CATÁLOGO DE PRODUTOS", "OPERAÇÃO DE ESTOQUE",
-            "ANÁLISE DE DESPERDÍCIO", "EQUIPE E PERMISSÕES 🔒", "MINHA CONTA", "CONFIGURAÇÕES"
+            "ANÁLISE DE DESPERDÍCIO", "EQUIPE E PERMISSÕES 🔒", "MINHA CONTA", "CONFIGURAÇÕES", "ℹ️ SOBRE"
         ]
         
         estilo_btn = """
@@ -125,7 +126,8 @@ class MainWindow(QMainWindow):
             "ANÁLISE DE DESPERDÍCIO": "relatorios",
             "EQUIPE E PERMISSÕES 🔒": "admin", # Apenas Admin/Dono
             "MINHA CONTA": "livre",           # Todos veem
-            "CONFIGURAÇÕES": "configuracoes"
+            "CONFIGURAÇÕES": "configuracoes",
+            "ℹ️ SOBRE": "livre"
         }
 
         # Descobre quem é o cara logado
@@ -185,6 +187,7 @@ class MainWindow(QMainWindow):
         self.aba_eqp = AbaEquipe(self.cliente_dados)
         self.aba_cnt = AbaConta(self.cliente_dados, self)
         self.aba_cfg = AbaConfiguracoes(self.cliente_dados)
+        self.aba_abt = AbaSobre(self)
 
         self.area_central.addWidget(self.aba_dash)
         self.area_central.addWidget(self.aba_cat)
@@ -193,6 +196,7 @@ class MainWindow(QMainWindow):
         self.area_central.addWidget(self.aba_eqp)
         self.area_central.addWidget(self.aba_cnt)
         self.area_central.addWidget(self.aba_cfg)
+        self.area_central.addWidget(self.aba_abt)
         
         layout_dir.addWidget(self.area_central)
 
@@ -272,7 +276,7 @@ class MainWindow(QMainWindow):
         
     def sincronizar_dados_nuvem(self):
         try:
-            url = f"https://vegastock.onrender.com/config/{self.cliente_dados['cliente_id']}"
+            url = f"https://SEU_USUARIO-NOME_DO_SPACE.hf.space/config/{self.cliente_dados['cliente_id']}"
             resp = requests.get(url, timeout=10)
             
             if resp.status_code == 200:
@@ -348,7 +352,8 @@ class MainWindow(QMainWindow):
             "ANÁLISE DE DESPERDÍCIO": "relatorios",
             "EQUIPE E PERMISSÕES": "aba_equipe",
             "MINHA CONTA": "livre",
-            "CONFIGURAÇÕES": "configuracoes"
+            "CONFIGURAÇÕES": "configuracoes",
+            "SOBRE": "sobre"
         }
 
         # 4. PASSA POR TODOS OS BOTÕES E APLICA A SUA REGRA
