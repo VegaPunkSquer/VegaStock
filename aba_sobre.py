@@ -47,7 +47,7 @@ class AbaSobre(QWidget):
             "      💬 <b>WhatsApp:</b> <a href='https://wa.me/5512981194607' style='color: #25D366;'>🟢 (12) 98119-4607</a>"
             "    </td>"
             "    <td>"
-            "      📧 <b>E-mail:</b> <a href='mailto:suporte@associado.com.br' style='color: #009EE3;'>suporte@associado.com.br</a><br><br>"
+            "      📧 <b>E-mail:</b> <a href='mailto:maissolucoesintegradas@gmail.com' style='color: #009EE3;'>suporte@associado.com.br</a><br><br>"
             "      💬 <b>WhatsApp:</b> <a href='https://wa.me/558396622804' style='color: #25D366;'>🟢 (83) 99662-2804</a>"
             "    </td>"
             "  </tr>"
