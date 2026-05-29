@@ -270,7 +270,7 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
         if cliente_existente.status_assinatura == "TESTE" and cliente_existente.validade_pro < datetime.utcnow():
             cliente_existente.status_assinatura = "Ativo"
             cliente_existente.plano = "BÁSICO"
-            cliente_existente.limite_contas = 2[cite: 3, 5]
+            cliente_existente.limite_contas = 2
             cliente_existente.validade_pro = None
             
             # Atualiza as credenciais do usuário Admin para as novas digitadas na tela
@@ -303,7 +303,7 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
     if whitelist:
         novo_cliente.status_assinatura = "TESTE"
         novo_cliente.plano = whitelist.plano
-        novo_cliente.limite_contas = 6 if whitelist.plano == "PRO" else 2[cite: 3, 5]
+        novo_cliente.limite_contas = 6 if whitelist.plano == "PRO" else 2
         novo_cliente.validade_pro = datetime.utcnow() + timedelta(days=whitelist.dias_teste)
 
     # 4. Criar o Usuário Admin trancado dentro do bloco
@@ -1092,7 +1092,7 @@ def verificar_whitelist_cliente(cnpj: str, db: Session = Depends(get_db)):
     # Busca se o CNPJ está na lista de autorizados por você
     autorizado = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == cnpj_limpo).first()
     
-    if not autorizadmo:
+    if not autorizado:
         return {"whitelist": False}
         
     # Se está na whitelist, vamos gerar uma Licenca válida no banco automaticamente!
