@@ -151,17 +151,26 @@ def atualizar_chat_suporte(self):
             self.worker_buscar.start()
 
 def renderizar_mensagens(self, lista_msg):
-    # Só redesenha a lista se o número de mensagens mudou (evita efeito pisca-pisca na tela)
-    if len(lista_msg) == self.lista_chat.count():
+    # Armazena o controle do banco separadamente para não conflitar com a linha do sistema
+    if not hasattr(self, '_cache_qtd_mensagens'):
+        self._cache_qtd_mensagens = 0
+        
+    if len(lista_msg) == self._cache_qtd_mensagens:
         return
         
+    self._cache_qtd_mensagens = len(lista_msg)
     self.lista_chat.clear()
+    
     for msg in lista_msg:
         remetente = "Você" if msg["remetente"] == "CLIENTE" else "VEGASTOCK ADMIN"
         texto_formatado = f"[{remetente}]: {msg['texto']}"
         self.lista_chat.addItem(texto_formatado)
     
-    # Rola a barra de rolagem automaticamente para o fim da conversa
+    # [O Aviso da Montanha] Se a última mensagem foi do cliente, injeta o lembrete
+    if lista_msg and lista_msg[-1]["remetente"] == "CLIENTE":
+        aviso_sistema = "[SISTEMA]: ✈️ Mensagem entregue ao suporte! Não é necessário aguardar nesta tela. Você pode fechar a aba e continuar usando o VegaStock normalmente; assim que o desenvolvedor responder, seu chat atualizará."
+        self.lista_chat.addItem(aviso_sistema)
+    
     self.lista_chat.scrollToBottom()
 
 def enviar_mensagem_suporte(self):
