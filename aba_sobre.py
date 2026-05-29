@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import Qt
 import requests
-from PySide6.QtWidgets import QListWidget, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QLabel
+from PySide6.QtWidgets import QListWidget, QListWidgetItem, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QWidget
 from PySide6.QtCore import QTimer, QThread, Signal
 import os
 
@@ -72,12 +72,14 @@ class AbaSobre(QWidget):
         # ========================================================
         # ESTRUTURA NATIVA DO CHAT DE SUPORTE INTERNO
         # ========================================================
-        lbl_suporte = QLabel("<b>💬 Suporte Técnico VegaStock</b>")
-        layout_principal = self.layout() # Captura o layout existente da aba
+        lbl_suporte = QLabel("💬 Central de Atendimento VegaStock")
+        lbl_suporte.setStyleSheet("font-size: 15px; font-weight: bold; color: #2C3E50; margin-top: 15px; margin-bottom: 5px;")
+        layout_principal = self.layout()
         layout_principal.addWidget(lbl_suporte)
 
-        # Lista nativa para renderizar os balões/linhas de conversa
+        # Lista nativa com fundo de chat e sem bordas genéricas esticadas
         self.lista_chat = QListWidget()
+        self.lista_chat.setStyleSheet("QListWidget { border: 1px solid #DCDCDC; border-radius: 6px; background-color: #F4F6F7; padding: 8px; }")
         layout_principal.addWidget(self.lista_chat)
 
         # Barra inferior de digitação e envio
@@ -151,7 +153,6 @@ def atualizar_chat_suporte(self):
             self.worker_buscar.start()
 
 def renderizar_mensagens(self, lista_msg):
-    # Armazena o controle do banco separadamente para não conflitar com a linha do sistema
     if not hasattr(self, '_cache_qtd_mensagens'):
         self._cache_qtd_mensagens = 0
         
@@ -162,14 +163,45 @@ def renderizar_mensagens(self, lista_msg):
     self.lista_chat.clear()
     
     for msg in lista_msg:
-        remetente = "Você" if msg["remetente"] == "CLIENTE" else "VEGASTOCK ADMIN"
-        texto_formatado = f"[{remetente}]: {msg['texto']}"
-        self.lista_chat.addItem(texto_formatado)
+        item = QListWidgetItem(self.lista_chat)
+        container = QWidget()
+        layout = QHBoxLayout(container)
+        layout.setContentsMargins(5, 5, 5, 5)
+        
+        lbl = QLabel()
+        lbl.setWordWrap(True)
+        lbl.setMaximumWidth(480)  # Impede que o balão estique bizarramente em monitores UltraWide
+        
+        if msg["remetente"] == "CLIENTE":
+            lbl.setText(f"<b>Você:</b><br>{msg['texto']}")
+            lbl.setStyleSheet("background-color: #DCF8C6; border: 1px solid #C7E5A9; border-radius: 8px; padding: 10px; font-size: 13px; color: #222222;")
+            layout.addStretch()  # Empurra o balão do cliente para a direita
+            layout.addWidget(lbl)
+        else:
+            lbl.setText(f"<b>Suporte VegaStock:</b><br>{msg['texto']}")
+            lbl.setStyleSheet("background-color: #FFFFFF; border: 1px solid #E2E2E2; border-radius: 8px; padding: 10px; font-size: 13px; color: #222222;")
+            layout.addWidget(lbl)
+            layout.addStretch()  # Empurra o balão do admin para a esquerda
+            
+        container.setLayout(layout)
+        item.setSizeHint(container.sizeHint())
+        self.lista_chat.setItemWidget(item, container)
     
-    # [O Aviso da Montanha] Se a última mensagem foi do cliente, injeta o lembrete
+    # [O Aviso da Montanha] Estilizado como um belo banner de alerta do sistema
     if lista_msg and lista_msg[-1]["remetente"] == "CLIENTE":
-        aviso_sistema = "[SISTEMA]: ✈️ Mensagem entregue ao suporte! Não é necessário aguardar nesta tela. Você pode fechar a aba e continuar usando o VegaStock normalmente; assim que o desenvolvedor responder, seu chat atualizará."
-        self.lista_chat.addItem(aviso_sistema)
+        item_sys = QListWidgetItem(self.lista_chat)
+        container_sys = QWidget()
+        layout_sys = QHBoxLayout(container_sys)
+        layout_sys.setContentsMargins(5, 8, 5, 5)
+        
+        lbl_sys = QLabel("⚠️ <b>SISTEMA:</b> Mensagem entregue ao suporte! Não é necessário aguardar nesta tela. Você pode continuar usando o VegaStock normalmente; assim que o desenvolvedor responder, seu histórico atualizará.")
+        lbl_sys.setWordWrap(True)
+        lbl_sys.setStyleSheet("background-color: #FFF3CD; border: 1px solid #FFEEBA; border-radius: 6px; padding: 12px; font-size: 12px; color: #856404;")
+        
+        layout_sys.addWidget(lbl_sys)
+        container_sys.setLayout(layout_sys)
+        item_sys.setSizeHint(container_sys.sizeHint())
+        self.lista_chat.setItemWidget(item_sys, container_sys)
     
     self.lista_chat.scrollToBottom()
 
