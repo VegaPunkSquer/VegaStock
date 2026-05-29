@@ -1,6 +1,6 @@
 import sys
 import requests
-from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
+from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QWidget, QHBoxLayout, 
                                QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                                QGroupBox, QFormLayout, QLineEdit, QComboBox, QDateEdit, 
                                QPushButton, QMessageBox, QAbstractItemView, QTabWidget)
