@@ -385,42 +385,8 @@ class MainWindow(QMainWindow):
                 btn.show() # A caixinha foi marcada na criação? Libera!
             else:
                 btn.hide() # Caixinha não foi marcada? Bloqueia!
-
-def iniciar_app():
-    app = QApplication(sys.argv)
-    
-    # Injeta a paleta de cores da empresa do seu tio no aplicativo inteiro
-    app.setStyleSheet(estilos.ESTILO_GLOBAL)
-
-    # Loop de Navegação (Roteador do PySide)
-    while True:
-        tela_login = TelaLogin()
-        resultado_login = tela_login.exec()
-
-        if resultado_login == TelaLogin.Accepted:
-            # Login deu certo! Abre a tela principal e quebra o loop
-            janela_principal = MainWindow(tela_login.cliente_dados)
-            janela_principal.show()
-            sys.exit(app.exec())
-        
-        elif tela_login.ir_para_cadastro:
-            # Clicou no botão "Cadastrar-se"
-            tela_cadastro = TelaCadastro()
-            tela_cadastro.exec()
-            # Ao fechar o cadastro (sucesso ou "Voltar"), o loop reinicia e abre o Login de novo
-            
-        elif tela_login.ir_para_recuperacao:
-            tela_rec = TelaRecuperacao()
-            tela_rec.exec()
-            # Ao fechar, o loop reinicia e volta para o Login
-        
-        else:
-            # Usuário clicou no "X" vermelho da janela, fecha tudo.
-            break
-
-    sys.exit()
-    
-def verificar_trigger_feedback(self):
+                
+    def verificar_trigger_feedback(self):
         status = self.cliente_dados.get("status_assinatura")
         validade_str = self.cliente_dados.get("validade_pro")
         cliente_id = self.cliente_dados.get("cliente_id") or self.cliente_dados.get("id")
@@ -459,6 +425,40 @@ def verificar_trigger_feedback(self):
                                 f.write(f"Enviado em {agora.isoformat()}")
             except Exception as e:
                 print(f"Erro no trigger de feedback: {e}")
+
+def iniciar_app():
+    app = QApplication(sys.argv)
+    
+    # Injeta a paleta de cores da empresa do seu tio no aplicativo inteiro
+    app.setStyleSheet(estilos.ESTILO_GLOBAL)
+
+    # Loop de Navegação (Roteador do PySide)
+    while True:
+        tela_login = TelaLogin()
+        resultado_login = tela_login.exec()
+
+        if resultado_login == TelaLogin.Accepted:
+            # Login deu certo! Abre a tela principal e quebra o loop
+            janela_principal = MainWindow(tela_login.cliente_dados)
+            janela_principal.show()
+            sys.exit(app.exec())
+        
+        elif tela_login.ir_para_cadastro:
+            # Clicou no botão "Cadastrar-se"
+            tela_cadastro = TelaCadastro()
+            tela_cadastro.exec()
+            # Ao fechar o cadastro (sucesso ou "Voltar"), o loop reinicia e abre o Login de novo
+            
+        elif tela_login.ir_para_recuperacao:
+            tela_rec = TelaRecuperacao()
+            tela_rec.exec()
+            # Ao fechar, o loop reinicia e volta para o Login
+        
+        else:
+            # Usuário clicou no "X" vermelho da janela, fecha tudo.
+            break
+
+    sys.exit()
 
 if __name__ == "__main__":
     iniciar_app()
