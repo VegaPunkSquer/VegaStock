@@ -103,3 +103,11 @@ class CnpjWhitelist(Base):
     cnpj = Column(String, unique=True, index=True, nullable=False)
     plano = Column(String, default="BÁSICO") # BÁSICO ou PRO
     data_fim = Column(DateTime, nullable=False)
+    
+class FeedbackCliente(Base):
+    __tablename__ = "feedbacks_cliente"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    estrelas = Column(Integer, nullable=False) # Nota de 1 a 5
+    comentario = Column(String, nullable=True)  # Críticas, elogios ou choradeiras
+    data_envio = Column(DateTime, default=datetime.utcnow)

@@ -1,3 +1,5 @@
+import datetime
+
 from pydantic import BaseModel
 from typing import Optional
 
@@ -121,3 +123,17 @@ class WhitelistCreate(BaseModel):
     cnpj: str
     plano: str
     data_fim: str
+    
+class FeedbackCreate(BaseModel):
+    cliente_id: int
+    estrelas: int
+    comentario: Optional[str] = None
+
+class FeedbackResponse(BaseModel):
+    id: int
+    nome_fantasia: str  # Vamos puxar do relacionamento para você saber de quem é
+    estrelas: int
+    comentario: Optional[str]
+    data_envio: datetime
+    class Config:
+        from_attributes = True

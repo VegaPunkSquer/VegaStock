@@ -1117,3 +1117,54 @@ def verificar_whitelist_cliente(cnpj: str, db: Session = Depends(get_db)):
     db.commit()
     
     return {"whitelist": True, "token_licenca": token_gratis}
+
+# ==========================================
+# ROTAS DO SISTEMA DE FEEDBACK & RETENÇÃO
+# ==========================================
+
+# 1. Rota para o App do Cliente enviar a avaliação de 80% do prazo
+@app.post("/feedback")
+def enviar_feedback_cliente(dados: schemas.FeedbackCreate, db: Session = Depends(get_db)):
+    if dados.estrelas < 1 or dados.estrelas > 5:
+        raise HTTPException(status_code=400, detail="A nota deve ser entre 1 e 5 estrelas.")
+        
+    cliente = db.query(models.Cliente).filter(models.Cliente.id == dados.cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+        
+    novo_feedback = models.FeedbackCliente(
+        cliente_id=dados.cliente_id,
+        estrelas=dados.estrelas,
+        comentario=dados.comentario
+    )
+    db.add(novo_feedback)
+    db.commit()
+    return {"status": "sucesso", "mensagem": "Obrigado pelo seu feedback!"}
+
+# 2. Rota para o seu App Admin coletar todas as avaliações do mercado
+@app.get("/admin/feedbacks")
+def listar_feedbacks_admin(token_master: str = Header(None), db: Session = Depends(get_db)):
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    # Faz um JOIN maroto para trazer o feedback junto com o nome fantasia do restaurante
+    resultados = db.query(
+        models.FeedbackCliente.id,
+        models.Cliente.nome_fantasia,
+        models.FeedbackCliente.estrelas,
+        models.FeedbackCliente.comentario,
+        models.FeedbackCliente.data_envio
+    ).join(models.Cliente, models.FeedbackCliente.cliente_id == models.Cliente.id).order_by(desc(models.FeedbackCliente.data_envio)).all()
+    
+    # Formata a resposta para bater certinho com o schema do Pydantic
+    lista_feedbacks = []
+    for res in resultados:
+        lista_feedbacks.append({
+            "id": res.id,
+            "nome_fantasia": res.nome_fantasia,
+            "estrelas": res.estrelas,
+            "comentario": res.comentario,
+            "data_envio": res.data_envio
+        })
+        
+    return lista_feedbacks
