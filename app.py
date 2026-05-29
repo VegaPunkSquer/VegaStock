@@ -419,9 +419,6 @@ def iniciar_app():
             break
 
     sys.exit()
-
-if __name__ == "__main__":
-    iniciar_app()
     
 def verificar_trigger_feedback(self):
         status = self.cliente_dados.get("status_assinatura")
@@ -462,3 +459,6 @@ def verificar_trigger_feedback(self):
                                 f.write(f"Enviado em {agora.isoformat()}")
             except Exception as e:
                 print(f"Erro no trigger de feedback: {e}")
+
+if __name__ == "__main__":
+    iniciar_app()
