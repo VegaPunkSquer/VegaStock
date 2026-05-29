@@ -56,7 +56,7 @@ class WorkerEnviarAdminChat(QThread):
             pass
 
 # URL exata do seu Space no Hugging Face
-API_BASE_URL = "https://vegap-vega-sotck.hf.space"
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 # Defina aqui o mesmo token master que você colocou no Config Secret do Hugging Face
 TOKEN_MASTER = "VegaChaveMestre123"
 

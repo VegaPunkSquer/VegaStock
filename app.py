@@ -452,7 +452,7 @@ def verificar_trigger_feedback(self):
                     # Se o arquivo de trava não existir, abre a janela e bloqueia repetições
                     if not os.path.exists(caminho_trava):
                         from dialog_feedback import DialogFeedback
-                        API_URL = "https://vegap-vega-sotck.hf.space"
+                        API_URL = "https://vegap-vega-stock.hf.space"
                         dialogo = DialogFeedback(API_URL, cliente_id, plano, self)
                         if dialogo.exec() == DialogFeedback.Accepted:
                             with open(caminho_trava, "w") as f:

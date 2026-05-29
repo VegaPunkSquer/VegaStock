@@ -5,8 +5,6 @@ from PySide6.QtWidgets import QListWidget, QLineEdit, QPushButton, QHBoxLayout, 
 from PySide6.QtCore import QTimer, QThread, Signal
 import os
 
-API_BASE_URL = "https://vegap-vega-sotck.hf.space"
-
 API_BASE_URL = "https://vegap-vega-stock.hf.space"
 
 class AbaSobre(QWidget):
