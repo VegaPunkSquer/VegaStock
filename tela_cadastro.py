@@ -40,6 +40,7 @@ class TelaCadastro(QDialog):
         self.input_cnpj = QLineEdit()
         self.input_cnpj.setInputMask("99.999.999/9999-99")
         layout.addWidget(self.input_cnpj)
+        self.input_cnpj.editingFinished.connect(self.checar_cnpj_whitelist)
 
         self.input_nome = QLineEdit()
         self.input_nome.setPlaceholderText("Nome Fantasia")
@@ -210,3 +211,23 @@ class TelaCadastro(QDialog):
             self.vitrine.exec()
         except ImportError:
             QMessageBox.warning(self, "Erro", "Módulo de vendas não encontrado.")
+    
+    def checar_cnpj_whitelist(self):
+        cnpj_cru = self.input_cnpj.text().strip()
+        cnpj_limpo = re.sub(r'[^0-9]', '', cnpj_cru)
+        
+        # Só dispara a consulta se o CNPJ estiver totalmente digitado
+        if len(cnpj_limpo) != 14:
+            return
+
+        try:
+            response = requests.get(f"{API_BASE_URL}/verificar_whitelist/{cnpj_limpo}")
+            if response.status_code == 200:
+                dados = response.json()
+                if dados.get("whitelist"):
+                    token = dados.get("token_licenca")
+                    # Preenche o campo invisivelmente e avisa o cliente
+                    self.input_licenca.setText(token)
+                    QMessageBox.information(self, "Acesso de Teste", "Este CNPJ possui um período de testes liberado! A licença foi preenchida automaticamente.")
+        except:
+            pass
