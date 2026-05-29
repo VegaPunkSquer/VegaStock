@@ -1,9 +1,10 @@
 import sys
 import requests
+from PySide6.QtCore import QTimer, Qt, QThread, Signal, QDate
 from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QWidget, QHBoxLayout, 
                                QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                                QGroupBox, QFormLayout, QLineEdit, QComboBox, QDateEdit, 
-                               QPushButton, QMessageBox, QAbstractItemView, QTabWidget)
+                               QPushButton, QMessageBox, QListWidget, QAbstractItemView, QTabWidget)
 
 class WorkerListarFeedbacks(QThread):
     resultado = Signal(list)
@@ -19,7 +20,6 @@ class WorkerListarFeedbacks(QThread):
                 self.erro.emit(f"Erro {response.status_code}")
         except Exception as e:
             self.erro.emit(str(e))
-from PySide6.QtCore import QTimer, Qt, QThread, Signal, QDate
 
 from PySide6.QtWidgets import QListWidget  # Garanta que este widget nativo está importado
 
@@ -338,7 +338,8 @@ class JanelaAdmin(QMainWindow):
         
         # Como o clique foi explícito, força o reset do cache para renderizar na hora
         self.historico_cache_tamanho = 0
-        self.lbl_cliente_atual.setText(f"<b>Atendendo: {item.text().split('\n')[0]}</b>")
+        nome_cliente = item.text().split('\n')[0]
+        self.lbl_cliente_atual.setText(f"<b>Atendendo: {nome_cliente}</b>")
         
         self.input_msg_admin.setEnabled(True)
         self.btn_enviar_admin.setEnabled(True)
