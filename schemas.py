@@ -116,3 +116,8 @@ class UnidadeResponse(BaseModel):
     nome: str
     class Config:
         from_attributes = True
+        
+class WhitelistCreate(BaseModel):
+    cnpj: str
+    plano: str
+    dias_teste: int

@@ -264,8 +264,27 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Licença expirada (prazo de 48h esgotado).")
     
     # 2. Verificar se CNPJ ou Login já existem para evitar duplicidade
-    if db.query(models.Cliente).filter(models.Cliente.cnpj == dados.cnpj).first():
-        raise HTTPException(status_code=400, detail="CNPJ já cadastrado.")
+    cliente_existente = db.query(models.Cliente).filter(models.Cliente.cnpj == dados.cnpj).first()
+    if cliente_existente:
+        # Se for um período de testes que já expirou, permite o "recadastro" para salvar a assinatura definitiva
+        if cliente_existente.status_assinatura == "TESTE" and cliente_existente.validade_pro < datetime.utcnow():
+            cliente_existente.status_assinatura = "Ativo"
+            cliente_existente.plano = "BÁSICO"
+            cliente_existente.limite_contas = 2[cite: 3, 5]
+            cliente_existente.validade_pro = None
+            
+            # Atualiza as credenciais do usuário Admin para as novas digitadas na tela
+            usuario_admin = db.query(models.Usuario).filter(models.Usuario.cliente_id == cliente_existente.id, models.Usuario.nivel_acesso == "Admin").first()
+            if usuario_admin:
+                usuario_admin.login = dados.login
+                usuario_admin.senha = gerar_hash(dados.senha)
+                
+            licenca.usada = True
+            licenca.cliente_id = cliente_existente.id
+            db.commit()
+            return {"status": "sucesso", "mensagem": "Sua conta de testes foi convertida em assinatura com sucesso! Todos os dados foram preservados."}
+        else:
+            raise HTTPException(status_code=400, detail="CNPJ já cadastrado.")
     if db.query(models.Usuario).filter(models.Usuario.login == dados.login).first():
         raise HTTPException(status_code=400, detail="Nome de usuário já em uso.")
 
@@ -278,6 +297,14 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
     db.add(novo_cliente)
     db.commit() # Força o banco a gravar fisicamente e gerar o ID real agora
     db.refresh(novo_cliente) # Puxa o ID gerado de volta pro Python
+    
+    # Se o CNPJ constar na Whitelist de testes, aplica as regras de expiração temporária
+    whitelist = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == dados.cnpj).first()
+    if whitelist:
+        novo_cliente.status_assinatura = "TESTE"
+        novo_cliente.plano = whitelist.plano
+        novo_cliente.limite_contas = 6 if whitelist.plano == "PRO" else 2[cite: 3, 5]
+        novo_cliente.validade_pro = datetime.utcnow() + timedelta(days=whitelist.dias_teste)
 
     # 4. Criar o Usuário Admin trancado dentro do bloco
     novo_usuario = models.Usuario(
@@ -309,6 +336,10 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     # Puxa os dados do restaurante (bloco) atrelado a este usuário
     cliente = db.query(models.Cliente).filter(models.Cliente.id == usuario.cliente_id).first()
+    
+    # Corta o acesso imediatamente se o período de demonstração gratuita expirou
+    if cliente.status_assinatura == "TESTE" and cliente.validade_pro and cliente.validade_pro < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="O seu período de testes expirou. Faça uma assinatura para liberar os seus dados.")
 
     # Devolve a chave do cofre para o PySide
     return {
@@ -1029,3 +1060,60 @@ def salvar_operador(dados: dict, db: Session = Depends(get_db)):
         db.add(novo_op)
     db.commit()
     return {"mensagem": "Operador salvo!"}
+
+# ==========================================
+# ROTAS DE ADMINISTRAÇÃO MASTER (VEGA ONLY)
+# ==========================================
+
+# 1. Rota para o seu App Admin inserir um CNPJ na Whitelist de testes
+@app.post("/admin/whitelist")
+def adicionar_cnpj_whitelist(dados: schemas.WhitelistCreate, token_master: str = Header(None), db: Session = Depends(get_db)):
+    # Proteção simples: define uma variável MASTER_TOKEN no painel do Hugging Face Settings
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    # Limpa o CNPJ de qualquer máscara antes de salvar
+    cnpj_limpo = "".join(filter(str.isdigit, dados.cnpj))
+    
+    existe = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == cnpj_limpo).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Este CNPJ já está liberado para testes.")
+        
+    novo_teste = models.CnpjWhitelist(cnpj=cnpj_limpo, plano=dados.plano, dias_teste=dados.dias_teste)
+    db.add(novo_teste)
+    db.commit()
+    return {"status": "sucesso", "mensagem": f"CNPJ {cnpj_limpo} liberado para testes!"}
+
+# 2. Rota que o App do Cliente vai bater para checar se ganha licença grátis
+@app.get("/verificar_whitelist/{cnpj}")
+def verificar_whitelist_cliente(cnpj: str, db: Session = Depends(get_db)):
+    cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+    
+    # Busca se o CNPJ está na lista de autorizados por você
+    autorizado = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == cnpj_limpo).first()
+    
+    if not autorizadmo:
+        return {"whitelist": False}
+        
+    # Se está na whitelist, vamos gerar uma Licenca válida no banco automaticamente!
+    # Verifica se já não criamos uma licença idêntica para evitar duplicidade
+    ja_tem_licenca = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_limpo, models.Licenca.usada == False).first()
+    
+    if ja_tem_licenca:
+        return {"whitelist": True, "token_licenca": ja_tem_licenca.token}
+        
+    # Fabrica um token aleatório de 12 dígitos
+    caracteres = string.ascii_letters + string.digits
+    token_gratis = ''.join(random.choice(caracteres) for _ in range(12))
+    
+    # Cria a licença grátis com validade de 48 horas para ele concluir o cadastro
+    nova_licenca = models.Licenca(
+        token=token_gratis,
+        usada=False,
+        cnpj_esperado=cnpj_limpo,
+        data_expiracao=datetime.utcnow() + timedelta(hours=48)
+    )
+    db.add(nova_licenca)
+    db.commit()
+    
+    return {"whitelist": True, "token_licenca": token_gratis}

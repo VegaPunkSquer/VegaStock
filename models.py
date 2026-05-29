@@ -96,3 +96,10 @@ class OperadorTurno(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id")) # De qual restaurante ele é
     nome = Column(String, nullable=False)
     pin = Column(String(4), nullable=False) # A senha de 4 dígitos
+    
+class CnpjWhitelist(Base):
+    __tablename__ = "cnpj_whitelist"
+    id = Column(Integer, primary_key=True, index=True)
+    cnpj = Column(String, unique=True, index=True, nullable=False)
+    plano = Column(String, default="BÁSICO") # BÁSICO ou PRO
+    dias_teste = Column(Integer, default=7)
