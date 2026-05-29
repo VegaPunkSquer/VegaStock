@@ -3,7 +3,22 @@ import requests
 from PySide6.QtWidgets import (QApplication, QMainWindow, QWidget, QHBoxLayout, 
                                QVBoxLayout, QTableWidget, QTableWidgetItem, QHeaderView, 
                                QGroupBox, QFormLayout, QLineEdit, QComboBox, QDateEdit, 
-                               QPushButton, QMessageBox, QAbstractItemView)
+                               QPushButton, QMessageBox, QAbstractItemView, QTabWidget)
+
+class WorkerListarFeedbacks(QThread):
+    resultado = Signal(list)
+    erro = Signal(str)
+
+    def run(self):
+        headers = {"token-master": TOKEN_MASTER}
+        try:
+            response = requests.get(f"{API_BASE_URL}/admin/feedbacks", headers=headers)
+            if response.status_code == 200:
+                self.resultado.emit(response.json())
+            else:
+                self.erro.emit(f"Erro {response.status_code}")
+        except Exception as e:
+            self.erro.emit(str(e))
 from PySide6.QtCore import Qt, QThread, Signal, QDate
 
 # URL exata do seu Space no Hugging Face
@@ -49,10 +64,13 @@ class JanelaAdmin(QMainWindow):
         self.setWindowTitle("VegaStock — Painel de Controle Operacional Admin")
         self.resize(800, 450)
 
-        # Widget central e layout principal (Lado a Lado)
-        widget_central = QWidget()
-        self.setCentralWidget(widget_central)
-        layout_principal = QHBoxLayout(widget_central)
+        # Instancia o gerenciador de abas nativo como o coração da janela
+        self.tabs = QTabWidget()
+        self.setCentralWidget(self.tabs)
+
+        # CONTAINER DA ABA 1: Controle de Whitelist (Seu código antigo envelopado aqui)
+        container_acessos = QWidget()
+        layout_principal = QHBoxLayout(container_acessos)
         layout_principal.setContentsMargins(15, 15, 15, 15)
         layout_principal.setSpacing(15)
 
@@ -96,6 +114,30 @@ class JanelaAdmin(QMainWindow):
         layout_form.addRow("", self.btn_enviar)
 
         layout_principal.addWidget(grupo_whitelist, stretch=4)
+        self.tabs.addTab(container_acessos, "🔑 Pré-Autorizar Testes")
+
+        # CONTAINER DA ABA 2: Central de Feedback dos Clientes ( Analytics )
+        container_feedbacks = QWidget()
+        layout_feedbacks = QVBoxLayout(container_feedbacks)
+        layout_feedbacks.setContentsMargins(15, 15, 15, 15)
+        layout_feedbacks.setSpacing(10)
+
+        # Tabelão padrão para listar os textões e notas
+        self.tabela_feedbacks = QTableWidget()
+        self.tabela_feedbacks.setColumnCount(4)
+        self.tabela_feedbacks.setHorizontalHeaderLabels(["Empresa / Cliente", "Nota (Estrelas)", "Comentário / Sugestão", "Data de Envio"])
+        self.tabela_feedbacks.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabela_feedbacks.setEditTriggers(QAbstractItemView.NoEditTriggers)
+        layout_feedbacks.addWidget(self.tabela_feedbacks)
+
+        self.btn_atualizar_feedbacks = QPushButton("🔄 Atualizar Mural de Feedbacks")
+        self.btn_atualizar_feedbacks.clicked.connect(self.carregar_feedbacks_nuvem)
+        layout_feedbacks.addWidget(self.btn_atualizar_feedbacks)
+
+        self.tabs.addTab(container_feedbacks, "⭐ Satisfação & Sugestões")
+
+        # Puxa os dados da nuvem automaticamente logo na inicialização para você ver o painel vivo
+        self.carregar_feedbacks_nuvem()
 
     def executar_liberacao_cnpj(self):
         cnpj_cru = self.input_cnpj.text().strip()
@@ -136,6 +178,40 @@ class JanelaAdmin(QMainWindow):
         self.btn_enviar.setEnabled(True)
         self.btn_enviar.setText("Liberar Acesso Gratuito")
         QMessageBox.critical(self, "Falha de Operação", mensagem)
+        
+    def carregar_feedbacks_nuvem(self):
+        self.btn_atualizar_feedbacks.setEnabled(False)
+        self.btn_atualizar_feedbacks.setText("⏳ Buscando avaliações na Neon...")
+        
+        self.worker_fb = WorkerListarFeedbacks()
+        self.worker_fb.resultado.connect(self.sucesso_feedbacks)
+        self.worker_fb.erro.connect(self.erro_feedbacks)
+        self.worker_fb.start()
+
+    def sucesso_feedbacks(self, lista_feedbacks):
+        self.btn_atualizar_feedbacks.setEnabled(True)
+        self.btn_atualizar_feedbacks.setText("🔄 Atualizar Mural de Feedbacks")
+        self.tabela_feedbacks.setRowCount(0)
+
+        for i, fb in enumerate(lista_feedbacks):
+            self.tabela_feedbacks.insertRow(i)
+            
+            # Formata a nota visualmente para ficar fácil de bater o olho
+            estrelas_vistas = "⭐" * fb["estrelas"]
+            
+            # Trata a data para o padrão BR
+            data_crua = fb["data_envio"].split("T")[0]
+            data_br = "/".join(data_crua.split("-")[::-1])
+
+            self.tabela_feedbacks.setItem(i, 0, QTableWidgetItem(str(fb["nome_fantasia"])))
+            self.tabela_feedbacks.setItem(i, 1, QTableWidgetItem(estrelas_vistas))
+            self.tabela_feedbacks.setItem(i, 2, QTableWidgetItem(str(fb["comentario"] or "Sem comentários adicionais.")))
+            self.tabela_feedbacks.setItem(i, 3, QTableWidgetItem(data_br))
+
+    def erro_feedbacks(self, mensagem):
+        self.btn_atualizar_feedbacks.setEnabled(True)
+        self.btn_atualizar_feedbacks.setText("🔄 Atualizar Mural de Feedbacks")
+        QMessageBox.warning(self, "Aviso de Coleta", f"Não foi possível atualizar os feedbacks: {mensagem}")
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
