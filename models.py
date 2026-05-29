@@ -111,3 +111,11 @@ class FeedbackCliente(Base):
     estrelas = Column(Integer, nullable=False) # Nota de 1 a 5
     comentario = Column(String, nullable=True)  # Críticas, elogios ou choradeiras
     data_envio = Column(DateTime, default=datetime.utcnow)
+    
+class MensagemSuporte(Base):
+    __tablename__ = "mensagens_suporte"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    remetente = Column(String, nullable=False)  # 'CLIENTE' ou 'ADMIN'
+    texto = Column(String, nullable=False)
+    data_envio = Column(DateTime, default=datetime.utcnow)

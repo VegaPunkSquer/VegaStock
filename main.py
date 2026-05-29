@@ -1168,3 +1168,63 @@ def listar_feedbacks_admin(token_master: str = Header(None), db: Session = Depen
         })
         
     return lista_feedbacks
+
+# ==========================================
+# ROTAS DO SISTEMA DE CHAT DE SUPORTE INTERNO
+# ==========================================
+
+# 1. Rota para enviar uma nova mensagem (usada tanto pelo Cliente quanto pelo Admin)
+@app.post("/suporte/enviar")
+def enviar_mensagem_suporte(dados: schemas.MensagemSuporteCreate, db: Session = Depends(get_db)):
+    nova_msg = models.MensagemSuporte(
+        cliente_id=dados.cliente_id,
+        remetente=dados.remetente,
+        texto=dados.texto
+    )
+    db.add(nova_msg)
+    db.commit()
+    db.refresh(nova_msg)
+    return {"status": "sucesso", "mensagem": nova_msg}
+
+# 2. Rota para carregar o histórico completo de uma conversa
+@app.get("/suporte/historico/{cliente_id}")
+def obter_historico_suporte(cliente_id: int, db: Session = Depends(get_db)):
+    mensagens = db.query(models.MensagemSuporte)\
+                  .filter(models.MensagemSuporte.cliente_id == cliente_id)\
+                  .order_by(models.MensagemSuporte.data_envio.asc()).all()
+    return mensagens
+
+# 3. Rota Master (Admin) para listar quais empresas estão falando com o suporte
+@app.get("/admin/suporte/conversas_actives")
+def listar_conversas_ativas(token_master: str = Header(None), db: Session = Depends(get_db)):
+    from sqlalchemy import func, desc  # Import local seguro para evitar quebras no topo
+    
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+    
+    # Subquery inteligente para capturar o ID da última mensagem enviada por cada cliente
+    subquery = db.query(
+        models.MensagemSuporte.cliente_id,
+        func.max(models.MensagemSuporte.id).label("max_id")
+    ).group_by(models.MensagemSuporte.cliente_id).subquery()
+
+    # Faz o JOIN com a tabela de Clientes para trazer o Nome Fantasia e o texto final
+    resultados = db.query(
+        models.MensagemSuporte.cliente_id,
+        models.Cliente.nome_fantasia,
+        models.MensagemSuporte.texto,
+        models.MensagemSuporte.data_envio
+    ).join(subquery, models.MensagemSuporte.id == subquery.c.max_id)\
+     .join(models.Cliente, models.MensagemSuporte.cliente_id == models.Cliente.id)\
+     .order_by(desc(models.MensagemSuporte.data_envio)).all()
+
+    lista_conversas = []
+    for r in resultados:
+        lista_conversas.append({
+            "cliente_id": r.cliente_id,
+            "nome_fantasia": r.nome_fantasia,
+            "ultima_mensagem": r.texto,
+            "data_ultima": r.data_envio
+        })
+        
+    return lista_conversas

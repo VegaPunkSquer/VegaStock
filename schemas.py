@@ -137,3 +137,24 @@ class FeedbackResponse(BaseModel):
     data_envio: datetime
     class Config:
         from_attributes = True
+        
+class MensagemSuporteCreate(BaseModel):
+    cliente_id: int
+    remetente: str  # 'CLIENTE' ou 'ADMIN'
+    texto: str
+
+class MensagemSuporteResponse(BaseModel):
+    id: int
+    cliente_id: int
+    remetente: str
+    texto: str
+    data_envio: datetime
+
+    class Config:
+        from_attributes = True
+
+class ConversaAtivaResponse(BaseModel):
+    cliente_id: int
+    nome_fantasia: str
+    ultima_mensagem: str
+    data_ultima: datetime        
