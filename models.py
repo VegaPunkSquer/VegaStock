@@ -102,4 +102,4 @@ class CnpjWhitelist(Base):
     id = Column(Integer, primary_key=True, index=True)
     cnpj = Column(String, unique=True, index=True, nullable=False)
     plano = Column(String, default="BÁSICO") # BÁSICO ou PRO
-    dias_teste = Column(Integer, default=7)
+    data_fim = Column(DateTime, nullable=False)

@@ -304,7 +304,7 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
         novo_cliente.status_assinatura = "TESTE"
         novo_cliente.plano = whitelist.plano
         novo_cliente.limite_contas = 6 if whitelist.plano == "PRO" else 2
-        novo_cliente.validade_pro = datetime.utcnow() + timedelta(days=whitelist.dias_teste)
+        novo_cliente.validade_pro = whitelist.data_fim
 
     # 4. Criar o Usuário Admin trancado dentro do bloco
     novo_usuario = models.Usuario(
@@ -1079,7 +1079,7 @@ def adicionar_cnpj_whitelist(dados: schemas.WhitelistCreate, token_master: str =
     if existe:
         raise HTTPException(status_code=400, detail="Este CNPJ já está liberado para testes.")
         
-    novo_teste = models.CnpjWhitelist(cnpj=cnpj_limpo, plano=dados.plano, dias_teste=dados.dias_teste)
+    novo_teste = models.CnpjWhitelist(cnpj=cnpj_limpo, plano=dados.plano, data_fim=datetime.fromisoformat(dados.data_fim))
     db.add(novo_teste)
     db.commit()
     return {"status": "sucesso", "mensagem": f"CNPJ {cnpj_limpo} liberado para testes!"}

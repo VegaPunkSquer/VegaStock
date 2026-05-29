@@ -120,4 +120,4 @@ class UnidadeResponse(BaseModel):
 class WhitelistCreate(BaseModel):
     cnpj: str
     plano: str
-    dias_teste: int
+    data_fim: str
