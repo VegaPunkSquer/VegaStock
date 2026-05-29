@@ -134,7 +134,7 @@ class FeedbackResponse(BaseModel):
     nome_fantasia: str  # Vamos puxar do relacionamento para você saber de quem é
     estrelas: int
     comentario: Optional[str]
-    data_envio: datetime
+    data_envio: datetime.datetime
     class Config:
         from_attributes = True
         
@@ -148,7 +148,7 @@ class MensagemSuporteResponse(BaseModel):
     cliente_id: int
     remetente: str
     texto: str
-    data_envio: datetime
+    data_envio: datetime.datetime
 
     class Config:
         from_attributes = True
@@ -157,4 +157,4 @@ class ConversaAtivaResponse(BaseModel):
     cliente_id: int
     nome_fantasia: str
     ultima_mensagem: str
-    data_ultima: datetime        
+    data_ultima: datetime.datetime
