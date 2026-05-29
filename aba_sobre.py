@@ -47,12 +47,12 @@ class AbaSobre(QWidget):
             "  </tr>"
             "  <tr>"
             "    <td>"
-            "      📧 <b>E-mail:</b> <a href='mailto:sergio.renan.ms@gmail.com' style='color: #009EE3;'>suporte@vegastock.com.br</a><br><br>"
-            "      💬 <b>WhatsApp: </b> <a href='https://wa.me/5512981194607' style='color: #25D366;'>(12) 98119-4607</a>"
+            "      📧 <b><a href='mailto:sergio.renan.ms@gmail.com' style='color: #000000; font-weight: bold;'>E-mail</a></b>"
+            "      💬 <b><a href='https://wa.me/5512981194607' style='color: #000000; font-weight: bold;'>Whatsapp</a></b>"
             "    </td>"
             "    <td>"
-            "      📧 <b>E-mail:</b> <a href='mailto:maissolucoesintegradas@gmail.com' style='color: #009EE3;'>suporte@maissolucoesintegradas.com.br</a><br><br>"
-            "      💬 <b>WhatsApp: </b> <a href='https://wa.me/558396622804' style='color: #25D366;'>(83) 99662-2804</a>"
+            "      📧 <b><a href='mailto:maissolucoesintegradas@gmail.com' style='color: #000000; font-weight: bold;'>E-mail</a></b>"
+            "      💬 <b> <a href='https://wa.me/558396622804' style='color: #000000; font-weight: bold;'>Whatsapp</a></b>"
             "    </td>"
             "  </tr>"
             "</table>"
@@ -72,8 +72,8 @@ class AbaSobre(QWidget):
         # ========================================================
         # ESTRUTURA NATIVA DO CHAT DE SUPORTE INTERNO
         # ========================================================
-        lbl_suporte = QLabel("💬 Central de Atendimento VegaStock")
-        lbl_suporte.setStyleSheet("font-size: 15px; font-weight: bold; color: #2C3E50; margin-top: 15px; margin-bottom: 5px;")
+        lbl_suporte = QLabel("💬 Central de Suporte Interno - VegaStock")
+        lbl_suporte.setStyleSheet("font-size: 22px; font-weight: bold; color: #2C3E50; margin-top: 15px; margin-bottom: 5px;")
         layout_principal = self.layout()
         layout_principal.addWidget(lbl_suporte)
 
@@ -86,9 +86,25 @@ class AbaSobre(QWidget):
         layout_envio = QHBoxLayout()
         self.input_mensagem = QLineEdit()
         self.input_mensagem.setPlaceholderText("Digite sua dúvida aqui...")
+        self.input_mensagem.setStyleSheet("font-size: 15px; font-weight: bold; color: #2C3E50; margin-top: 15px; margin-bottom: 5px;")
         self.input_mensagem.returnPressed.connect(self.enviar_mensagem_suporte) # Envia ao apertar Enter
         
+        # Corrigido o nome para btn_enviar_chat e aplicado um visual moderno e imponente estilo WhatsApp
         self.btn_enviar_chat = QPushButton("Enviar ✈️")
+        self.btn_enviar_chat.setStyleSheet("""
+            QPushButton {
+                background-color: #25D366; 
+                color: white; 
+                font-weight: bold; 
+                font-size: 14px; 
+                padding: 12px 24px; 
+                border: none;
+                border-radius: 6px;
+                min-width: 110px;
+            }
+            QPushButton:hover { background-color: #20BA5A; }
+            QPushButton:disabled { background-color: #A5E7BC; color: #F0FBF4; }
+        """)
         self.btn_enviar_chat.clicked.connect(self.enviar_mensagem_suporte)
         
         layout_envio.addWidget(self.input_mensagem, stretch=8)
@@ -110,8 +126,8 @@ class AbaSobre(QWidget):
 class WorkerBuscarChat(QThread):
     mensagens_recebidas = Signal(list)
 
-    def __init__(self, cliente_id):
-        super().__init__()
+    def __init__(self, cliente_id, parent=None):
+        super().__init__(parent)  # Amarria o parentesco nativo aqui
         self.cliente_id = cliente_id
 
     def run(self):
@@ -125,8 +141,8 @@ class WorkerBuscarChat(QThread):
 class WorkerEnviarChat(QThread):
     sucesso = Signal()
 
-    def __init__(self, cliente_id, texto):
-        super().__init__()
+    def __init__(self, cliente_id, texto, parent=None):
+        super().__init__(parent)  # E aqui também para evitar o crash no envio
         self.cliente_id = cliente_id
         self.texto = texto
 
@@ -144,11 +160,10 @@ class WorkerEnviarChat(QThread):
 
 # Injeta os métodos de controle dentro da classe AbaSobre existente
 def atualizar_chat_suporte(self):
-    # Captura de forma segura os dados do cliente logado no app principal
     if hasattr(self.window(), 'cliente_dados') and self.window().cliente_dados:
         cliente_id = self.window().cliente_dados.get("cliente_id") or self.window().cliente_dados.get("id")
         if cliente_id:
-            self.worker_buscar = WorkerBuscarChat(cliente_id)
+            self.worker_buscar = WorkerBuscarChat(cliente_id, parent=self) # Injetado parent=self
             self.worker_buscar.mensagens_recebidas.connect(self.renderizar_mensagens)
             self.worker_buscar.start()
 
@@ -216,9 +231,10 @@ def enviar_mensagem_suporte(self):
             self.btn_enviar_chat.setEnabled(False)
             self.input_mensagem.clear()
             
-            self.worker_enviar = WorkerEnviarChat(cliente_id, texto)
-            self.worker_enviar.sucesso.connect(lambda: [self.btn_enviar_chat.setEnabled(True), self.atualizar_chat_suporte()])
-            self.worker_enviar.start()
+            # parent=self inserido e variável renomeada para evitar atropelamentos com o timer de busca
+            self.worker_envio_exclusivo_sobre = WorkerEnviarChat(cliente_id, texto, parent=self)
+            self.worker_envio_exclusivo_sobre.sucesso.connect(lambda: [self.btn_enviar_chat.setEnabled(True), self.atualizar_chat_suporte()])
+            self.worker_envio_exclusivo_sobre.start()
 
 # Vincula dinamicamente os métodos à classe principal
 AbaSobre.atualizar_chat_suporte = atualizar_chat_suporte
