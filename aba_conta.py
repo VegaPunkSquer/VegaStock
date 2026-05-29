@@ -151,7 +151,7 @@ class AbaConta(QWidget):
         # ==========================================
         # TRAVA DE HIERARQUIA (O PPOREEEEM GIGANTE)
         # ==========================================
-        if self.cliente_dados.get("nivel_acesso", "Normal") != "Admin":
+        if str(self.cliente_dados.get("nivel_acesso", "Normal")).lower() != "admin":
             frame_info.hide() 
             frame_mobile.hide() # <--- ADICIONE ESTA LINHA PARA ESCONDER O ACESSO MOBILE
             lbl_senha_titulo.setText("Segurança: Alterar Minhas Credenciais")
@@ -212,7 +212,7 @@ class AbaConta(QWidget):
         # ==========================================
         # ROTA 1: SE FOR ADMIN (Mantém a sua lógica intacta)
         # ==========================================
-        if nivel_acesso == "Admin":
+        if str(nivel_acesso).lower() == "admin":
             atual = self.input_senha_atual.text()
             if not all([atual, nova, confirma]):
                 QMessageBox.warning(self, "Aviso", "Preencha todos os campos de senha.")
