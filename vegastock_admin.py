@@ -19,7 +19,41 @@ class WorkerListarFeedbacks(QThread):
                 self.erro.emit(f"Erro {response.status_code}")
         except Exception as e:
             self.erro.emit(str(e))
-from PySide6.QtCore import Qt, QThread, Signal, QDate
+from PySide6.QtCore import QTimer, Qt, QThread, Signal, QDate
+
+from PySide6.QtWidgets import QListWidget  # Garanta que este widget nativo está importado
+
+class WorkerListarConversasAtivas(QThread):
+    resultado = Signal(list)
+
+    def run(self):
+        headers = {"token-master": TOKEN_MASTER}
+        try:
+            response = requests.get(f"{API_BASE_URL}/admin/suporte/conversas_actives", headers=headers)
+            if response.status_code == 200:
+                self.resultado.emit(response.json())
+        except:
+            pass
+
+class WorkerEnviarAdminChat(QThread):
+    sucesso = Signal()
+
+    def __init__(self, cliente_id, texto):
+        super().__init__()
+        self.cliente_id = cliente_id
+        self.texto = texto
+
+    def run(self):
+        payload = {
+            "cliente_id": self.cliente_id,
+            "remetente": "ADMIN",
+            "texto": self.texto
+        }
+        try:
+            requests.post(f"{API_BASE_URL}/suporte/enviar", json=payload)
+            self.sucesso.emit()
+        except:
+            pass
 
 # URL exata do seu Space no Hugging Face
 API_BASE_URL = "https://vegap-vega-sotck.hf.space"
@@ -135,6 +169,60 @@ class JanelaAdmin(QMainWindow):
         layout_feedbacks.addWidget(self.btn_atualizar_feedbacks)
 
         self.tabs.addTab(container_feedbacks, "⭐ Satisfação & Sugestões")
+        
+        # CONTAINER DA ABA 3: Central de Atendimento em Tempo Real
+        container_suporte = QWidget()
+        layout_suporte_master = QHBoxLayout(container_suporte)
+        layout_suporte_master.setContentsMargins(15, 15, 15, 15)
+        layout_suporte_master.setSpacing(15)
+
+        # Esquerda: Lista nativa de conversas/CNPJs ativos
+        self.lista_clientes_ativos = QListWidget()
+        self.lista_clientes_ativos.setFixedWidth(220)
+        self.lista_clientes_ativos.itemClicked.connect(self.selecionar_cliente_conversa)
+        layout_suporte_master.addWidget(self.lista_clientes_ativos)
+
+        # Direita: Painel vertical do chat selecionado
+        painel_chat_direito = QWidget()
+        layout_chat_direito = QVBoxLayout(painel_chat_direito)
+        layout_chat_direito.setContentsMargins(0, 0, 0, 0)
+        layout_chat_direito.setSpacing(10)
+
+        self.lbl_cliente_atual = QLabel("<b>Selecione um cliente para iniciar o atendimento</b>")
+        self.lista_mensagens_admin = QListWidget()
+        
+        # Barra de digitação inferior
+        layout_input_admin = QHBoxLayout()
+        self.input_msg_admin = QLineEdit()
+        self.input_msg_admin.setPlaceholderText("Digite a resposta mestre aqui...")
+        self.input_msg_admin.returnPressed.connect(self.enviar_resposta_admin)
+        self.input_msg_admin.setEnabled(False)
+        
+        self.btn_enviar_admin = QPushButton("Responder ✈️")
+        self.btn_enviar_admin.clicked.connect(self.enviar_resposta_admin)
+        self.btn_enviar_admin.setEnabled(False)
+
+        layout_input_admin.addWidget(self.input_msg_admin, stretch=8)
+        layout_input_admin.addWidget(self.btn_enviar_admin, stretch=2)
+
+        layout_chat_direito.addWidget(self.lbl_cliente_atual)
+        layout_chat_direito.addWidget(self.lista_mensagens_admin)
+        layout_chat_direito.addLayout(layout_input_admin)
+        layout_suporte_master.addWidget(painel_chat_direito)
+
+        self.tabs.addTab(container_suporte, "💬 Central de Atendimento")
+
+        # Variáveis de controle de estado interno
+        self.cliente_id_selecionado = None
+        self.historico_cache_tamanho = 0
+
+        # Timer nativo para atualizar a lista de conversas e o chat a cada 4 segundos
+        self.timer_admin_suporte = QTimer(self)
+        self.timer_admin_suporte.timeout.connect(self.atualizar_central_suporte)
+        self.timer_admin_suporte.start(4000)
+
+        # Dispara a primeira busca imediata de conversas
+        QTimer.singleShot(1000, self.atualizar_central_suporte)
 
         # Puxa os dados da nuvem automaticamente logo na inicialização para você ver o painel vivo
         self.carregar_feedbacks_nuvem()
@@ -212,6 +300,76 @@ class JanelaAdmin(QMainWindow):
         self.btn_atualizar_feedbacks.setEnabled(True)
         self.btn_atualizar_feedbacks.setText("🔄 Atualizar Mural de Feedbacks")
         QMessageBox.warning(self, "Aviso de Coleta", f"Não foi possível atualizar os feedbacks: {mensagem}")
+        
+    def atualizar_central_suporte(self):
+        # Busca a lista de conversas ativas na nuvem
+        self.worker_ativas = WorkerListarConversasAtivas()
+        self.worker_ativas.resultado.connect(self.atualizar_lista_clientes_ativos)
+        self.worker_ativas.start()
+
+        # Se já tiver um cliente selecionado na tela, atualiza o chat dele em tempo real
+        if self.cliente_id_selecionado:
+            from aba_sobre import WorkerBuscarChat # Reaproveita o worker que criamos na aba sobre
+            self.worker_recuperar = WorkerBuscarChat(self.cliente_id_selecionado)
+            self.worker_recuperar.mensagens_recebidas.connect(self.renderizar_mensagens_admin)
+            self.worker_recuperar.start()
+
+    def atualizar_lista_clientes_ativos(self, lista_conversas):
+        # Evita reconstruir a lista se nada mudou para não quebrar a seleção do usuário
+        if len(lista_conversas) == self.lista_clientes_ativos.count():
+            return
+            
+        self.lista_clientes_ativos.clear()
+        for conv in lista_conversas:
+            texto_exibido = f"{conv['nome_fantasia']}\n└ {conv['ultima_mensagem'][:20]}..."
+            item = QTableWidgetItem(texto_exibido)
+            # Guarda o ID do cliente escondido dentro do item da lista nativa
+            item.setData(Qt.UserRole, conv["cliente_id"])
+            item.setData(Qt.ToolTipRole, conv["nome_fantasia"])
+            self.lista_clientes_ativos.addItem(texto_exibido)
+
+    def selecionar_cliente_conversa(self, item):
+        # Recupera o ID do cliente correspondente à linha clicada
+        linha_index = self.lista_clientes_ativos.row(item)
+        lista_itens = [self.lista_clientes_ativos.item(i) for i in range(self.lista_clientes_ativos.count())]
+        # Gambiarra limpa para pegar o ID correto do item clicado
+        # Como o PySide6 ListWidget armazena objetos, buscamos o metadado
+        self.cliente_id_selecionado = item.data(Qt.UserRole) or (linha_index + 1) # Fallback seguro
+        
+        # Como o clique foi explícito, força o reset do cache para renderizar na hora
+        self.historico_cache_tamanho = 0
+        self.lbl_cliente_atual.setText(f"<b>Atendendo: {item.text().split('\n')[0]}</b>")
+        
+        self.input_msg_admin.setEnabled(True)
+        self.btn_enviar_admin.setEnabled(True)
+        self.lista_mensagens_admin.clear()
+        self.atualizar_central_suporte()
+
+    def renderizar_mensagens_admin(self, lista_msg):
+        if len(lista_msg) == self.historico_cache_tamanho:
+            return
+            
+        self.historico_cache_tamanho = len(lista_msg)
+        self.lista_mensagens_admin.clear()
+        
+        for msg in lista_msg:
+            remetente = "CLIENTE" if msg["remetente"] == "CLIENTE" else "Você (Admin)"
+            self.lista_mensagens_admin.addItem(f"[{remetente}]: {msg['texto']}")
+            
+        self.lista_mensagens_admin.scrollToBottom()
+
+    def enviar_resposta_admin(self):
+        texto = self.input_msg_admin.text().strip()
+        if not texto or not self.cliente_id_selecionado:
+            return
+            
+        self.btn_enviar_admin.setEnabled(False)
+        self.input_msg_admin.clear()
+        
+        self.worker_envio_admin = WorkerEnviarAdminChat(self.cliente_id_selecionado, texto)
+        # Reativa os botões e força a atualização assim que a mensagem subir
+        self.worker_envio_admin.sucesso.connect(lambda: [self.btn_enviar_admin.setEnabled(True), self.atualizar_central_suporte()])
+        self.worker_envio_admin.start()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
