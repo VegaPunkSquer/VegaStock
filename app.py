@@ -2,6 +2,8 @@ import sys
 import os
 import requests
 import ctypes
+from aba_sobre import AbaSobre
+import re
 from datetime import datetime
 from PySide6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
                                QLabel, QHBoxLayout, QStackedWidget,QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout) # ADICIONADO QFrame
@@ -216,6 +218,10 @@ class MainWindow(QMainWindow):
         # Chama a função que tranca tudo logo que o app abre!
         # ========================================================
         self.atualizar_bloqueios_interface()
+        self.atualizar_bloqueios_interface()
+        
+        # Gatilho automático para verificar os 80% do prazo de testes
+        self.verificar_trigger_feedback()
         
     def mudar_aba(self, index):
         self.area_central.setCurrentIndex(index)
@@ -416,3 +422,43 @@ def iniciar_app():
 
 if __name__ == "__main__":
     iniciar_app()
+    
+def verificar_trigger_feedback(self):
+        status = self.cliente_dados.get("status_assinatura")
+        validade_str = self.cliente_dados.get("validade_pro")
+        cliente_id = self.cliente_dados.get("cliente_id") or self.cliente_dados.get("id")
+        plano = self.cliente_dados.get("plano", "BÁSICO")
+
+        if status == "TESTE" and validade_str and cliente_id:
+            try:
+                # Trata a string de data vinda do JSON do backend
+                validade_limpa = validade_str.split(".")[0].replace("Z", "")
+                data_validade = datetime.fromisoformat(validade_limpa)
+                agora = datetime.utcnow()
+                
+                dias_restantes = (data_validade - agora).total_seconds() / 86400
+                
+                # Heurística dos 80% passados (20% ou menos de tempo restante):
+                # Se for teste de 7 dias, dispara com 1.5 dias ou menos.
+                # Se for teste de 30 dias, dispara com 6 dias ou menos.
+                disparar = False
+                if 0 < dias_restantes <= 1.5:
+                    disparar = True
+                elif 2.0 < dias_restantes <= 6.0:
+                    disparar = True
+
+                if disparar:
+                    # Uso estrito de caminhos absolutos dinâmicos para a trava local
+                    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+                    caminho_trava = os.path.join(BASE_DIR, f".feedback_enviado_{cliente_id}.txt")
+                    
+                    # Se o arquivo de trava não existir, abre a janela e bloqueia repetições
+                    if not os.path.exists(caminho_trava):
+                        from dialog_feedback import DialogFeedback
+                        API_URL = "https://vegap-vega-sotck.hf.space"
+                        dialogo = DialogFeedback(API_URL, cliente_id, plano, self)
+                        if dialogo.exec() == DialogFeedback.Accepted:
+                            with open(caminho_trava, "w") as f:
+                                f.write(f"Enviado em {agora.isoformat()}")
+            except Exception as e:
+                print(f"Erro no trigger de feedback: {e}")
