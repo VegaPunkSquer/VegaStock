@@ -130,7 +130,18 @@ class AbaEquipe(QWidget):
         self.input_cargo.setPlaceholderText("Ex: Estoquista, Gerente")
 
         form_inputs.addRow("Login:", self.input_login)
-        form_inputs.addRow("Senha:", self.input_senha)
+        
+        # Container horizontal para o campo e o botão do olhinho ficarem lado a lado
+        layout_senha_olho = QHBoxLayout()
+        layout_senha_olho.addWidget(self.input_senha)
+        
+        self.btn_olho_equipe = QPushButton("👁️")
+        self.btn_olho_equipe.setFixedWidth(35)
+        self.btn_olho_equipe.setStyleSheet("padding: 5px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;")
+        self.btn_olho_equipe.clicked.connect(self.toggle_senha_equipe)
+        layout_senha_olho.addWidget(self.btn_olho_equipe)
+        
+        form_inputs.addRow("Senha:", layout_senha_olho)
         
         # --- INÍCIO: FEEDBACK VISUAL DA SENHA (NOVO) ---
         self.input_senha.textChanged.connect(self.validar_senha_tempo_real)
@@ -476,3 +487,11 @@ class AbaEquipe(QWidget):
                 self.carregar_equipe()
             except: 
                 pass
+            
+    def toggle_senha_equipe(self):
+        if self.input_senha.echoMode() == QLineEdit.Password:
+            self.input_senha.setEchoMode(QLineEdit.Normal)
+            self.btn_olho_equipe.setText("🔒")
+        else:
+            self.input_senha.setEchoMode(QLineEdit.Password)
+            self.btn_olho_equipe.setText("👁️")

@@ -751,28 +751,26 @@ def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
     # ========================================================
     if not user_id: 
         cliente = db.query(models.Cliente).filter(models.Cliente.id == cliente_id).first()
-        # Conta quantos funcionários existem ignorando o Admin master se necessário, ou contando o total do bloco
         qtd_atual = db.query(models.Usuario).filter(models.Usuario.cliente_id == cliente_id).count()
         
         if cliente and qtd_atual >= cliente.limite_contas:
             raise HTTPException(status_code=400, detail=f"Limite de {cliente.limite_contas} contas atingido.")
     # ========================================================
 
-    # Se passou da barreira e tem ID, edita. Se não, cria novo.
     if user_id:
         usuario = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
     else:
         usuario = models.Usuario(cliente_id=cliente_id)
         db.add(usuario)
     
-    usuario.login = dados["login"]
+    usuario.login = dados.get("login")
     if dados.get("senha"): 
         usuario.senha = gerar_hash(dados["senha"]) 
-    usuario.cargo = dados["cargo"]
-    usuario.nivel_acesso = "Equipe" # <--- A BALA DE PRATA: Garante que a API não vai inventar de ser Admin
-    
-    # Transforma a lista do front ['estoque', 'relatorios'] em string "estoque,relatorios"
-    usuario.permissoes = ",".join(dados["permissoes"])
+    usuario.cargo = dados.get("cargo")
+    usuario.nivel_acesso = "Equipe"
+    usuario.permissoes = ",".join(dados.get("permissoes", []))
     
     db.commit()
     return {"status": "sucesso"}

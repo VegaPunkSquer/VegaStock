@@ -75,27 +75,56 @@ class AbaConta(QWidget):
         lbl_senha_titulo.setStyleSheet("font-weight: bold; font-size: 16px; border: none;")
         layout_senha.addWidget(lbl_senha_titulo)
 
-        # Campos de Senha
+        # Estilo padrão para os botões de olhinho da aba conta
+        estilo_olho = "padding: 7px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px;"
+
+        # 1. Campo Senha Atual com Olhinho
         self.input_senha_atual = QLineEdit()
         self.input_senha_atual.setPlaceholderText("Senha Atual")
         self.input_senha_atual.setEchoMode(QLineEdit.Password)
-        self.input_senha_atual.setFixedWidth(300)
         self.input_senha_atual.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
-        layout_senha.addWidget(self.input_senha_atual)
+        
+        layout_sa = QHBoxLayout()
+        layout_sa.addWidget(self.input_senha_atual)
+        self.btn_olho_sa = QPushButton("👁️")
+        self.btn_olho_sa.setFixedWidth(35)
+        self.btn_olho_sa.setStyleSheet(estilo_olho)
+        self.btn_olho_sa.clicked.connect(lambda: self.toggle_campo_senha(self.input_senha_atual, self.btn_olho_sa))
+        layout_sa.addWidget(self.btn_olho_sa)
+        layout_sa.addStretch()
+        layout_senha.addLayout(layout_sa)
 
+        # 2. Campo Nova Senha com Olhinho
         self.input_nova_senha = QLineEdit()
         self.input_nova_senha.setPlaceholderText("Nova Senha")
         self.input_nova_senha.setEchoMode(QLineEdit.Password)
-        self.input_nova_senha.setFixedWidth(300)
         self.input_nova_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
-        layout_senha.addWidget(self.input_nova_senha)
+        
+        layout_ns = QHBoxLayout()
+        layout_ns.addWidget(self.input_nova_senha)
+        self.btn_olho_ns = QPushButton("👁️")
+        self.btn_olho_ns.setFixedWidth(35)
+        self.btn_olho_ns.setStyleSheet(estilo_olho)
+        self.btn_olho_ns.clicked.connect(lambda: self.toggle_campo_senha(self.input_nova_senha, self.btn_olho_ns))
+        layout_ns.addWidget(self.btn_olho_ns)
+        layout_ns.addStretch()
+        layout_senha.addLayout(layout_ns)
 
+        # 3. Campo Confirmar Senha com Olhinho
         self.input_confirma_senha = QLineEdit()
         self.input_confirma_senha.setPlaceholderText("Confirmar Nova Senha")
         self.input_confirma_senha.setEchoMode(QLineEdit.Password)
-        self.input_confirma_senha.setFixedWidth(300)
         self.input_confirma_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
-        layout_senha.addWidget(self.input_confirma_senha)
+        
+        layout_cs = QHBoxLayout()
+        layout_cs.addWidget(self.input_confirma_senha)
+        self.btn_olho_cs = QPushButton("👁️")
+        self.btn_olho_cs.setFixedWidth(35)
+        self.btn_olho_cs.setStyleSheet(estilo_olho)
+        self.btn_olho_cs.clicked.connect(lambda: self.toggle_campo_senha(self.input_confirma_senha, self.btn_olho_cs))
+        layout_cs.addWidget(self.btn_olho_cs)
+        layout_cs.addStretch()
+        layout_senha.addLayout(layout_cs)
 
         btn_salvar_senha = QPushButton("Atualizar Senha")
         btn_salvar_senha.setFixedWidth(150)
@@ -132,12 +161,19 @@ class AbaConta(QWidget):
         self.input_pin.setMaxLength(4)
         self.input_pin.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
         
+        # Botão de olhinho para o PIN do mobile
+        self.btn_olho_pin = QPushButton("👁️")
+        self.btn_olho_pin.setFixedWidth(35)
+        self.btn_olho_pin.setStyleSheet("padding: 7px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px;")
+        self.btn_olho_pin.clicked.connect(lambda: self.toggle_campo_senha(self.input_pin, self.btn_olho_pin))
+        
         btn_salvar_pin = QPushButton("Salvar PIN Operacional")
         btn_salvar_pin.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px; border-radius: 3px;")
         btn_salvar_pin.clicked.connect(self.salvar_pin_mobile)
 
         layout_pin.addWidget(self.input_nome_operador)
         layout_pin.addWidget(self.input_pin)
+        layout_pin.addWidget(self.btn_olho_pin) # Injetado entre o PIN e o Salvar
         layout_pin.addWidget(btn_salvar_pin)
         
         layout_mobile.addLayout(layout_pin)
@@ -287,6 +323,14 @@ class AbaConta(QWidget):
                 QMessageBox.information(self, "Sucesso", "PIN do Mobile configurado com sucesso!")
         except Exception as e:
             QMessageBox.critical(self, "Erro", "Erro ao salvar PIN."),
+            
+    def toggle_campo_senha(self, campo_input, botao_clicado):
+        if campo_input.echoMode() == QLineEdit.Password:
+            campo_input.setEchoMode(QLineEdit.Normal)
+            botao_clicado.setText("🔒")
+        else:
+            campo_input.setEchoMode(QLineEdit.Password)
+            botao_clicado.setText("👁️")
             
     def refresh_ui(self):
         """Atualiza os textos da tela com os novos dados sincronizados."""
