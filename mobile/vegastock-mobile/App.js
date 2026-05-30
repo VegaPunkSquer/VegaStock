@@ -21,6 +21,10 @@ export default function App() {
   const [loginUsuario, setLoginUsuario] = useState('');
   const [senhaUsuario, setSenhaUsuario] = useState('');
   const [pinDigitado, setPinDigitado] = useState('');
+  
+  // Estados para controlar a visibilidade dos olhinhos (Verdadeiro = Oculto)
+  const [ocultarSenha, setOcultarSenha] = useState(true);
+  const [ocultarPin, setOcultarPin] = useState(true);
 
   // ==========================================
   // ESTADOS DO ESTOQUE
@@ -35,7 +39,7 @@ export default function App() {
   const [quantidade, setQuantidade] = useState('');
   const [produtosCatalogo, setProdutosCatalogo] = useState([]);
 
-  const API_URL = "https://vegastock.onrender.com";
+  const API_URL = "https://vegap-vega-stock.hf.space";
 
   if (!permission) return <View />;
   if (!permission.granted) {
@@ -193,7 +197,21 @@ export default function App() {
       <View style={styles.containerEscuro}>
         <Text style={styles.tituloSecundario}>Acesso da Equipe</Text>
         <TextInput style={styles.inputAuth} placeholder="Login" placeholderTextColor="#777" value={loginUsuario} onChangeText={setLoginUsuario} />
-        <TextInput style={styles.inputAuth} placeholder="Senha" placeholderTextColor="#777" secureTextEntry value={senhaUsuario} onChangeText={setSenhaUsuario} />
+        
+        {/* Bloco horizontal para embutir o olhinho da senha */}
+        <View style={{ width: '90%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#2b2b36', borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#444' }}>
+          <TextInput 
+            style={{ flex: 1, color: '#fff', fontSize: 18, padding: 15, textAlign: 'center' }} 
+            placeholder="Senha" 
+            placeholderTextColor="#777" 
+            secureTextEntry={ocultarSenha} 
+            value={senhaUsuario} 
+            onChangeText={setSenhaUsuario} 
+          />
+          <TouchableOpacity style={{ padding: 15 }} onPress={() => setOcultarSenha(!ocultarSenha)}>
+            <Text style={{ fontSize: 20 }}>{ocultarSenha ? '👁️' : '🔒'}</Text>
+          </TouchableOpacity>
+        </View>
         
         <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginSenha} disabled={carregando}>
           {carregando ? (
@@ -213,7 +231,22 @@ export default function App() {
         <Text style={styles.tituloSecundario}>Operador de Turno</Text>
         <Text style={{color: '#fff', fontSize: 18, marginBottom: 15}}>Digite seu PIN de 4 dígitos</Text>
         
-        <TextInput style={styles.inputPin} placeholder="****" placeholderTextColor="#777" keyboardType="numeric" secureTextEntry maxLength={4} value={pinDigitado} onChangeText={setPinDigitado} />
+        {/* Bloco horizontal para embutir o olhinho do PIN operacional */}
+        <View style={{ width: '80%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1f', borderRadius: 10, borderWidth: 2, borderColor: '#555', marginBottom: 15 }}>
+          <TextInput 
+            style={{ flex: 1, color: '#FFD700', fontSize: 40, padding: 15, textAlign: 'center', letterSpacing: 15 }} 
+            placeholder="****" 
+            placeholderTextColor="#777" 
+            keyboardType="numeric" 
+            secureTextEntry={ocultarPin} 
+            maxLength={4} 
+            value={pinDigitado} 
+            onChangeText={setPinDigitado} 
+          />
+          <TouchableOpacity style={{ padding: 15 }} onPress={() => setOcultarPin(!ocultarPin)}>
+            <Text style={{ fontSize: 22 }}>{ocultarPin ? '👁️' : '🔒'}</Text>
+          </TouchableOpacity>
+        </View>
         
         <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginPin}  disabled={carregando}>
           {carregando ? (
