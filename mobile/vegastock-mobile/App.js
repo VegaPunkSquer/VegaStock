@@ -381,10 +381,13 @@ export default function App() {
           <Text style={styles.btnText}>⬆️ REGISTRAR SAÍDA</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={{marginTop: 50, padding: 15, backgroundColor: '#eee', borderRadius: 8}} onPress={() => {
+        {/* Adicionado largura fixa de 90% idêntica aos outros botões e centralização de texto flexível */}
+        <TouchableOpacity style={{width: '90%', marginTop: 40, padding: 15, backgroundColor: '#eee', borderRadius: 12, alignItems: 'center', justifyContent: 'center'}} onPress={() => {
             setOperadorLogado(''); setEtapaAuth('INICIO'); 
           }}>
-          <Text style={{color: '#f44336', fontWeight: 'bold', fontSize: 16}}>🚪 SAIR DA CONTA</Text>
+          <Text style={{color: '#f44336', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>
+            🚪 SAIR DA CONTA
+          </Text>
         </TouchableOpacity>
       </View>
     );
