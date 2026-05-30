@@ -6,6 +6,32 @@ from PySide6.QtWidgets import (QApplication, QLabel, QMainWindow, QWidget, QHBox
                                QGroupBox, QFormLayout, QLineEdit, QComboBox, QDateEdit, 
                                QPushButton, QMessageBox, QListWidget, QAbstractItemView, QTabWidget)
 
+class WorkerListarWhitelist(QThread):
+    resultado = Signal(list)
+    erro = Signal(str)
+
+    def run(self):
+        # Agora o endpoint bate na rota GET oficial autenticada
+        url_alvo = f"{API_BASE_URL}/admin/whitelist"
+        headers = {"token-master": TOKEN_MASTER}
+        
+        print(f"\n[DEBUG MASTER] 📡 Iniciando requisição GET para: {url_alvo}")
+        try:
+            response = requests.get(url_alvo, headers=headers, timeout=10)
+            print(f"[DEBUG MASTER] 🎯 Resposta da API recebida. Status Code: {response.status_code}")
+            
+            if response.status_code == 200:
+                dados_json = response.json()
+                print(f"[DEBUG MASTER] 📦 Dados brutos recebidos da Neon (Qtd: {len(dados_json)} itens): {dados_json}")
+                self.resultado.emit(dados_json)
+            else:
+                msg = f"Servidor recusou a consulta. Status: {response.status_code} - {response.text}"
+                print(f"[DEBUG MASTER] ❌ Erro de status: {msg}")
+                self.erro.emit(msg)
+        except Exception as e:
+            msg_falha = f"Falha de conexão física/timeout com a API: {str(e)}"
+            print(f"[DEBUG MASTER] 💥 Exceção capturada na Thread: {msg_falha}")
+            self.erro.emit(msg_falha)
 class WorkerListarFeedbacks(QThread):
     resultado = Signal(list)
     erro = Signal(str)
@@ -117,7 +143,18 @@ class JanelaAdmin(QMainWindow):
         self.tabela_clientes.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.tabela_clientes.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tabela_clientes.setSelectionBehavior(QAbstractItemView.SelectRows)
-        layout_principal.addWidget(self.tabela_clientes, stretch=6)
+        
+        # Cria um container vertical para a esquerda comportar a tabela + o botão de atualizar
+        layout_esquerda_tabela = QVBoxLayout()
+        layout_esquerda_tabela.addWidget(self.tabela_clientes)
+        
+        # Botão nativo para forçar a renderização dos dados da Neon
+        self.btn_atualizar_whitelist = QPushButton("🔄 Atualizar Lista de CNPJ")
+        self.btn_atualizar_whitelist.setStyleSheet("padding: 8px; font-weight: bold;")
+        self.btn_atualizar_whitelist.clicked.connect(self.carregar_whitelist_banco)
+        layout_esquerda_tabela.addWidget(self.btn_atualizar_whitelist)
+        
+        layout_principal.addLayout(layout_esquerda_tabela, stretch=6)
 
         # ========================================================
         # DIREITA: Formulário de Pré-Autorização de Testes (Whitelist)
@@ -226,6 +263,33 @@ class JanelaAdmin(QMainWindow):
 
         # Puxa os dados da nuvem automaticamente logo na inicialização para você ver o painel vivo
         self.carregar_feedbacks_nuvem()
+        
+        # Aumentado para 1.5 segundos para garantir que o layout do Windows terminou de desenhar a tabela
+        QTimer.singleShot(1500, self.carregar_whitelist_banco)
+
+    def carregar_whitelist_banco(self):
+        self.worker_wl = WorkerListarWhitelist()
+        self.worker_wl.resultado.connect(self.sucesso_renderizar_whitelist)
+        self.worker_wl.start()
+
+    def sucesso_renderizar_whitelist(self, lista_whitelist):
+        self.tabela_clientes.setRowCount(0)
+        if not lista_whitelist:
+            return
+            
+        for i, wl in enumerate(lista_whitelist):
+            self.tabela_clientes.insertRow(i)
+            
+            # Formata a data com segurança vinda do Neon
+            data_crua = wl.get("data_fim", "")
+            if "T" in data_crua:
+                data_crua = data_crua.split("T")[0]
+            data_br = "/".join(data_crua.split("-")[::-1]) if "-" in data_crua else data_crua
+            
+            # Insere as colunas na tabela nativa do Qt
+            self.tabela_clientes.setItem(i, 0, QTableWidgetItem(str(wl.get("cnpj", ""))))
+            self.tabela_clientes.setItem(i, 1, QTableWidgetItem(str(wl.get("plano", "BÁSICO"))))
+            self.tabela_clientes.setItem(i, 2, QTableWidgetItem(data_br))
 
     def executar_liberacao_cnpj(self):
         cnpj_cru = self.input_cnpj.text().strip()
@@ -252,15 +316,11 @@ class JanelaAdmin(QMainWindow):
         self.btn_enviar.setEnabled(True)
         self.btn_enviar.setText("Liberar Acesso Gratuito")
         
-        # Alimenta a tabela local temporariamente para feedback visual imediato
-        linha = self.tabela_clientes.rowCount()
-        self.tabela_clientes.insertRow(linha)
-        self.tabela_clientes.setItem(linha, 0, QTableWidgetItem(self.input_cnpj.text()))
-        self.tabela_clientes.setItem(linha, 1, QTableWidgetItem(self.combo_plano.currentText()))
-        self.tabela_clientes.setItem(linha, 2, QTableWidgetItem(self.date_final.date().toString("dd/MM/yyyy")))
-
         QMessageBox.information(self, "Sucesso Master", mensagem)
         self.input_cnpj.clear()
+        
+        # Força a tabela a ir na nuvem e buscar a lista atualizada com o novo CNPJ!
+        self.carregar_whitelist_banco()
 
     def erro_whitelist(self, mensagem):
         self.btn_enviar.setEnabled(True)
@@ -315,18 +375,21 @@ class JanelaAdmin(QMainWindow):
             self.worker_recuperar.start()
 
     def atualizar_lista_clientes_ativos(self, lista_conversas):
-        # Evita reconstruir a lista se nada mudou para não quebrar a seleção do usuário
+        from PySide6.QtWidgets import QListWidgetItem # Importa o item de lista correto!
+        
         if len(lista_conversas) == self.lista_clientes_ativos.count():
             return
             
         self.lista_clientes_ativos.clear()
         for conv in lista_conversas:
             texto_exibido = f"{conv['nome_fantasia']}\n└ {conv['ultima_mensagem'][:20]}..."
-            item = QTableWidgetItem(texto_exibido)
-            # Guarda o ID do cliente escondido dentro do item da lista nativa
+            
+            # Corrigido para QListWidgetItem nativo! O app nunca mais vai fechar sozinho!
+            item = QListWidgetItem(texto_exibido)
             item.setData(Qt.UserRole, conv["cliente_id"])
-            item.setData(Qt.ToolTipRole, conv["nome_fantasia"])
-            self.lista_clientes_ativos.addItem(texto_exibido)
+            item.setToolTip(conv["nome_fantasia"])
+            
+            self.lista_clientes_ativos.addItem(item)
 
     def selecionar_cliente_conversa(self, item):
         # Recupera o ID do cliente correspondente à linha clicada
@@ -371,6 +434,60 @@ class JanelaAdmin(QMainWindow):
         # Reativa os botões e força a atualização assim que a mensagem subir
         self.worker_envio_admin.sucesso.connect(lambda: [self.btn_enviar_admin.setEnabled(True), self.atualizar_central_suporte()])
         self.worker_envio_admin.start()
+
+    def carregar_whitelist_banco(self):
+        print("\n[DEBUG MASTER] 🔀 Método 'carregar_whitelist_banco' acionado na interface.")
+        self.btn_atualizar_whitelist.setEnabled(False)
+        self.btn_atualizar_whitelist.setText("⏳ Conectando ao Banco Neon...")
+        
+        self.worker_wl = WorkerListarWhitelist()
+        print("[DEBUG MASTER] 🔗 Conectando Signals da Thread à Janela Principal...")
+        self.worker_wl.resultado.connect(self.sucesso_renderizar_whitelist)
+        self.worker_wl.erro.connect(self.erro_renderizar_whitelist)
+        
+        print("[DEBUG MASTER] 🚀 Disparando Thread do Worker...")
+        self.worker_wl.start()
+
+    def sucesso_renderizar_whitelist(self, lista_whitelist):
+        print(f"\n[DEBUG MASTER] ✅ Slot de sucesso atingido. Renderizando {len(lista_whitelist)} itens na QTableWidget.")
+        self.btn_atualizar_whitelist.setEnabled(True)
+        self.btn_atualizar_whitelist.setText("🔄 Atualizar Lista de CNPJ")
+        
+        if not lista_whitelist:
+            print("[DEBUG MASTER] ⚠️ Alerta: A lista retornada da API está vazia!")
+            QMessageBox.warning(self, "Aviso de Banco Vazio", "A requisição com a Neon funcionou, mas não há nenhum CNPJ cadastrado nessa tabela.")
+            self.tabela_clientes.setRowCount(0)
+            return
+            
+        self.tabela_clientes.setRowCount(0)
+        for i, wl in enumerate(lista_whitelist):
+            self.tabela_clientes.insertRow(i)
+            
+            data_crua = wl.get("data_fim", "")
+            if "T" in data_crua:
+                data_crua = data_crua.split("T")[0]
+            data_br = "/".join(data_crua.split("-")[::-1]) if "-" in data_crua else data_crua
+            
+            cnpj_banco = str(wl.get("cnpj_whitelist", ""))
+            print(f"[DEBUG MASTER] ✏️ Montando Linha {i} -> CNPJ Cru: {cnpj_banco} | Plano: {wl.get('plano')} | Fim: {data_br}")
+            
+            if len(cnpj_banco) == 14:
+                cnpj_formatado = f"{cnpj_banco[:2]}.{cnpj_banco[2:5]}.{cnpj_banco[5:8]}/{cnpj_banco[8:12]}-{cnpj_banco[12:]}"
+            else:
+                cnpj_formatado = cnpj_banco
+
+            self.tabela_clientes.setItem(i, 0, QTableWidgetItem(cnpj_formatado))
+            self.tabela_clientes.setItem(i, 1, QTableWidgetItem(str(wl.get("plano", "BÁSICO")).upper()))
+            self.tabela_clientes.setItem(i, 2, QTableWidgetItem(data_br))
+        print("[DEBUG MASTER] 🏁 Fim do fluxo de preenchimento da tabela visual.\n")
+
+    def erro_renderizar_whitelist(self, mensagem_erro):
+        print(f"\n[DEBUG MASTER] 🚨 Slot de ERRO atingido na Interface: {mensagem_erro}")
+        self.btn_atualizar_whitelist.setEnabled(True)
+        self.btn_atualizar_whitelist.setText("🔄 Atualizar Lista de CNPJ")
+        
+        QMessageBox.critical(self, "Erro de Conexão Whitelist", f"Ocorreu um problema ao tentar ler o banco de dados:\n\n{mensagem_erro}")
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)

@@ -1086,6 +1086,24 @@ def adicionar_cnpj_whitelist(dados: schemas.WhitelistCreate, token_master: str =
     db.commit()
     return {"status": "sucesso", "mensagem": f"CNPJ {cnpj_limpo} liberado para testes!"}
 
+# --- NOVA ROTA JÁ DISPONÍVEL NO SEU BACKEND PARA O PAINEL ADMIN ---
+@app.get("/admin/whitelist")
+def listar_whitelist_admin(token_master: str = Header(None), db: Session = Depends(get_db)):
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    # Puxa todas as pré-autorizações direto do banco Neon
+    itens = db.query(models.CnpjWhitelist).order_by(models.CnpjWhitelist.id.desc()).all()
+    
+    lista_retorno = []
+    for item in itens:
+        lista_retorno.append({
+            "cnpj_whitelist": item.cnpj,  # Retorna a chave que o admin precisa ler
+            "plano": item.plano,
+            "data_fim": item.data_fim.isoformat() if item.data_fim else ""
+        })
+    return lista_retorno
+
 # 2. Rota que o App do Cliente vai bater para checar se ganha licença grátis
 @app.get("/verificar_whitelist/{cnpj}")
 def verificar_whitelist_cliente(cnpj: str, db: Session = Depends(get_db)):
