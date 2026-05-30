@@ -223,6 +223,15 @@ class MainWindow(QMainWindow):
         # Gatilho automático para verificar os 80% do prazo de testes
         self.verificar_trigger_feedback()
         
+        # Aplica a escala salva na inicialização chamando o loop correto da própria aba_cnt que já criamos
+        from PySide6.QtCore import QSettings
+        config = QSettings("VegaStock", "Preferencias")
+        indice_salvo = int(config.value("escala_fonte_index", 0))
+        
+        # Dispara o loop usando a aba real que acabamos de setar na linha acima
+        if hasattr(self, 'aba_cnt'):
+            self.aba_cnt.mudar_escala_aplicativo(indice_salvo)
+        
     def mudar_aba(self, index):
         self.area_central.setCurrentIndex(index)
 

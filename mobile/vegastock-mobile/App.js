@@ -21,8 +21,9 @@ export default function App() {
   const [loginUsuario, setLoginUsuario] = useState('');
   const [senhaUsuario, setSenhaUsuario] = useState('');
   const [pinDigitado, setPinDigitado] = useState('');
-  
-  // Estados para controlar a visibilidade dos olhinhos (Verdadeiro = Oculto)
+
+  // Controle de Pareamento e Olhinhos (Novos e sem duplicidade)
+  const [empresaPareada, setEmpresaPareada] = useState(false); 
   const [ocultarSenha, setOcultarSenha] = useState(true);
   const [ocultarPin, setOcultarPin] = useState(true);
 
@@ -107,6 +108,23 @@ export default function App() {
     setScanned(true);
     const codigoLimpo = String(data).trim();
 
+    // ========================================================
+    // INTERCEPTADOR DE PAREAMENTO: Se não tiver pareado, o bip é do monitor!
+    // ========================================================
+    if (!empresaPareada) {
+      const idCapturado = parseInt(codigoLimpo, 10);
+      if (!isNaN(idCapturado)) {
+        setClienteIdContexto(idCapturado);
+        setEmpresaPareada(true);
+        setEtapaAuth('LOGIN_UNIFICADO'); // Joga para a nova tela de login único que vamos criar
+        Alert.alert("Sucesso", "Celular vinculado ao estabelecimento com sucesso!");
+      } else {
+        Alert.alert("Erro", "QR Code de pareamento inválido.");
+      }
+      return; // Para a execução aqui para não tentar buscar o ID como produto
+    }
+
+    // Fluxo original de bipes de produtos mantido intacto
     try {
       let resposta = await fetch(`${API_URL}/produto_por_codigo/${clienteIdContexto}/${codigoLimpo}`);
       if (resposta.status === 200) {
@@ -171,38 +189,78 @@ export default function App() {
   // RENDERIZAÇÃO DAS TELAS
   // ==========================================
   
-  // TELA 1: ESCOLHA DE ACESSO
+  // TELA 1: ESCOLHA DE ACESSO (UNIFICADA COM PAREAMENTO)
   if (etapaAuth === 'INICIO') {
+    // Se o celular já guardou o pareamento do monitor, pula o bloqueio e abre direto o Login Unificado
+    if (empresaPareada) {
+      setEtapaAuth('LOGIN_UNIFICADO');
+    }
+
     return (
       <View style={styles.containerEscuro}>
         <Text style={styles.tituloSecundario}>Bem-vindo ao</Text>
-        <Text style={{fontSize: 40, fontWeight: 'bold', color: '#FFD700', marginBottom: 50}}>VegaStock</Text>
+        <Text style={{fontSize: 40, fontWeight: 'bold', color: '#FFD700', marginBottom: 20}}>VegaStock</Text>
         
-        <TouchableOpacity style={styles.botaoGigante} onPress={() => setEtapaAuth('SENHA')}>
-          <Text style={styles.btnTextEscuro}>Acesso da Equipe</Text>
-          <Text style={{color: '#333'}}>Login e Senha</Text>
-        </TouchableOpacity>
+        <Text style={{color: '#aaa', fontSize: 15, textAlign: 'center', marginHorizontal: 25, marginBottom: 40, lineHeight: 22}}>
+          Para iniciar, vincule este aplicativo ao painel administrativo do seu computador.
+        </Text>
 
-        <TouchableOpacity style={[styles.botaoGigante, {backgroundColor: '#333', borderColor: '#555', borderWidth: 1}]} onPress={() => setEtapaAuth('PIN')}>
-          <Text style={styles.btnText}>Acesso Rápido</Text>
-          <Text style={{color: '#aaa'}}>PIN Operacional</Text>
+        <TouchableOpacity 
+          style={[styles.botaoGigante, {backgroundColor: '#2196F3', borderColor: '#2196F3', borderWidth: 0}]} 
+          onPress={() => { setScanned(false); setModoCamera(true); }}
+        >
+          <Text style={[styles.btnTextEscuro, {color: '#fff', fontSize: 18}]}>📷 Vincular Estabelecimento</Text>
+          <Text style={{color: '#e0e0e0', fontSize: 13, marginTop: 4}}>Escanear QR Code no Monitor</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // TELA 2: LOGIN DA EQUIPE (Senha)
-  if (etapaAuth === 'SENHA') {
+  // ========================================================
+  // TELA 2: PORTA DE LOGIN UNIFICADA (SENHA OU PIN NA MESMA CAIXA)
+  // ========================================================
+  if (etapaAuth === 'LOGIN_UNIFICADO') {
+    // Função mestre que decide se valida como PIN de 4 números ou conta de Equipe
+    const executarLoginInteligente = () => {
+      const credencial = senhaUsuario.trim();
+      
+      if (!loginUsuario.trim() || !credencial) {
+        Alert.alert("Aviso", "Preencha o usuário e a senha/PIN.");
+        return;
+      }
+
+      // Se tiver exatamente 4 dígitos e for apenas números, roda a validação do PIN Operacional
+      if (credencial.length === 4 && /^\d+$/.test(credencial)) {
+        // Copia a credencial para o estado do PIN que o seu validador antigo usa
+        setPinDigitado(credencial);
+        validarPinOperador();
+      } else {
+        // Se for texto ou maior, roda o validador padrão de equipes
+        fazerLoginEquipe();
+      }
+    };
+
     return (
       <View style={styles.containerEscuro}>
-        <Text style={styles.tituloSecundario}>Acesso da Equipe</Text>
-        <TextInput style={styles.inputAuth} placeholder="Login" placeholderTextColor="#777" value={loginUsuario} onChangeText={setLoginUsuario} />
+        <Text style={styles.tituloSecundario}>Acesso ao Estoque</Text>
+        <Text style={{color: '#aaa', fontSize: 14, marginBottom: 25, textAlign: 'center', marginHorizontal: 20}}>
+          Digite seu usuário e sua senha de acesso ou seu PIN operacional de 4 números.
+        </Text>
+
+        <TextInput 
+          style={styles.inputAuth} 
+          placeholder="Usuário / Operador" 
+          placeholderTextColor="#777" 
+          value={loginUsuario} 
+          onChangeText={setLoginUsuario} 
+          autoCapitalize="none"
+        />
         
-        {/* Bloco horizontal para embutir o olhinho da senha */}
-        <View style={{ width: '90%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#2b2b36', borderRadius: 10, marginBottom: 15, borderWidth: 1, borderColor: '#444' }}>
+        {/* Bloco horizontal único do olhinho inteligente */}
+        <View style={{ width: '90%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#2b2b36', borderRadius: 10, marginBottom: 25, borderWidth: 1, borderColor: '#444' }}>
           <TextInput 
             style={{ flex: 1, color: '#fff', fontSize: 18, padding: 15, textAlign: 'center' }} 
-            placeholder="Senha" 
+            placeholder="Senha ou PIN" 
             placeholderTextColor="#777" 
             secureTextEntry={ocultarSenha} 
             value={senhaUsuario} 
@@ -213,57 +271,18 @@ export default function App() {
           </TouchableOpacity>
         </View>
         
-        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginSenha} disabled={carregando}>
-          {carregando ? (
-            <ActivityIndicator size="small" color="#000" />
-          ) : (
-            <Text style={styles.btnTextEscuro}>ENTRAR</Text>
-          )}
+        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={executarLoginInteligente}>
+          <Text style={styles.btnTextEscuro}>Conectar</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={{marginTop: 25}} onPress={() => { setEmpresaPareada(false); setEtapaAuth('INICIO'); }}>
+          <Text style={{color: '#f44336', fontWeight: 'bold'}}>🔄 Desvincular Empresa</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // TELA 3: LOGIN RÁPIDO (PIN)
-  if (etapaAuth === 'PIN') {
-    return (
-      <View style={styles.containerEscuro}>
-        <Text style={styles.tituloSecundario}>Operador de Turno</Text>
-        <Text style={{color: '#fff', fontSize: 18, marginBottom: 15}}>Digite seu PIN de 4 dígitos</Text>
-        
-        {/* Bloco horizontal para embutir o olhinho do PIN operacional */}
-        <View style={{ width: '80%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#1a1a1f', borderRadius: 10, borderWidth: 2, borderColor: '#555', marginBottom: 15 }}>
-          <TextInput 
-            style={{ flex: 1, color: '#FFD700', fontSize: 40, padding: 15, textAlign: 'center', letterSpacing: 15 }} 
-            placeholder="****" 
-            placeholderTextColor="#777" 
-            keyboardType="numeric" 
-            secureTextEntry={ocultarPin} 
-            maxLength={4} 
-            value={pinDigitado} 
-            onChangeText={setPinDigitado} 
-          />
-          <TouchableOpacity style={{ padding: 15 }} onPress={() => setOcultarPin(!ocultarPin)}>
-            <Text style={{ fontSize: 22 }}>{ocultarPin ? '👁️' : '🔒'}</Text>
-          </TouchableOpacity>
-        </View>
-        
-        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginPin}  disabled={carregando}>
-          {carregando ? (
-            <ActivityIndicator size="small" color="#000" />
-          ) : ( 
-            <Text style={styles.btnTextEscuro}>ACESSAR</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity style={{marginTop: 30}} onPress={() => setEtapaAuth('INICIO')}>
-          <Text style={{color: '#aaa'}}>Voltar</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // TELA 4: OPERAÇÃO (Logado)
+  // TELA 3: OPERAÇÃO (Logado)
   if (etapaAuth === 'LOGADO') {
     // Inteligência do Avatar Visual
     const ehLinkWeb = logoRestaurante && logoRestaurante.startsWith('http');
