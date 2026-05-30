@@ -282,7 +282,7 @@ class MainWindow(QMainWindow):
         
     def sincronizar_dados_nuvem(self):
         try:
-            url = f"https://SEU_USUARIO-NOME_DO_SPACE.hf.space/config/{self.cliente_dados['cliente_id']}"
+            url = f"https://vegap-vega-stock.hf.space/config/{self.cliente_dados['cliente_id']}"
             resp = requests.get(url, timeout=10)
             
             if resp.status_code == 200:

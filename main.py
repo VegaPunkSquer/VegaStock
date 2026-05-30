@@ -743,11 +743,15 @@ def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
     cliente_id = dados.get("cliente_id")
     user_id = dados.get("id")
 
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="cliente_id é obrigatório.")
+
     # ========================================================
     # A BARREIRA DA NUVEM: Só bloqueia se for cadastro NOVO
     # ========================================================
     if not user_id: 
         cliente = db.query(models.Cliente).filter(models.Cliente.id == cliente_id).first()
+        # Conta quantos funcionários existem ignorando o Admin master se necessário, ou contando o total do bloco
         qtd_atual = db.query(models.Usuario).filter(models.Usuario.cliente_id == cliente_id).count()
         
         if cliente and qtd_atual >= cliente.limite_contas:
