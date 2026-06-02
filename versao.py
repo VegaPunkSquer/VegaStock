@@ -1,1 +1,1 @@
-VERSAO_LOCAL = "v1.0.0" 
+VERSAO_LOCAL = "v1.0.2" 
