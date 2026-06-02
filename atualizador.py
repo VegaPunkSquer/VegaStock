@@ -87,32 +87,24 @@ def _baixar_e_instalar(url, parent_widget):
                     progresso.setValue(porcentagem)
 
         # Download concluído! Hora de criar o script "kamikaze"
+        # Código corrigido para evitar falha de herança de ambiente
         nome_exe_original = os.path.basename(exe_atual)
         
-        # 1. TASKKILL por Nome de Imagem (mata tudo do app de uma vez)
-        # 2. SET _MEIPASS= vazios (apaga a memória herdada para não dar o erro do DLL)
         conteudo_bat = f"""@echo off
-timeout /t 1 /nobreak > NUL
-taskkill /F /IM "{nome_exe_original}" /T > NUL 2>&1
 timeout /t 2 /nobreak > NUL
-del "{exe_atual}"
+del /F /Q "{exe_atual}"
 ren "{exe_novo}" "{nome_exe_original}"
-set _MEIPASS2=
-set _MEIPASS=
-start "" "{exe_atual}"
+start "" cmd /c "set _MEIPASS=&set _MEIPASS2=&start "" "{exe_atual}""
 del "%~f0"
 """
         with open(bat_path, "w", encoding="utf-8") as f:
             f.write(conteudo_bat)
 
-        # Roda o .bat silenciosamente
         CREATE_NO_WINDOW = 0x08000000
-        subprocess.Popen([bat_path], creationflags=CREATE_NO_WINDOW)
+        DETACHED_PROCESS = 0x00000008
+        subprocess.Popen([bat_path], creationflags=CREATE_NO_WINDOW | DETACHED_PROCESS)
 
-        # Trava o app no vazio para o taskkill fazer o trabalho dele
-        import time
-        while True:
-            time.sleep(1)
+        os._exit(0)
 
     except Exception as e:
         progresso.cancel()
