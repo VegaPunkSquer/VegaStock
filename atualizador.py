@@ -87,14 +87,13 @@ def _baixar_e_instalar(url, parent_widget):
                     progresso.setValue(porcentagem)
 
         # Download concluído! Hora de criar o script "kamikaze"
-        # Código corrigido para evitar falha de herança de ambiente
         nome_exe_original = os.path.basename(exe_atual)
         
         conteudo_bat = f"""@echo off
 timeout /t 2 /nobreak > NUL
 del /F /Q "{exe_atual}"
 ren "{exe_novo}" "{nome_exe_original}"
-start "" cmd /c "set _MEIPASS=&set _MEIPASS2=&start "" "{exe_atual}""
+powershell -Command "[Environment]::SetEnvironmentVariable('_MEIPASS', $null, 'Process'); [Environment]::SetEnvironmentVariable('_MEIPASS2', $null, 'Process'); Start-Process '{exe_atual}'"
 del "%~f0"
 """
         with open(bat_path, "w", encoding="utf-8") as f:
