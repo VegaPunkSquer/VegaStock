@@ -1,8 +1,11 @@
+import sys
+
 import requests
 import os
-from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 from PySide6.QtCore import Qt, QThread, Signal
 from PySide6.QtGui import QIcon
+from atualizador import checar_e_atualizar
 
 API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerLogin(QThread):

@@ -13,6 +13,7 @@ import estilos
 from tela_login import TelaLogin
 from tela_cadastro import TelaCadastro
 from tela_recuperacao import TelaRecuperacao
+from atualizador import checar_e_atualizar
 
 from aba_dashboard import AbaDashboard
 from aba_catalogo import AbaCatalogo
@@ -470,4 +471,11 @@ def iniciar_app():
     sys.exit()
 
 if __name__ == "__main__":
+    # 1. Verifica se tem atualização ANTES de abrir a janela
+    if checar_e_atualizar():
+        # Se retornou True, é porque está baixando/fechando. 
+        import sys
+        sys.exit()
+    
+    # 2. Se estiver tudo atualizado, chama a sua função original que liga o app
     iniciar_app()
