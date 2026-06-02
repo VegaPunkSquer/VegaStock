@@ -94,7 +94,7 @@ def _baixar_e_instalar(url, parent_widget):
         conteudo_bat = f"""@echo off
 timeout /t 1 /nobreak > NUL
 taskkill /F /PID {pid_atual} > NUL 2>&1
-timeout /t 1 /nobreak > NUL
+timeout /t 2 /nobreak > NUL
 del "{exe_atual}"
 ren "{exe_novo}" "{nome_exe_original}"
 start "" "{exe_atual}"
