@@ -1,0 +1,1 @@
+VERSAO_LOCAL = "v1.0.0" 
