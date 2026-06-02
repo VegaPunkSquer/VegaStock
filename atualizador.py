@@ -93,7 +93,7 @@ def _baixar_e_instalar(url, parent_widget):
 timeout /t 2 /nobreak > NUL
 del /F /Q "{exe_atual}"
 ren "{exe_novo}" "{nome_exe_original}"
-powershell -Command "[Environment]::SetEnvironmentVariable('_MEIPASS', $null, 'Process'); [Environment]::SetEnvironmentVariable('_MEIPASS2', $null, 'Process'); Start-Process '{exe_atual}'"
+explorer.exe "{exe_atual}"
 del "%~f0"
 """
         with open(bat_path, "w", encoding="utf-8") as f:
