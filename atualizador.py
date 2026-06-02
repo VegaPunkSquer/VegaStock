@@ -88,10 +88,13 @@ def _baixar_e_instalar(url, parent_widget):
 
         # Download concluído! Hora de criar o script "kamikaze"
         nome_exe_original = os.path.basename(exe_atual)
+        pid_atual = os.getpid() # Pega o ID exato do processo do seu aplicativo no Windows
         
-        # O script espera 2 segs, deleta o velho, renomeia o novo, executa e se auto-destrói
+        # O script agora usa o TASKKILL do Windows para assassinar o aplicativo sem dar chance de erro
         conteudo_bat = f"""@echo off
-timeout /t 2 /nobreak > NUL
+timeout /t 1 /nobreak > NUL
+taskkill /F /PID {pid_atual} > NUL 2>&1
+timeout /t 1 /nobreak > NUL
 del "{exe_atual}"
 ren "{exe_novo}" "{nome_exe_original}"
 start "" "{exe_atual}"
@@ -100,12 +103,15 @@ del "%~f0"
         with open(bat_path, "w", encoding="utf-8") as f:
             f.write(conteudo_bat)
 
-        # Roda o .bat em segundo plano, sem abrir janela preta chata
+        # Roda o .bat silenciosamente
         CREATE_NO_WINDOW = 0x08000000
         subprocess.Popen([bat_path], creationflags=CREATE_NO_WINDOW)
 
-        # Mata o aplicativo atual imediatamente para liberar o arquivo .exe
-        os._exit(0)
+        # Em vez de tentar fechar o Python (o que causa o erro de memória),
+        # nós travamos o aplicativo aqui e esperamos 1 segundo até o Windows matar ele.
+        import time
+        while True:
+            time.sleep(1)
 
     except Exception as e:
         progresso.cancel()
