@@ -30,7 +30,7 @@ class MainWindow(QMainWindow):
     def __init__(self, cliente_dados):
         super().__init__()
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        caminho_icone = os.path.join(BASE_DIR, "assets", 'logo.ico')
         
         self.setWindowIcon(QIcon(caminho_icone))
         self.cliente_dados = cliente_dados

@@ -110,7 +110,7 @@ class AbaDashboard(QWidget):
         # 1. Coloca a tela em estado de carregamento IMEDIATO
         # Configura o GIF usando caminho absoluto
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        caminho_gif = os.path.join(BASE_DIR, "assets", 'hourglass.gif')
         
         self.movie = QMovie(caminho_gif)
         self.movie.setScaledSize(QSize(30, 30)) # Redimensiona para não quebrar seu layout

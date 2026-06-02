@@ -163,7 +163,7 @@ class AbaRelatorios(QWidget):
         self.tabela.setRowCount(1)
         lbl_gif = QLabel()
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        caminho_gif = os.path.join(BASE_DIR, "assets", 'hourglass.gif')
         
         self.movie = QMovie(caminho_gif)
         self.movie.setScaledSize(QSize(20, 20))

@@ -110,7 +110,12 @@ def registrar_movimentacao(mov: schemas.MovimentacaoCreate, db: Session = Depend
 
     db.add(nova_movimentacao)
     db.commit()
-    return {"status": "sucesso", "novo_saldo": produto.quantidade_atual, "novo_custo": produto.custo_medio}
+    
+    # Nova lógica: Verifica se ficou abaixo do mínimo
+    precisa_alerta = produto.quantidade_atual < produto.estoque_minimo
+    
+    
+    return {"status": "sucesso", "novo_saldo": produto.quantidade_atual, "novo_custo": produto.custo_medio, "alerta": precisa_alerta}
 
 @app.get("/movimentacoes/{cliente_id}")
 def listar_movimentacoes(cliente_id: int, dias: int = 30, db: Session = Depends(get_db)):

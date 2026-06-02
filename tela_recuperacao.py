@@ -9,7 +9,7 @@ class TelaRecuperacao(QDialog):
     def __init__(self):
         super().__init__()
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        caminho_icone = os.path.join(BASE_DIR, "assets", 'logo.ico')
         
         self.setWindowIcon(QIcon(caminho_icone))
         self.setWindowTitle("VegaStock - Sistema de Estoque - Recuperar Senha")

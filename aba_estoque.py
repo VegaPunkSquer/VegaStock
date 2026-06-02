@@ -4,8 +4,9 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
                                QMessageBox, QGroupBox, QFormLayout, QRadioButton, 
                                QButtonGroup, QDoubleSpinBox, QAbstractItemView)
 import os
-from PySide6.QtCore import Qt, QThread, Signal, QSize
+from PySide6.QtCore import Qt, QThread, Signal, QSize, QUrl
 from PySide6.QtGui import QMovie
+from PySide6.QtMultimedia import QSoundEffect
 
 API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerEstoque(QThread):
@@ -211,7 +212,7 @@ class AbaEstoque(QWidget):
         self.tabela.setRowCount(1)
         lbl_gif = QLabel()
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        caminho_gif = os.path.join(BASE_DIR, "assets", 'hourglass.gif')
         
         self.movie = QMovie(caminho_gif)
         self.movie.setScaledSize(QSize(20, 20))
@@ -324,12 +325,30 @@ class AbaEstoque(QWidget):
         try:
             resp = requests.post(f"{API_BASE_URL}/movimentacao", json=payload)
             if resp.status_code == 200:
+                resultado = resp.json()
                 self.spin_qtd.setValue(0)
                 self.spin_custo.setValue(0)
                 # Dá F5 na tabela e nos combos para garantir dados frescos usando a Thread
                 self.carregar_dados(atualizar_combos=True) 
-                QMessageBox.information(self, "Sucesso", "Movimentação registrada com sucesso!")
+                if resultado.get("alerta"):
+                    self.tocar_alerta_sonoro()
+                    QMessageBox.warning(self, "Atenção!", "Produto atingiu estoque mínimo!")
+                else:
+                    QMessageBox.information(self, "Sucesso", "Movimentação registrada com sucesso!")
             else:
                 QMessageBox.warning(self, "Erro", resp.json().get("detail", "Erro ao registrar."))
         except Exception:
             QMessageBox.critical(self, "Erro", "Falha de conexão com o servidor.")
+            
+    def tocar_alerta_sonoro(self):
+        if not hasattr(self, 'player'):
+            self.player = QSoundEffect()
+        
+        # Constrói o caminho absoluto para a pasta assets
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        caminho_som = os.path.join(base_dir, "assets", "alerta.wav")
+        
+        if os.path.exists(caminho_som):
+            self.player.setSource(QUrl.fromLocalFile(caminho_som))
+            self.player.setVolume(1.0)
+            self.player.play()
