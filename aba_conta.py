@@ -461,7 +461,7 @@ class AbaConta(QWidget):
                 if widget.maximumHeight() < 16777215 or widget.minimumHeight() > 0:
                     if not hasattr(widget, "_alt_original"):
                         widget._alt_original = widget.height() if widget.height() > 0 else 35
-                    widget.setFixedHeight(int(widget._alt_original * (1.0 + (fator - 1.0) * 0.6)))
+                    widget.setMinimumHeight(int(widget._alt_original * (1.0 + (fator - 1.0) * 0.6)))
             
     def refresh_ui(self):
         """Atualiza os textos da tela com os novos dados sincronizados."""

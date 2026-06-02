@@ -5,6 +5,10 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   
+  // Controle da Câmera vs Busca Manual
+  const [modoCamera, setModoCamera] = useState(true); 
+  const [textoBuscaManual, setTextoBuscaManual] = useState('');
+  
   // ==========================================
   // ESTADOS DE AUTENTICAÇÃO (O SEU FLUXO ORIGINAL)
   // ==========================================
@@ -352,8 +356,12 @@ export default function App() {
     }
 
     if (modo) {
-      // (Mantido igual: Tela da Câmera)
-      return (
+      // Filtra os produtos do catálogo com base no que for digitado
+      const produtosFiltrados = produtosCatalogo.filter(p =>
+        p.nome.toLowerCase().includes(textoBuscaManual.toLowerCase())
+      );
+
+      return modoCamera ? (
         <View style={styles.containerCamera}>
           <CameraView style={StyleSheet.absoluteFillObject} facing="back" onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "qr", "upc_a"] }} />
           <View style={styles.overlay}>
@@ -363,10 +371,63 @@ export default function App() {
                  <Text style={styles.btnTextEscuro}>TOCAR PARA LER NOVAMENTE</Text>
               </TouchableOpacity>
             )}
+            
+            {/* NOVO BOTÃO DE BUSCA MANUAL */}
+            <TouchableOpacity 
+              style={[styles.btnConfirmarAuth, {backgroundColor: '#2196F3', marginBottom: 10}]} 
+              onPress={async () => {
+                setModoCamera(false);
+                // Já garante que a lista de produtos está baixada pra pesquisa
+                try {
+                  let res = await fetch(`${API_URL}/produtos_mobile/${clienteIdContexto}`);
+                  if (res.ok) setProdutosCatalogo(await res.json());
+                } catch(e) {}
+              }}
+            >
+              <Text style={styles.btnText}>SEM CÓDIGO? DIGITAR MANUALMENTE</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#F44336'}]} onPress={() => setModo(null)}>
               <Text style={styles.btnText}>VOLTAR</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      ) : (
+        <View style={styles.containerEscuro}>
+          <Text style={styles.tituloSecundario}>Busca Manual - {modo}</Text>
+
+          <TextInput
+            style={[styles.inputAuth, { marginTop: 20 }]}
+            placeholder="Digite o nome do produto..."
+            placeholderTextColor="#777"
+            value={textoBuscaManual}
+            onChangeText={setTextoBuscaManual}
+          />
+
+          <FlatList
+            data={produtosFiltrados}
+            keyExtractor={(item) => item.id.toString()}
+            style={{ width: '90%', marginBottom: 20 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={{ backgroundColor: '#2b2b36', padding: 15, marginVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#444' }}
+                onPress={() => {
+                  setProdutoReconhecido(item);
+                  setTextoBuscaManual('');
+                  setModoCamera(true); // Volta a câmera ao normal para a próxima leitura
+                }}
+              >
+                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#fff' }}>{item.nome}</Text>
+              </TouchableOpacity>
+            )}
+          />
+
+          <TouchableOpacity
+            style={[styles.btnConfirmarAuth, {backgroundColor: '#444'}]}
+            onPress={() => { setModoCamera(true); setTextoBuscaManual(''); }}
+          >
+            <Text style={styles.btnText}>VOLTAR PARA A CÂMERA</Text>
+          </TouchableOpacity>
         </View>
       );
     }
