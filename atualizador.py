@@ -88,15 +88,17 @@ def _baixar_e_instalar(url, parent_widget):
 
         # Download concluído! Hora de criar o script "kamikaze"
         nome_exe_original = os.path.basename(exe_atual)
-        pid_atual = os.getpid() # Pega o ID exato do processo do seu aplicativo no Windows
         
-        # O script agora usa o TASKKILL do Windows para assassinar o aplicativo sem dar chance de erro
+        # 1. TASKKILL por Nome de Imagem (mata tudo do app de uma vez)
+        # 2. SET _MEIPASS= vazios (apaga a memória herdada para não dar o erro do DLL)
         conteudo_bat = f"""@echo off
 timeout /t 1 /nobreak > NUL
-taskkill /F /PID {pid_atual} > NUL 2>&1
+taskkill /F /IM "{nome_exe_original}" /T > NUL 2>&1
 timeout /t 2 /nobreak > NUL
 del "{exe_atual}"
 ren "{exe_novo}" "{nome_exe_original}"
+set _MEIPASS2=
+set _MEIPASS=
 start "" "{exe_atual}"
 del "%~f0"
 """
@@ -107,8 +109,7 @@ del "%~f0"
         CREATE_NO_WINDOW = 0x08000000
         subprocess.Popen([bat_path], creationflags=CREATE_NO_WINDOW)
 
-        # Em vez de tentar fechar o Python (o que causa o erro de memória),
-        # nós travamos o aplicativo aqui e esperamos 1 segundo até o Windows matar ele.
+        # Trava o app no vazio para o taskkill fazer o trabalho dele
         import time
         while True:
             time.sleep(1)
