@@ -21,8 +21,8 @@ O **VegaStock** é um ecossistema B2B de alta performance projetado especificame
     <td width="50%" align="center"><b>Máquina de Vendas / PDV Interativo</b></td>
   </tr>
   <tr>
-    <td><img src=".github/assets/dashboard_demo.gif" alt="Dashboard VegaStock" width="100%"></td>
-    <td><img src=".github/assets/pdv_demo.gif" alt="PDV VegaStock" width="100%"></td>
+    <td><img src="https://github.com/VegaPunkSquer/VegaStock/blob/master/assets/dashboard_demo.gif" alt="Dashboard VegaStock" width="100%"></td>
+    <td><img src="https://github.com/VegaPunkSquer/VegaStock/blob/master/assets/pdv_demo.gif" alt="PDV VegaStock" width="100%"></td>
   </tr>
 </table>
 
