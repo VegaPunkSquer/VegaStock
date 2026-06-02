@@ -437,9 +437,12 @@ class MainWindow(QMainWindow):
                 print(f"Erro no trigger de feedback: {e}")
 
 def iniciar_app():
-    app = QApplication(sys.argv)
+    # Verifica se o motor já existe. Se não existir, ele cria.
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
     
-    # Injeta a paleta de cores da empresa do seu tio no aplicativo inteiro
+    # Injeta a paleta de cores da empresa do meu tio no aplicativo inteiro
     app.setStyleSheet(estilos.ESTILO_GLOBAL)
 
     # Loop de Navegação (Roteador do PySide)
@@ -471,11 +474,18 @@ def iniciar_app():
     sys.exit()
 
 if __name__ == "__main__":
-    # 1. Verifica se tem atualização ANTES de abrir a janela
-    if checar_e_atualizar():
-        # Se retornou True, é porque está baixando/fechando. 
-        import sys
-        sys.exit()
+    from PySide6.QtWidgets import QApplication
+    import sys
     
-    # 2. Se estiver tudo atualizado, chama a sua função original que liga o app
+    # 1. A REGRA DE OURO: Liga o motor visual ANTES de qualquer coisa
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+        
+    # 2. Agora sim, o atualizador pode mostrar as caixas de aviso sem o app explodir!
+    if checar_e_atualizar():
+        # Se ele tiver que atualizar, ele morre aqui
+        sys.exit()
+        
+    # 3. Se não teve atualização (ou já estava atualizado), abre o sistema
     iniciar_app()
