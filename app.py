@@ -476,6 +476,7 @@ def iniciar_app():
 if __name__ == "__main__":
     from PySide6.QtWidgets import QApplication
     import sys
+    import os # <-- Adicione o import do os aqui, se não tiver
     
     # 1. A REGRA DE OURO: Liga o motor visual ANTES de qualquer coisa
     app = QApplication.instance()
@@ -484,8 +485,8 @@ if __name__ == "__main__":
         
     # 2. Agora sim, o atualizador pode mostrar as caixas de aviso sem o app explodir!
     if checar_e_atualizar():
-        # Se ele tiver que atualizar, ele morre aqui
-        sys.exit()
+        # Se ele tiver que atualizar, ele morre aqui (sem dar erro de memória)
+        os._exit(0)
         
-    # 3. Se não teve atualização (ou já estava atualizado), abre o sistema
+    # 3. Se não teve atualização, abre o sistema
     iniciar_app()

@@ -105,7 +105,7 @@ del "%~f0"
         subprocess.Popen([bat_path], creationflags=CREATE_NO_WINDOW)
 
         # Mata o aplicativo atual imediatamente para liberar o arquivo .exe
-        sys.exit()
+        os._exit(0)
 
     except Exception as e:
         progresso.cancel()
