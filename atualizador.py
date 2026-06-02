@@ -6,7 +6,10 @@ from PySide6.QtWidgets import QMessageBox, QProgressDialog
 from PySide6.QtCore import Qt
 
 # A tatuagem de nascença do seu App! Lembre de mudar aqui ANTES de compilar o novo .exe
-VERSAO_LOCAL = "v1.0.0" 
+try:
+    from versao import VERSAO_LOCAL
+except ImportError:
+    VERSAO_LOCAL = "v1.0.0"
 
 # O radar automático apontado para o seu repositório no GitHub
 GITHUB_API_URL = "https://api.github.com/repos/VegaPunkSquer/VegaStock/releases/latest"
