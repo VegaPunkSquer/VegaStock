@@ -51,13 +51,19 @@ class FabricaVegaStock(QWidget):
         if not os.path.exists(pyinstaller_exe):
             pyinstaller_exe = "pyinstaller" # Tenta o global caso o venv não esteja lá
             
+        # --- AQUI ESTÁ A LÓGICA DO SEU .BAT ---
+        nome_final = f"VegaStock_{nova_versao}"
+        
         comando = [
             pyinstaller_exe, 
             "--noconfirm", 
-            "--onedir", 
+            "--onefile",           # Como você usa no seu .bat
             "--windowed", 
-            "--name", "VegaStock", 
-            caminho_main
+            "--name", nome_final,  # VegaStock_v1.0.x
+            "--icon", "assets/logo.ico", 
+            "--add-data", "assets;assets", 
+            "--hidden-import", "dialog_feedback", 
+            "app.py"               # O arquivo que você compila no .bat
         ]
         
         self.btn_atualizar.setText("Assando o código...")
