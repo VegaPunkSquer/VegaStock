@@ -306,7 +306,7 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
     # Se o CNPJ constar na Whitelist de testes, aplica as regras de expiração temporária
     whitelist = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == dados.cnpj).first()
     if whitelist:
-        novo_cliente.status_assinatura = "TESTE"
+        novo_cliente.status_assinatura = f"TESTE_{whitelist.plano.upper()}"
         novo_cliente.plano = whitelist.plano
         novo_cliente.limite_contas = 6 if whitelist.plano == "PRO" else 2
         novo_cliente.validade_pro = whitelist.data_fim

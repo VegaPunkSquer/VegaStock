@@ -147,7 +147,8 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(lambda _, idx=i: self.mudar_aba(idx))
             
             if "🔒" in nome:
-                if self.cliente_dados.get('status_assinatura') == "PRO":
+                status = str(self.cliente_dados.get('status_assinatura', '')).upper()
+                if status == "PRO" or status == "TESTE_PRO":
                     btn.setText(nome.replace(" 🔒", ""))
                 else:
                     estilo_bloqueado = """
@@ -158,6 +159,7 @@ class MainWindow(QMainWindow):
                         QPushButton:checked { background-color: #e0e0e0; color: #555; border: 1px solid #ccc; }
                     """
                     btn.setStyleSheet(estilo_bloqueado)
+                    btn.setEnabled(False)
                     
             self.layout_abas.addWidget(btn)
             self.botoes_abas.append(btn)
@@ -402,7 +404,7 @@ class MainWindow(QMainWindow):
         cliente_id = self.cliente_dados.get("cliente_id") or self.cliente_dados.get("id")
         plano = self.cliente_dados.get("plano", "BÁSICO")
 
-        if status == "TESTE" and validade_str and cliente_id:
+        if "TESTE" in status and validade_str and cliente_id:
             try:
                 # Trata a string de data vinda do JSON do backend
                 validade_limpa = validade_str.split(".")[0].replace("Z", "")

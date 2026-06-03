@@ -2,6 +2,7 @@ import os
 import sys
 import json
 import subprocess
+import shutil
 from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QLineEdit, QPushButton, QMessageBox
 
 class FabricaVegaStock(QWidget):
@@ -22,6 +23,17 @@ class FabricaVegaStock(QWidget):
         self.btn_atualizar.clicked.connect(self.compilar)
         layout.addWidget(self.btn_atualizar)
 
+    def limpar_restos(self, diretorio_raiz, nome_versao):
+        # 1/3 e 3/3 do seu .bat: Limpa a pasta build e arquivos .spec
+        pasta_build = os.path.join(diretorio_raiz, "build")
+        if os.path.exists(pasta_build):
+            shutil.rmtree(pasta_build, ignore_errors=True)
+        
+        spec_1 = os.path.join(diretorio_raiz, f"VegaStock_{nome_versao}.spec")
+        spec_2 = os.path.join(diretorio_raiz, "VegaStock.spec")
+        if os.path.exists(spec_1): os.remove(spec_1)
+        if os.path.exists(spec_2): os.remove(spec_2)
+
     def compilar(self):
         nova_versao = self.input_versao.text().strip()
         if not nova_versao:
@@ -37,12 +49,16 @@ class FabricaVegaStock(QWidget):
         arquivo_json = os.path.join(diretorio_raiz, "versao.json")
         caminho_main = os.path.join(diretorio_raiz, "main.py")
         
-        # Sobrescreve o JSON com a versão nova
+        # O BAT do seu tio recriado: Sobrescreve o JSON e também cria o versao.py
         try:
             with open(arquivo_json, "w", encoding="utf-8") as f:
                 json.dump({"versao": nova_versao}, f, indent=4)
+                
+            arquivo_py = os.path.join(diretorio_raiz, "versao.py")
+            with open(arquivo_py, "w", encoding="utf-8") as f:
+                f.write(f'VERSAO_LOCAL = "{nova_versao}"\n')
         except Exception as e:
-            QMessageBox.critical(self, "Erro", f"Falha ao salvar JSON:\n{e}")
+            QMessageBox.critical(self, "Erro", f"Falha ao salvar arquivos de versão:\n{e}")
             return
             
         # Se você abrir o .exe direto pelo Windows, ele pode não achar o PyInstaller do ambiente virtual.
@@ -71,9 +87,16 @@ class FabricaVegaStock(QWidget):
         QApplication.processEvents() # Destrava a tela para o texto do botão atualizar
         
         try:
-            # O shell=True garante que a janela do terminal preta não pule na sua cara do nada
+            # 1. Limpa o lixo da compilação anterior
+            self.limpar_restos(diretorio_raiz, nova_versao)
+            
+            # 2. O shell=True garante que a janela preta não pule na sua cara do nada
             subprocess.run(comando, shell=True, check=True)
-            QMessageBox.information(self, "Sucesso", f"O executável da versão {nova_versao} está pronto na pasta dist!")
+            
+            # 3. Limpa os restos da obra (igual seu .bat)
+            self.limpar_restos(diretorio_raiz, nova_versao)
+            
+            QMessageBox.information(self, "Sucesso", f"MONSTRO CRIADO!\n\nO executável da versão {nova_versao} está pronto na pasta dist!")
             self.input_versao.clear()
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"A compilação falhou:\n{e}")
