@@ -1,9 +1,25 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, Image, ActivityIndicator } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
+
+  // MÁGICA DA MEMÓRIA: Carrega o restaurante salvo assim que o app abre
+  useEffect(() => {
+    const carregarPareamento = async () => {
+      try {
+        const idSalvo = await AsyncStorage.getItem('vegastock_cliente_id');
+        if (idSalvo !== null) {
+          setClienteIdContexto(parseInt(idSalvo, 10));
+          setEmpresaPareada(true);
+          setEtapaAuth('LOGIN_UNIFICADO');
+        }
+      } catch (e) {}
+    };
+    carregarPareamento();
+  }, []);
   
   // Controle da Câmera vs Busca Manual
   const [modoCamera, setModoCamera] = useState(true); 
@@ -59,22 +75,20 @@ export default function App() {
   }
 
   // --- LOGIN VIA SENHA (EQUIPE PRO) ---
-  const handleLoginSenha = async () => {
-    if(!loginUsuario || !senhaUsuario) { Alert.alert("Erro", "Preencha login e senha."); return; }
+  const fazerLoginAPI_Senha = async (loginStr, senhaStr) => {
     setCarregando(true);
     try {
       let res = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: loginUsuario, senha: senhaUsuario })
+        body: JSON.stringify({ login: loginStr, senha: senhaStr })
       });
       if (res.ok) {
         let dados = await res.json();
         setClienteIdContexto(dados.cliente_id);
         setNomeFantasia(dados.nome_fantasia || "Restaurante");
         setLogoRestaurante(dados.logo_url);
-        setOperadorLogado(loginUsuario.toUpperCase()); // Carimba o nome do cara
-        
+        setOperadorLogado(loginStr.toUpperCase());
         setLoginUsuario(''); setSenhaUsuario('');
         setEtapaAuth('LOGADO');
       } else {
@@ -85,23 +99,21 @@ export default function App() {
   };
 
   // --- LOGIN VIA PIN (OPERADOR BÁSICO) ---
-  const handleLoginPin = async () => {
-    if(pinDigitado.length !== 4) { Alert.alert("Erro", "O PIN deve ter 4 dígitos."); return; }
+  const fazerLoginAPI_PIN = async (pinStr) => {
     setCarregando(true);
     try {
       let res = await fetch(`${API_URL}/validar_pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cliente_id: clienteIdContexto, pin: pinDigitado })
+        body: JSON.stringify({ cliente_id: clienteIdContexto, pin: pinStr })
       });
       if (res.ok) {
         let dados = await res.json();
         setOperadorLogado(dados.nome);
-        setPinDigitado('');
+        setLoginUsuario(''); setSenhaUsuario('');
         setEtapaAuth('LOGADO');
       } else {
         Alert.alert("Erro", "PIN incorreto.");
-        setPinDigitado('');
       }
     } catch(e) { Alert.alert("Conexão", "Servidor offline."); }
     finally { setCarregando(false); }
@@ -120,7 +132,8 @@ export default function App() {
       if (!isNaN(idCapturado)) {
         setClienteIdContexto(idCapturado);
         setEmpresaPareada(true);
-        setEtapaAuth('LOGIN_UNIFICADO'); // Joga para a nova tela de login único que vamos criar
+        AsyncStorage.setItem('vegastock_cliente_id', idCapturado.toString()); // <-- GRAVA NO CELULAR!
+        setEtapaAuth('LOGIN_UNIFICADO'); 
         Alert.alert("Sucesso", "Celular vinculado ao estabelecimento com sucesso!");
       } else {
         Alert.alert("Erro", "QR Code de pareamento inválido.");
@@ -251,23 +264,24 @@ export default function App() {
   // TELA 2: PORTA DE LOGIN UNIFICADA (SENHA OU PIN NA MESMA CAIXA)
   // ========================================================
   if (etapaAuth === 'LOGIN_UNIFICADO') {
-    // Função mestre que decide se valida como PIN de 4 números ou conta de Equipe
     const executarLoginInteligente = () => {
       const credencial = senhaUsuario.trim();
       
-      if (!loginUsuario.trim() || !credencial) {
-        Alert.alert("Aviso", "Preencha o usuário e a senha/PIN.");
+      if (!credencial) {
+        Alert.alert("Aviso", "Preencha a senha ou o PIN.");
         return;
       }
 
-      // Se tiver exatamente 4 dígitos e for apenas números, roda a validação do PIN Operacional
+      // Se for só 4 números, tenta entrar como PIN de funcionário
       if (credencial.length === 4 && /^\d+$/.test(credencial)) {
-        // Copia a credencial para o estado do PIN que o seu validador antigo usa
-        setPinDigitado(credencial);
-        validarPinOperador();
+        fazerLoginAPI_PIN(credencial);
       } else {
-        // Se for texto ou maior, roda o validador padrão de equipes
-        fazerLoginEquipe();
+        // Se for senha normal, exige o usuário preenchido
+        if (!loginUsuario.trim()) {
+          Alert.alert("Aviso", "Preencha o usuário.");
+          return;
+        }
+        fazerLoginAPI_Senha(loginUsuario.trim(), credencial);
       }
     };
 
@@ -287,7 +301,6 @@ export default function App() {
           autoCapitalize="none"
         />
         
-        {/* Bloco horizontal único do olhinho inteligente */}
         <View style={{ width: '90%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#2b2b36', borderRadius: 10, marginBottom: 25, borderWidth: 1, borderColor: '#444' }}>
           <TextInput 
             style={{ flex: 1, color: '#fff', fontSize: 18, padding: 15, textAlign: 'center' }} 
@@ -303,10 +316,14 @@ export default function App() {
         </View>
         
         <TouchableOpacity style={styles.btnConfirmarAuth} onPress={executarLoginInteligente}>
-          <Text style={styles.btnTextEscuro}>Conectar</Text>
+          <Text style={styles.btnTextEscuro}>{carregando ? "Conectando..." : "Conectar"}</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={{marginTop: 25}} onPress={() => { setEmpresaPareada(false); setEtapaAuth('INICIO'); }}>
+        <TouchableOpacity style={{marginTop: 25}} onPress={() => { 
+            AsyncStorage.removeItem('vegastock_cliente_id'); // <-- DELETA DA MEMÓRIA
+            setEmpresaPareada(false); 
+            setEtapaAuth('INICIO'); 
+          }}>
           <Text style={{color: '#f44336', fontWeight: 'bold'}}>🔄 Desvincular Empresa</Text>
         </TouchableOpacity>
       </View>
