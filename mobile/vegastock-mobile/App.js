@@ -211,11 +211,38 @@ export default function App() {
 
         <TouchableOpacity 
           style={[styles.botaoGigante, {backgroundColor: '#2196F3', borderColor: '#2196F3', borderWidth: 0}]} 
-          onPress={() => { setScanned(false); setModoCamera(true); }}
+          onPress={() => { setScanned(false); setEtapaAuth('CAMERA_PAREAMENTO'); }}
         >
           <Text style={[styles.btnTextEscuro, {color: '#fff', fontSize: 18}]}>📷 Vincular Estabelecimento</Text>
           <Text style={{color: '#e0e0e0', fontSize: 13, marginTop: 4}}>Escanear QR Code no Monitor</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  // ========================================================
+  // TELA 1.5: CÂMERA DE PAREAMENTO (LENDO QR CODE DO PC)
+  // ========================================================
+  if (etapaAuth === 'CAMERA_PAREAMENTO') {
+    return (
+      <View style={styles.containerCamera}>
+        <CameraView 
+          style={StyleSheet.absoluteFillObject} 
+          facing="back" 
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} 
+          barcodeScannerSettings={{ barcodeTypes: ["qr"] }} 
+        />
+        <View style={styles.overlay}>
+          <Text style={styles.textoScan}>Lendo QR Code do Monitor...</Text>
+          {scanned && (
+            <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#FFD700', marginBottom: 10}]} onPress={() => setScanned(false)}>
+               <Text style={styles.btnTextEscuro}>TOCAR PARA LER NOVAMENTE</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#F44336'}]} onPress={() => setEtapaAuth('INICIO')}>
+            <Text style={styles.btnText}>VOLTAR</Text>
+          </TouchableOpacity>
+        </View>
       </View>
     );
   }
