@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, Image, ActivityIndicator } from 'react-native';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, Image, ActivityIndicator, Vibration } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
 
 export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -123,10 +124,33 @@ export default function App() {
     finally { setCarregando(false); }
   };
 
+  // Função para tocar o Bip
+  const tocarBip = async () => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        require('./assets/beep.mp3') // Certifique-se de que este arquivo existe!
+      );
+      await sound.playAsync();
+      
+      // Limpa a memória depois de tocar para o app não explodir de memória
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          sound.unloadAsync();
+        }
+      });
+    } catch (error) {
+      console.log("Erro ao tocar o bip", error);
+    }
+  };
+
   // --- FUNÇÕES DA CÂMERA E ESTOQUE ---
   const handleBarCodeScanned = async ({ type, data }) => {
     setScanned(true);
     const codigoLimpo = String(data).trim();
+
+    // Toca o som e vibra o celular por 100 milissegundos
+    Vibration.vibrate(100);
+    tocarBip();
 
     // ========================================================
     // INTERCEPTADOR DE PAREAMENTO: Se não tiver pareado, o bip é do monitor!
