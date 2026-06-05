@@ -587,11 +587,22 @@ def criar_produto(dados: schemas.ProdutoCreate, db: Session = Depends(get_db)):
         nome=dados.nome,
         categoria_id=dados.categoria_id,
         unidade_medida=dados.unidade_medida,
-        estoque_minimo=dados.estoque_minimo
+        estoque_minimo=dados.estoque_minimo,
+        codigo_barras=dados.codigo_barras
     )
     db.add(novo_produto)
     db.commit()
-    return {"mensagem": "Produto criado com sucesso!"}
+    db.refresh(novo_produto) # Puxa o ID gerado pelo banco
+    
+    # Devolve o pacote completo pro celular
+    return {
+        "mensagem": "Produto criado com sucesso!",
+        "produto": {
+            "id": novo_produto.id,
+            "nome": novo_produto.nome,
+            "unidade_medida": novo_produto.unidade_medida
+        }
+    }
 
 @app.delete("/produtos/{produto_id}")
 def deletar_produto(produto_id: int, db: Session = Depends(get_db)):

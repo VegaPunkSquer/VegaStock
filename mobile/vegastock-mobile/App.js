@@ -59,6 +59,10 @@ export default function App() {
   const [produtoReconhecido, setProdutoReconhecido] = useState(null);
   const [quantidade, setQuantidade] = useState('');
   const [produtosCatalogo, setProdutosCatalogo] = useState([]);
+  // Controle do Novo Cadastro pelo Celular
+  const [cadastrandoNovo, setCadastrandoNovo] = useState(false);
+  const [nomeNovoProd, setNomeNovoProd] = useState('');
+  const [unidadeNovoProd, setUnidadeNovoProd] = useState('');
 
   const API_URL = "https://vegap-vega-stock.hf.space";
 
@@ -200,6 +204,42 @@ export default function App() {
         setProdutoReconhecido(null); setQuantidade(''); setCusto(''); setMotivoEscolhido(null); setScanned(false); setModo(null);
       }
     } catch (error) { Alert.alert("Erro", "Sem conexão."); }
+  };
+
+  const cadastrarProdutoPeloCelular = async () => {
+    if (!nomeNovoProd || !unidadeNovoProd) {
+      Alert.alert("Aviso", "Preencha o nome e a unidade (ex: un, kg).");
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/produtos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cliente_id: clienteIdContexto,
+          nome: nomeNovoProd,
+          categoria_id: null,
+          unidade_medida: unidadeNovoProd.toLowerCase(),
+          estoque_minimo: 0,
+          codigo_barras: codigoNovo // Já nasce vinculado!
+        })
+      });
+
+      if (res.ok) {
+        const resposta = await res.json();
+        Alert.alert("Sucesso", "Produto cadastrado e vinculado!");
+        
+        // Joga o funcionário direto pra tela de dar a entrada no produto novinho
+        setProdutoReconhecido(resposta.produto);
+        setCodigoNovo(null);
+        setCadastrandoNovo(false);
+        setNomeNovoProd('');
+        setUnidadeNovoProd('');
+      } else {
+        Alert.alert("Erro", "Não foi possível cadastrar.");
+      }
+    } catch (e) { Alert.alert("Erro", "Sem conexão."); }
   };
 
   // ==========================================
@@ -382,18 +422,43 @@ export default function App() {
     }
 
     if (codigoNovo) {
-      // (Mantido igual: Tela de Batismo)
+      if (cadastrandoNovo) {
+        return (
+          <View style={styles.containerBranco}>
+            <Text style={{fontSize: 28, fontWeight: 'bold', color: '#2196F3', marginBottom: 10}}>Novo Produto</Text>
+            <Text style={{fontSize: 16, marginBottom: 20, textAlign: 'center'}}>Cadastrando código: {codigoNovo}</Text>
+            
+            <TextInput style={[styles.inputAuth, {backgroundColor: '#fff', color: '#000', borderWidth: 2, borderColor: '#ccc'}]} placeholder="Nome (Ex: Cebola Roxa)" placeholderTextColor="#999" value={nomeNovoProd} onChangeText={setNomeNovoProd} />
+            <TextInput style={[styles.inputAuth, {backgroundColor: '#fff', color: '#000', borderWidth: 2, borderColor: '#ccc'}]} placeholder="Unidade (Ex: kg, un, litro)" placeholderTextColor="#999" value={unidadeNovoProd} onChangeText={setUnidadeNovoProd} />
+            
+            <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#4CAF50', width: '90%'}]} onPress={cadastrarProdutoPeloCelular}>
+              <Text style={styles.btnText}>SALVAR E CONTINUAR</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#999', width: '90%', marginTop: 10}]} onPress={() => setCadastrandoNovo(false)}>
+              <Text style={styles.btnText}>VOLTAR</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
       return (
         <View style={styles.containerBranco}>
-          <Text style={{fontSize: 28, fontWeight: 'bold', color: '#FF9800', marginBottom: 10}}>Código Novo!</Text>
-          <Text style={{fontSize: 18, marginBottom: 20, textAlign: 'center', paddingHorizontal: 20}}>A qual produto o código {codigoNovo} pertence?</Text>
-          <FlatList data={produtosCatalogo} keyExtractor={(item) => item.id.toString()} style={{ width: '90%', marginBottom: 20 }} renderItem={({ item }) => (
-              <TouchableOpacity style={{backgroundColor: '#fff', padding: 18, marginVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#ddd'}} onPress={() => realizarBatismo(item.id)}>
-                <Text style={{fontSize: 18, fontWeight: 'bold', color: '#333'}}>{item.nome}</Text>
+          <Text style={{fontSize: 28, fontWeight: 'bold', color: '#FF9800', marginBottom: 10}}>Código Desconhecido</Text>
+          <Text style={{fontSize: 16, marginBottom: 15, textAlign: 'center', paddingHorizontal: 20}}>O código {codigoNovo} não existe no sistema. O que deseja fazer?</Text>
+          
+          <TouchableOpacity style={[styles.botaoAcao, {backgroundColor: '#2196F3', marginBottom: 15}]} onPress={() => setCadastrandoNovo(true)}>
+            <Text style={styles.btnText}>➕ CADASTRAR NOVO PRODUTO</Text>
+          </TouchableOpacity>
+          
+          <Text style={{fontSize: 14, fontWeight: 'bold', marginVertical: 10, color: '#666'}}>OU VINCULAR A UM EXISTENTE:</Text>
+
+          <FlatList data={produtosCatalogo} keyExtractor={(item) => item.id.toString()} style={{ width: '90%', marginBottom: 10 }} renderItem={({ item }) => (
+              <TouchableOpacity style={{backgroundColor: '#fff', padding: 15, marginVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#ddd'}} onPress={() => realizarBatismo(item.id)}>
+                <Text style={{fontSize: 16, fontWeight: 'bold', color: '#333', textAlign: 'center'}}>{item.nome}</Text>
               </TouchableOpacity>
             )} />
           <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#F44336', width: '90%'}]} onPress={() => { setCodigoNovo(null); setScanned(false); }}>
-            <Text style={styles.btnText}>CANCELAR BATISMO</Text>
+            <Text style={styles.btnText}>CANCELAR TUDO</Text>
           </TouchableOpacity>
         </View>
       );

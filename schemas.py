@@ -27,9 +27,10 @@ class ProdutoResponse(BaseModel):
 class ProdutoCreate(BaseModel):
     cliente_id: int
     nome: str
-    categoria_id: int
+    categoria_id: Optional[int] = None
     unidade_medida: str
     estoque_minimo: float
+    codigo_barras: Optional[str] = None
 
 # Schema que o PySide vai ENVIAR para dar a baixa
 class MovimentacaoCreate(BaseModel):
