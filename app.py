@@ -1,20 +1,71 @@
 import sys
 import os
+import time
+
+# --- RESOLUÇÃO DE CAMINHOS ABSOLUTOS ---
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+    bundle_dir = sys._MEIPASS
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    bundle_dir = base_dir
+
+# ==========================================
+# O SEGREDO DA VELOCIDADE: SPLASH SCREEN NO TOPO
+# ==========================================
+from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel, QProgressBar
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt
+
+class SplashScreenVega(QSplashScreen):
+    def __init__(self, caminho_img):
+        pixmap = QPixmap(caminho_img).scaled(600, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        super().__init__(pixmap, Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
+        
+        self.lbl_status = QLabel("Iniciando VegaStock...", self)
+        self.lbl_status.setStyleSheet("color: white; font-weight: bold; font-size: 13px; background-color: rgba(0,0,0,150); padding: 2px; border-radius: 4px;")
+        self.lbl_status.setAlignment(Qt.AlignCenter)
+        self.lbl_status.setGeometry(20, pixmap.height() - 70, pixmap.width() - 40, 25)
+        
+        self.barra = QProgressBar(self)
+        self.barra.setGeometry(20, pixmap.height() - 40, pixmap.width() - 40, 20)
+        self.barra.setStyleSheet("""
+            QProgressBar { border: 1px solid #555; border-radius: 5px; background-color: #222; text-align: center; color: white; font-weight: bold; }
+            QProgressBar::chunk { background-color: #00E5FF; border-radius: 4px; }
+        """)
+
+    def atualizar(self, valor, texto):
+        self.barra.setValue(valor)
+        self.lbl_status.setText(texto)
+        QApplication.processEvents()
+
+# Inicia o núcleo visual ANTES dos imports pesados
+app_instancia = QApplication.instance()
+if app_instancia is None:
+    app_instancia = QApplication(sys.argv)
+
+caminho_splash = os.path.join(bundle_dir, "assets", "logo.png")
+splash = SplashScreenVega(caminho_splash)
+splash.show()
+splash.atualizar(10, "Carregando núcleo de interface gráfica...")
+
+# ==========================================
+# IMPORTS PESADOS (Carregam enquanto a Splash está na tela)
+# ==========================================
 import requests
 import ctypes
-from aba_sobre import AbaSobre
 import re
 from datetime import datetime
-from PySide6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
-                               QLabel, QHBoxLayout, QStackedWidget,QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout) # ADICIONADO QFrame
-from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QBrush, QIcon
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtWidgets import (QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
+                               QLabel, QHBoxLayout, QStackedWidget, QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout)
+from PySide6.QtGui import QPainter, QPainterPath, QColor, QBrush, QIcon
+from PySide6.QtCore import QSize
+splash.atualizar(40, "Conectando módulos e banco de dados...")
 import estilos
 from tela_login import TelaLogin
 from tela_cadastro import TelaCadastro
 from tela_recuperacao import TelaRecuperacao
 from atualizador import checar_e_atualizar
-
 from aba_dashboard import AbaDashboard
 from aba_catalogo import AbaCatalogo
 from aba_estoque import AbaEstoque
@@ -24,7 +75,7 @@ from aba_conta import AbaConta
 from aba_configuracoes import AbaConfiguracoes
 from aba_sobre import AbaSobre
 
-myappid = 'vegasotck.versao1' # Pode ser qualquer string única
+myappid = 'vegasotck.versao1'
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 class MainWindow(QMainWindow):
@@ -234,6 +285,28 @@ class MainWindow(QMainWindow):
         # Dispara o loop usando a aba real que acabamos de setar na linha acima
         if hasattr(self, 'aba_cnt'):
             self.aba_cnt.mudar_escala_aplicativo(indice_salvo)
+            
+        # Verifica se o atualizador deixou algum recado de novidades
+        self.checar_notas_atualizacao()
+
+    def checar_notas_atualizacao(self):
+        notas_path = os.path.join(base_dir, "release_notes.txt")
+        if os.path.exists(notas_path):
+            try:
+                with open(notas_path, "r", encoding="utf-8") as f:
+                    texto_notas = f.read().strip()
+                
+                if texto_notas:
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("🚀 Aplicativo Atualizado!")
+                    msg.setText("O VegaStock foi atualizado com sucesso!\n\nVeja o que há de novo nesta versão:\n\n" + texto_notas)
+                    msg.setIcon(QMessageBox.Information)
+                    msg.setStandardButtons(QMessageBox.Ok)
+                    msg.exec()
+                
+                os.remove(notas_path)
+            except Exception:
+                pass
         
     def mudar_aba(self, index):
         self.area_central.setCurrentIndex(index)
@@ -439,56 +512,38 @@ class MainWindow(QMainWindow):
                 print(f"Erro no trigger de feedback: {e}")
 
 def iniciar_app():
-    # Verifica se o motor já existe. Se não existir, ele cria.
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-    
-    # Injeta a paleta de cores da empresa do meu tio no aplicativo inteiro
-    app.setStyleSheet(estilos.ESTILO_GLOBAL)
+    app_instancia.setStyleSheet(estilos.ESTILO_GLOBAL)
 
-    # Loop de Navegação (Roteador do PySide)
     while True:
         tela_login = TelaLogin()
+        
+        # Fecha a Splash quando a tela de login aparecer!
+        if splash:
+            splash.finish(tela_login)
+            
         resultado_login = tela_login.exec()
 
         if resultado_login == TelaLogin.Accepted:
-            # Login deu certo! Abre a tela principal e quebra o loop
             janela_principal = MainWindow(tela_login.cliente_dados)
             janela_principal.show()
-            sys.exit(app.exec())
-        
+            sys.exit(app_instancia.exec())
         elif tela_login.ir_para_cadastro:
-            # Clicou no botão "Cadastrar-se"
             tela_cadastro = TelaCadastro()
             tela_cadastro.exec()
-            # Ao fechar o cadastro (sucesso ou "Voltar"), o loop reinicia e abre o Login de novo
-            
         elif tela_login.ir_para_recuperacao:
             tela_rec = TelaRecuperacao()
             tela_rec.exec()
-            # Ao fechar, o loop reinicia e volta para o Login
-        
         else:
-            # Usuário clicou no "X" vermelho da janela, fecha tudo.
             break
 
     sys.exit()
 
 if __name__ == "__main__":
-    from PySide6.QtWidgets import QApplication
-    import sys
-    import os # <-- Adicione o import do os aqui, se não tiver
-    
-    # 1. A REGRA DE OURO: Liga o motor visual ANTES de qualquer coisa
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication(sys.argv)
-        
-    # 2. Agora sim, o atualizador pode mostrar as caixas de aviso sem o app explodir!
+    splash.atualizar(80, "Verificando radares de atualizações...")
     if checar_e_atualizar():
-        # Se ele tiver que atualizar, ele morre aqui (sem dar erro de memória)
         os._exit(0)
         
-    # 3. Se não teve atualização, abre o sistema
+    splash.atualizar(100, "Pronto! Iniciando VegaStock...")
+    time.sleep(0.5)
+    
     iniciar_app()
