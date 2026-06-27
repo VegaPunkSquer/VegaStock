@@ -1,168 +1,111 @@
-# ==================================================
-# VEGASTOCK PRO - DARK THEME (Premium SaaS)
-# ==================================================
-
+# Paleta da Empresa: Light Premium (SaaS Design)
 ESTILO_GLOBAL = """
-/* Fundo Geral e Texto Padrão */
+/* Fundo Geral e Tipografia */
 QWidget {
-    background-color: #121215;
-    color: #E0E0E0;
-    font-family: 'Segoe UI', Arial, sans-serif;
-    font-size: 14px;
+    background-color: #F8FAFC;
+    color: #0F172A;
+    font-family: 'Segoe UI', -apple-system, sans-serif;
 }
 
-/* Janela Principal */
-QMainWindow {
-    background-color: #121215;
-}
-
-/* Títulos e Textos de Destaque */
+/* Títulos */
 QLabel#titulo {
-    font-size: 26px;
-    font-weight: bold;
-    color: #FFFFFF;
-    margin-bottom: 10px;
+    font-size: 22px;
+    font-weight: 800;
+    color: #0F172A;
 }
 
-QLabel#subtitulo {
-    font-size: 16px;
-    color: #A0A0B0;
-}
-
-/* Inputs de Texto (Elegantes e Flat) */
-QLineEdit {
-    background-color: #1A1A20;
-    border: 1px solid #33333E;
-    padding: 10px 15px;
+/* Inputs, SpinBoxes e Comboboxes */
+QLineEdit, QComboBox, QSpinBox, QDoubleSpinBox {
+    background-color: #FFFFFF;
+    border: 1px solid #CBD5E1;
     border-radius: 6px;
-    color: #FFFFFF;
-    font-size: 14px;
-}
-QLineEdit:focus {
-    border: 1px solid #FFD700;
-    background-color: #1E1E25;
-}
-
-/* Botões Padrão (Dark) */
-QPushButton {
-    background-color: #24242C;
-    border: 1px solid #33333E;
-    color: #FFFFFF;
-    font-weight: bold;
-    padding: 10px 20px;
-    border-radius: 6px;
-}
-QPushButton:hover {
-    background-color: #2D2D38;
-    border: 1px solid #444455;
-}
-QPushButton:pressed {
-    background-color: #1A1A20;
-}
-
-/* Botões de Ação Principal (O Amarelo VegaTech) */
-QPushButton#btn_destaque {
-    background-color: #FFD700;
-    color: #121215;
-    border: none;
-    font-weight: bold;
-    font-size: 15px;
-}
-QPushButton#btn_destaque:hover {
-    background-color: #F4C400;
-}
-QPushButton#btn_destaque:pressed {
-    background-color: #D9AE00;
-}
-
-/* Botões de Perigo (Excluir/Sair) */
-QPushButton#btn_perigo {
-    background-color: #2A1515;
-    color: #FF5555;
-    border: 1px solid #4A2020;
-}
-QPushButton#btn_perigo:hover {
-    background-color: #FF5555;
-    color: #FFFFFF;
-}
-
-/* Tabelas (Estoque, Relatórios) */
-QTableWidget {
-    background-color: #1A1A20;
-    alternate-background-color: #1E1E25;
-    border: 1px solid #2C2C35;
-    border-radius: 6px;
-    gridline-color: #2C2C35;
+    padding: 4px 12px;
+    min-height: 28px;
+    color: #0F172A;
     selection-background-color: #FFD700;
-    selection-color: #121215;
+    selection-color: #000000;
 }
-QHeaderView::section {
-    background-color: #24242C;
-    color: #A0A0B0;
-    padding: 10px;
-    border: none;
-    border-bottom: 1px solid #2C2C35;
-    font-weight: bold;
+QLineEdit:hover, QComboBox:hover, QSpinBox:hover, QDoubleSpinBox:hover {
+    border: 1px solid #94A3B8;
 }
-
-/* Barra de Rolagem (Discreta estilo Mac/Web) */
-QScrollBar:vertical {
-    border: none;
-    background: #121215;
-    width: 8px;
-    margin: 0px 0px 0px 0px;
-}
-QScrollBar::handle:vertical {
-    background: #33333E;
-    min-height: 20px;
-    border-radius: 4px;
-}
-QScrollBar::handle:vertical:hover {
-    background: #FFD700;
-}
-QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
-    height: 0px;
-}
-
-/* Menus Laterais (Abas Estilo Dashboard) */
-QListWidget {
-    background-color: #15151A;
-    border: none;
-    border-right: 1px solid #2C2C35;
-    outline: none;
-}
-QListWidget::item {
-    padding: 15px 20px;
-    color: #A0A0B0;
-    border-left: 4px solid transparent;
-}
-QListWidget::item:selected {
-    background-color: #1E1E25;
-    color: #FFD700;
-    border-left: 4px solid #FFD700;
-    font-weight: bold;
-}
-QListWidget::item:hover:!selected {
-    background-color: #1A1A20;
-    color: #FFFFFF;
-}
-
-/* Combobox (Filtros e Seleções) */
-QComboBox {
-    background-color: #1A1A20;
-    border: 1px solid #33333E;
-    border-radius: 6px;
-    padding: 8px 15px;
-    color: #FFFFFF;
+QLineEdit:focus, QComboBox:focus, QSpinBox:focus, QDoubleSpinBox:focus {
+    border: 2px solid #FFD700;
+    background-color: #FFFFFF;
 }
 QComboBox::drop-down {
     border: none;
+    width: 20px;
 }
-QComboBox QAbstractItemView {
-    background-color: #1A1A20;
-    color: #FFFFFF;
-    selection-background-color: #FFD700;
-    selection-color: #121215;
-    border: 1px solid #33333E;
+
+/* Botões Padrão */
+QPushButton {
+    background-color: #0F172A;
+    color: #F8FAFC;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 16px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    background-color: #1E293B;
+}
+QPushButton:pressed {
+    background-color: #000000;
+}
+
+/* Botão de Destaque */
+QPushButton#btn_destaque {
+    background-color: #FFD700;
+    color: #000000;
+    font-weight: 700;
+}
+QPushButton#btn_destaque:hover {
+    background-color: #FACC15;
+}
+QPushButton#btn_destaque:pressed {
+    background-color: #EAB308;
+}
+
+/* DESIGN 1: TABELAS CLEAN (Sem grade dura do Excel) */
+QTableWidget {
+    background-color: #FFFFFF;
+    border: 1px solid #E2E8F0;
+    border-radius: 8px;
+    gridline-color: transparent; 
+}
+QTableWidget::item {
+    border-bottom: 1px solid #F1F5F9; /* Linhas horizontais super suaves */
+    padding: 5px;
+}
+QTableWidget::item:selected {
+    background-color: #FEF08A;
+    color: #0F172A;
+}
+QHeaderView::section {
+    background-color: #F8FAFC;
+    color: #64748B;
+    font-weight: 700;
+    border: none;
+    border-bottom: 2px solid #E2E8F0;
+    padding: 10px;
+}
+
+/* DESIGN 2: BARRAS DE ROLAGEM MINIMALISTAS (Scrollbars) */
+QScrollBar:vertical {
+    border: none;
+    background: transparent;
+    width: 6px;
+    margin: 0px;
+}
+QScrollBar::handle:vertical {
+    background: #CBD5E1;
+    border-radius: 3px;
+    min-height: 20px;
+}
+QScrollBar::handle:vertical:hover {
+    background: #94A3B8;
+}
+QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {
+    height: 0px;
 }
 """

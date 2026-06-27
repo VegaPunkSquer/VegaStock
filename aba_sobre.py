@@ -1,9 +1,10 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel
+from PySide6.QtWidgets import QFrame, QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import Qt
 import requests
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QWidget
 from PySide6.QtCore import QTimer, QThread, Signal
 import os
+from atualizador import VERSAO_LOCAL
 
 API_BASE_URL = "https://vegap-vega-stock.hf.space"
 
@@ -20,9 +21,9 @@ class AbaSobre(QWidget):
         lbl_titulo.setStyleSheet("font-size: 20px; font-weight: bold;")
         layout.addWidget(lbl_titulo)
 
-        # Informações gerais do software
+        # Informações gerais do software (Agora Modular!)
         lbl_info = QLabel(
-            "<b>Versão:</b> 1.0.0<br>"
+            f"<b>Versão:</b> {VERSAO_LOCAL}<br>"
             "<b>Descrição:</b> Sistema desktop inteligente para gestão de estoque em restaurantes, "
             "cafeterias e indústrias alimentícias, equipado com controle multitenant e relatórios "
             "avançados de desperdício."
@@ -79,6 +80,18 @@ class AbaSobre(QWidget):
 
         # Lista nativa com fundo de chat e sem bordas genéricas esticadas
         self.lista_chat = QListWidget()
+        
+        # BLINDAGEM DO CHAT: Quebra a regra do menu lateral e zera o padding para o texto não ser esmagado
+        self.lista_chat.setStyleSheet("""
+            QListWidget::item {
+                padding: 2px;
+                border: none;
+            }
+            QListWidget::item:hover, QListWidget::item:selected {
+                background-color: transparent;
+                border: none;
+            }
+        """)
         self.lista_chat.setStyleSheet("QListWidget { border: 1px solid #DCDCDC; border-radius: 6px; background-color: #F4F6F7; padding: 8px; }")
         layout_principal.addWidget(self.lista_chat)
 
@@ -187,16 +200,36 @@ def renderizar_mensagens(self, lista_msg):
         lbl.setWordWrap(True)
         lbl.setMaximumWidth(480)  # Impede que o balão estique bizarramente em monitores UltraWide
         
+        # O TRUQUE: O balão agora é um QFrame (Bloco) separado dos textos!
+        balao = QFrame()
+        balao.setMaximumWidth(480)
+        layout_balao = QVBoxLayout(balao)
+        layout_balao.setContentsMargins(10, 10, 10, 10)
+        layout_balao.setSpacing(2)
+        
+        lbl_nome = QLabel()
+        lbl_msg = QLabel(msg['texto'])
+        lbl_msg.setWordWrap(True)
+        lbl_msg.setStyleSheet("font-size: 13px; color: #222222; border: none; background: transparent;")
+        
         if msg["remetente"] == "CLIENTE":
-            lbl.setText(f"<b>Você:</b><br>{msg['texto']}")
-            lbl.setStyleSheet("background-color: #DCF8C6; border: 1px solid #C7E5A9; border-radius: 8px; padding: 10px; font-size: 13px; color: #222222;")
-            layout.addStretch()  # Empurra o balão do cliente para a direita
-            layout.addWidget(lbl)
+            lbl_nome.setText("Você:")
+            lbl_nome.setStyleSheet("font-weight: bold; color: #075E54; font-size: 11px; border: none; background: transparent;")
+            balao.setStyleSheet("background-color: #DCF8C6; border-radius: 8px;")
+            
+            layout_balao.addWidget(lbl_nome)
+            layout_balao.addWidget(lbl_msg)
+            layout.addStretch()
+            layout.addWidget(balao)
         else:
-            lbl.setText(f"<b>Suporte VegaStock:</b><br>{msg['texto']}")
-            lbl.setStyleSheet("background-color: #FFFFFF; border: 1px solid #E2E2E2; border-radius: 8px; padding: 10px; font-size: 13px; color: #222222;")
-            layout.addWidget(lbl)
-            layout.addStretch()  # Empurra o balão do admin para a esquerda
+            lbl_nome.setText("Suporte VegaStock:")
+            lbl_nome.setStyleSheet("font-weight: bold; color: #333333; font-size: 11px; border: none; background: transparent;")
+            balao.setStyleSheet("background-color: #FFFFFF; border: 1px solid #E2E2E2; border-radius: 8px;")
+            
+            layout_balao.addWidget(lbl_nome)
+            layout_balao.addWidget(lbl_msg)
+            layout.addWidget(balao)
+            layout.addStretch()
             
         container.setLayout(layout)
         item.setSizeHint(container.sizeHint())

@@ -88,7 +88,6 @@ class MainWindow(QMainWindow):
         self.cliente_dados = cliente_dados
         self.setWindowTitle(f"VegaStock - Gerenciamento de Estoque - {self.cliente_dados['nome_fantasia']}")
         self.resize(900, 600)
-
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         # --- INÍCIO DO LAYOUT GRID DEFINITIVO ---
@@ -144,16 +143,21 @@ class MainWindow(QMainWindow):
             "ANÁLISE DE DESPERDÍCIO", "EQUIPE E PERMISSÕES 🔒", "MINHA CONTA", "CONFIGURAÇÕES", "ℹ️ SOBRE"
         ]
         
+        # DESIGN DO MENU PREMIUM: Sem blocos cinzas, apenas linhas de marcação
         estilo_btn = """
             QPushButton {
-                background-color: 
-                #EAEAEA; border: 1px solid #CCCCCC;
-                text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; color: #333;
-                border-radius: 5px; /* Cantos arredondados de volta */
+                background-color: transparent; 
+                border: none;
+                border-left: 3px solid transparent;
+                text-align: left; 
+                padding: 12px 15px; 
+                font-weight: bold; 
+                font-size: 12px; 
+                color: #64748B;
+                border-radius: 0px;
             }
-            QPushButton:hover { background-color: #DCDCDC; }
-           
-            QPushButton:checked { background-color: #FFD700; border: 1px solid #E6C200; color: #000; }
+            QPushButton:hover { background-color: #F1F5F9; color: #0F172A; }
+            QPushButton:checked { background-color: #FFFBEB; border-left: 3px solid #FFD700; color: #0F172A; }
         """
         
         # --- BOTÃO LOGOFF ---
@@ -510,6 +514,14 @@ class MainWindow(QMainWindow):
                                 f.write(f"Enviado em {agora.isoformat()}")
             except Exception as e:
                 print(f"Erro no trigger de feedback: {e}")
+                
+    def showEvent(self, event):
+        super().showEvent(event)
+        # O GOLPE FINAL: Centraliza no exato milissegundo em que a janela aparece, impedindo o Windows de interferir
+        monitor = self.screen().availableGeometry()
+        x = monitor.x() + (monitor.width() - self.width()) // 2
+        y = monitor.y() + (monitor.height() - self.height()) // 2
+        self.move(x, y)
 
 def iniciar_app():
     app_instancia.setStyleSheet(estilos.ESTILO_GLOBAL)
