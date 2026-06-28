@@ -552,7 +552,8 @@ def iniciar_app():
 
 if __name__ == "__main__":
     splash.atualizar(80, "Verificando radares de atualizações...")
-    if checar_e_atualizar():
+    # O TRUQUE: Passamos a splash como "pai" para a caixa de aviso nascer na frente dela!
+    if checar_e_atualizar(splash):
         os._exit(0)
         
     splash.atualizar(100, "Pronto! Iniciando VegaStock...")
