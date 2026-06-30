@@ -1,0 +1,3 @@
+[30/06/2026 16:03:58] IMPORTACAO CSV: Usuario 'sergio'. Produtos: 2. Erros: 220. Novas Categorias: 1.
+[30/06/2026 16:15:16] IMPORTACAO CSV: Usuario 'sergio'. Produtos: 2. Erros: 220. Novas Categorias: 0.
+[30/06/2026 17:15:37] IMPORTACAO CSV: Usuario 'sergio'. Sucesso: 2. Erros: 220. Cat criadas: 0. Uni criadas: 1.
