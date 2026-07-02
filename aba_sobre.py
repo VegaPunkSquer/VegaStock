@@ -4,7 +4,8 @@ import requests
 from PySide6.QtWidgets import QListWidget, QListWidgetItem, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QWidget
 from PySide6.QtCore import QTimer, QThread, Signal
 import os
-from atualizador import VERSAO_LOCAL
+from atualizador import VERSAO_LOCAL, API_MASTER_URL, PRODUTO_ID_NO_MASTER
+from PySide6.QtWidgets import QMessageBox
 
 API_BASE_URL = "https://vegap-vega-stock.hf.space"
 
@@ -31,6 +32,12 @@ class AbaSobre(QWidget):
         )
         lbl_info.setStyleSheet("font-size: 13px; color: #333333; line-height: 140%;")
         layout.addWidget(lbl_info)
+
+        self.btn_release_notes = QPushButton("⭐ Ver Novidades da Versão")
+        self.btn_release_notes.setStyleSheet("background-color: #F39C12; color: white; font-weight: bold; padding: 8px; border-radius: 4px; max-width: 250px;")
+        self.btn_release_notes.setCursor(Qt.PointingHandCursor)
+        self.btn_release_notes.clicked.connect(self.ver_release_notes)
+        layout.addWidget(self.btn_release_notes)
 
         layout.addSpacing(10)
 
@@ -269,7 +276,51 @@ def enviar_mensagem_suporte(self):
             self.worker_envio_exclusivo_sobre.sucesso.connect(lambda: [self.btn_enviar_chat.setEnabled(True), self.atualizar_chat_suporte()])
             self.worker_envio_exclusivo_sobre.start()
 
+class WorkerReleaseNotes(QThread):
+    sucesso = Signal(str, str)
+    erro = Signal(str)
+
+    def run(self):
+        try:
+            resp = requests.get(f"{API_MASTER_URL}/master/atualizacao/{PRODUTO_ID_NO_MASTER}", timeout=5)
+            if resp.status_code == 200:
+                dados = resp.json()
+                notas = dados.get("notas_atualizacao", "Sem notas detalhadas para esta versão.")
+                versao = dados.get("versao_atual", "Desconhecida")
+                self.sucesso.emit(versao, notas)
+            else:
+                self.erro.emit("Não foi possível carregar as novidades no momento.")
+        except Exception:
+            self.erro.emit("Falha de conexão com o servidor.")
+
+def ver_release_notes(self):
+    self.btn_release_notes.setText("⏳ Buscando...")
+    self.btn_release_notes.setEnabled(False)
+    
+    self.worker_notas = WorkerReleaseNotes(parent=self)
+    self.worker_notas.sucesso.connect(self.exibir_release_notes)
+    self.worker_notas.erro.connect(self.erro_release_notes)
+    self.worker_notas.start()
+
+def exibir_release_notes(self, versao_nuvem, notas):
+    self.btn_release_notes.setText("⭐ Ver Novidades da Versão")
+    self.btn_release_notes.setEnabled(True)
+    
+    msg = QMessageBox(self)
+    msg.setWindowTitle(f"Release Notes - Versão {versao_nuvem}")
+    msg.setText(f"O que há de novo na versão mais recente:\n\n{notas}")
+    msg.setIcon(QMessageBox.Information)
+    msg.exec()
+
+def erro_release_notes(self, erro_msg):
+    self.btn_release_notes.setText("⭐ Ver Novidades da Versão")
+    self.btn_release_notes.setEnabled(True)
+    QMessageBox.warning(self, "Aviso", erro_msg)
+
 # Vincula dinamicamente os métodos à classe principal
 AbaSobre.atualizar_chat_suporte = atualizar_chat_suporte
 AbaSobre.renderizar_mensagens = renderizar_mensagens
 AbaSobre.enviar_mensagem_suporte = enviar_mensagem_suporte
+AbaSobre.ver_release_notes = ver_release_notes
+AbaSobre.exibir_release_notes = exibir_release_notes
+AbaSobre.erro_release_notes = erro_release_notes
