@@ -313,6 +313,18 @@ class MainWindow(QMainWindow):
                 pass
         
     def mudar_aba(self, index):
+        # O Cão de Guarda: Se o cara der um alt+tab e a meia-noite virar, ele é deslogado no próximo clique
+        status = str(self.cliente_dados.get('status_assinatura', '')).upper()
+        validade_str = self.cliente_dados.get('validade_pro')
+        
+        if "TESTE" in status and validade_str:
+            validade_limpa = validade_str.split(".")[0].replace("Z", "")
+            data_validade = datetime.fromisoformat(validade_limpa)
+            if data_validade < datetime.utcnow():
+                QMessageBox.critical(self, "Tempo Esgotado", "O seu período de testes expirou! O sistema será bloqueado.")
+                self.fazer_logoff()
+                return
+                
         self.area_central.setCurrentIndex(index)
 
     def carregar_logo_redondo(self, caminho_logo):
@@ -491,9 +503,12 @@ class MainWindow(QMainWindow):
                 dias_restantes = (data_validade - agora).total_seconds() / 86400
                 
                 # Heurística dos 80% passados (20% ou menos de tempo restante):
-                # Se for teste de 7 dias, dispara com 1.5 dias ou menos.
-                # Se for teste de 30 dias, dispara com 6 dias ou menos.
                 disparar = False
+                
+                # Trava de segurança extra: Se o tempo já acabou (menor que zero), nem pede feedback, aborta a missão.
+                if dias_restantes <= 0:
+                    return
+
                 if 0 < dias_restantes <= 1.5:
                     disparar = True
                 elif 2.0 < dias_restantes <= 6.0:

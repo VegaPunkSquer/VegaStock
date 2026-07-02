@@ -72,6 +72,11 @@ def listar_produtos(cliente_id: int, db: Session = Depends(get_db)):
 # ==========================================
 @app.post("/movimentacao")
 def registrar_movimentacao(mov: schemas.MovimentacaoCreate, db: Session = Depends(get_db)):
+    # A Guilhotina da API: Corta a operação na raiz se o teste venceu, mesmo com app aberto
+    cliente = db.query(models.Cliente).filter(models.Cliente.id == mov.cliente_id).first()
+    if cliente and cliente.status_assinatura and "TESTE" in cliente.status_assinatura.upper() and cliente.validade_pro and cliente.validade_pro < datetime.utcnow():
+        raise HTTPException(status_code=403, detail="O seu período de testes expirou. Sistema bloqueado.")
+
     produto = db.query(models.Produto).filter(models.Produto.id == mov.produto_id, models.Produto.cliente_id == mov.cliente_id).first()
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
@@ -343,7 +348,7 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     cliente = db.query(models.Cliente).filter(models.Cliente.id == usuario.cliente_id).first()
     
     # Corta o acesso imediatamente se o período de demonstração gratuita expirou
-    if cliente.status_assinatura == "TESTE" and cliente.validade_pro and cliente.validade_pro < datetime.utcnow():
+    if cliente.status_assinatura and "TESTE" in cliente.status_assinatura.upper() and cliente.validade_pro and cliente.validade_pro < datetime.utcnow():
         raise HTTPException(status_code=401, detail="O seu período de testes expirou. Faça uma assinatura para liberar os seus dados.")
 
     # Devolve a chave do cofre para o PySide
@@ -1099,8 +1104,24 @@ def adicionar_cnpj_whitelist(dados: schemas.WhitelistCreate, token_master: str =
         
     novo_teste = models.CnpjWhitelist(cnpj=cnpj_limpo, plano=dados.plano, data_fim=datetime.fromisoformat(dados.data_fim))
     db.add(novo_teste)
+    
+    # ESTRATÉGIA VEGA: Fabrica o Token para o cara usar no Cadastro ou Recuperação agora!
+    caracteres = string.ascii_letters + string.digits
+    token_gratis = ''.join(random.choice(caracteres) for _ in range(12))
+    
+    nova_licenca = models.Licenca(
+        token=token_gratis,
+        usada=False,
+        cnpj_esperado=cnpj_limpo,
+        data_expiracao=datetime.fromisoformat(dados.data_fim)
+    )
+    db.add(nova_licenca)
     db.commit()
-    return {"status": "sucesso", "mensagem": f"CNPJ {cnpj_limpo} liberado para testes!"}
+    
+    return {
+        "status": "sucesso", 
+        "mensagem": f"CNPJ {cnpj_limpo} liberado!\n\nA Licença gerada foi: {token_gratis}\n\nCopie e envie ao cliente, ela será exigida no cadastro."
+    }
 
 # --- NOVA ROTA JÁ DISPONÍVEL NO SEU BACKEND PARA O PAINEL ADMIN ---
 @app.get("/admin/whitelist")
@@ -1113,10 +1134,15 @@ def listar_whitelist_admin(token_master: str = Header(None), db: Session = Depen
     
     lista_retorno = []
     for item in itens:
+        # Pesca a última licença gerada para esse CNPJ específico
+        licenca = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == item.cnpj).order_by(models.Licenca.id.desc()).first()
+        token_str = licenca.token if licenca else "Sem Token"
+        
         lista_retorno.append({
-            "cnpj_whitelist": item.cnpj,  # Retorna a chave que o admin precisa ler
+            "cnpj_whitelist": item.cnpj,  
             "plano": item.plano,
-            "data_fim": item.data_fim.isoformat() if item.data_fim else ""
+            "data_fim": item.data_fim.isoformat() if item.data_fim else "",
+            "token": token_str  # <--- ENVIA O TOKEN PRO SEU HUB AQUI
         })
     return lista_retorno
 
@@ -1264,3 +1290,76 @@ def listar_conversas_ativas(token_master: str = Header(None), db: Session = Depe
         })
         
     return lista_conversas
+
+# ==========================================
+# ROTAS PAGINADAS (Otimização para as Tabelas do PySide)
+# ==========================================
+
+# 1. Catálogo Paginado
+@app.get("/produtos/paginado")
+def listar_produtos_paginado(cliente_id: int, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    query = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id)
+    
+    # Conta o total absoluto para o PySide saber desenhar os botões de página (Ex: Página 1 de 20)
+    total_itens = query.count()
+    
+    # Puxa só a "fatia" que o PySide pediu
+    produtos = query.order_by(models.Produto.nome).offset(offset).limit(limit).all()
+    
+    return {
+        "total": total_itens,
+        "produtos": [
+            {
+                "id": p.id,
+                "nome": p.nome,
+                "categoria_id": p.categoria_id,
+                "unidade_medida": p.unidade_medida,
+                "estoque_minimo": p.estoque_minimo,
+                "quantidade_atual": p.quantidade_atual,
+                "codigo_barras": p.codigo_barras
+            } for p in produtos
+        ]
+    }
+
+# 2. Histórico de Estoque Paginado
+@app.get("/movimentacoes/paginado/{cliente_id}")
+def listar_movimentacoes_paginado(cliente_id: int, dias: int = 30, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    data_corte = datetime.utcnow() - timedelta(hours=3, days=dias)
+    
+    query = db.query(models.MovimentacaoEstoque).filter(
+        models.MovimentacaoEstoque.cliente_id == cliente_id,
+        models.MovimentacaoEstoque.data_hora >= data_corte
+    )
+    
+    total_itens = query.count()
+    
+    # order_by(desc) para trazer as movimentações mais recentes primeiro, limitando a fatia
+    movimentacoes = query.order_by(desc(models.MovimentacaoEstoque.id)).offset(offset).limit(limit).all()
+
+    resultado = []
+    for m in movimentacoes:
+        produto = db.query(models.Produto).filter(models.Produto.id == m.produto_id).first()
+        nome_produto = produto.nome if produto else "Deletado"
+        unidade = produto.unidade_medida if produto else ""
+
+        nome_motivo = ""
+        if m.motivo_baixa_id and m.tipo_movimento.lower() == "saida":
+            motivo = db.query(models.MotivoBaixa).filter(models.MotivoBaixa.id == m.motivo_baixa_id).first()
+            nome_motivo = motivo.descricao if motivo else ""
+
+        resultado.append({
+            "id": m.id,
+            "data": m.data_hora.strftime("%d/%m/%Y\n%H:%M"),
+            "tipo": m.tipo_movimento.upper(),
+            "produto": nome_produto,
+            "quantidade": m.quantidade,
+            "unidade": unidade,
+            "custo": m.custo_unitario,
+            "responsavel": m.operador_nome if m.operador_nome else "Desconhecido",
+            "motivo": nome_motivo
+        })
+        
+    return {
+        "total": total_itens,
+        "movimentacoes": resultado
+    }

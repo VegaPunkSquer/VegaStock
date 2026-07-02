@@ -13,25 +13,37 @@ class WorkerEstoque(QThread):
     resultado = Signal(dict)
     erro = Signal(str)
 
-    def __init__(self, cliente_id, dias):
+    def __init__(self, cliente_id, dias, limit, offset, atualizar_combos=True):
         super().__init__()
         self.cliente_id = cliente_id
-        self.dias = dias # Recebe os dias do filtro
+        self.dias = dias
+        self.limit = limit
+        self.offset = offset
+        self.atualizar_combos = atualizar_combos
 
     def run(self):
         try:
-            # Puxa tudo de uma vez
-            r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
-            r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
-            r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/{self.cliente_id}?dias={self.dias}")
+            dados = {"atualizar_combos": self.atualizar_combos}
+            
+            # Só atualiza combos (produtos e motivos) se for a primeira vez ou após dar baixa
+            if self.atualizar_combos:
+                r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
+                r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
+                dados["produtos"] = r_prod.json() if r_prod.status_code == 200 else []
+                dados["motivos"] = r_mot.json() if r_mot.status_code == 200 else []
 
-            self.resultado.emit({
-                "produtos": r_prod.json() if r_prod.status_code == 200 else [],
-                "motivos": r_mot.json() if r_mot.status_code == 200 else [],
-                "historico": r_hist.json() if r_hist.status_code == 200 else []
-            })
-        except Exception:
-            self.erro.emit("Falha de conexão.")
+            # Puxa o histórico paginado da nuvem
+            r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/paginado/{self.cliente_id}", params={"dias": self.dias, "limit": self.limit, "offset": self.offset})
+
+            if r_hist.status_code == 200:
+                json_hist = r_hist.json()
+                dados["historico"] = json_hist.get("movimentacoes", [])
+                dados["total"] = json_hist.get("total", 0)
+                self.resultado.emit(dados)
+            else:
+                self.erro.emit(f"Erro na API Paginada: {r_hist.status_code} - {r_hist.text}")
+        except Exception as e:
+            self.erro.emit(f"Falha de conexão física: {str(e)}")
 
 class AbaEstoque(QWidget):
     def __init__(self, cliente_dados):
@@ -150,6 +162,44 @@ class AbaEstoque(QWidget):
         layout_filtro.addWidget(self.btn_atualizar) # O botão é injetado na tela aqui
         layout_principal.addLayout(layout_filtro)
 
+        # ==========================================
+        # PAGINAÇÃO (NO TOPO) E TABELA
+        # ==========================================
+        self.limite_atual = 30
+        self.offset_atual = 0
+        self.total_movs = 0
+        
+        layout_paginacao = QHBoxLayout()
+        layout_paginacao.setContentsMargins(0, 15, 0, 5)
+        
+        layout_paginacao.addWidget(QLabel("Mostrar:"))
+        self.combo_limite = QComboBox()
+        self.combo_limite.addItems(["10", "30", "50", "100"])
+        self.combo_limite.blockSignals(True) 
+        self.combo_limite.setCurrentText("30")
+        self.combo_limite.blockSignals(False)
+        self.combo_limite.currentIndexChanged.connect(self.mudar_limite)
+        layout_paginacao.addWidget(self.combo_limite)
+        
+        layout_paginacao.addStretch()
+        
+        self.btn_anterior = QPushButton("◀ Anterior")
+        self.btn_anterior.setStyleSheet("font-weight: bold; padding: 5px 15px; border-radius: 4px; background-color: #eee;")
+        self.btn_anterior.clicked.connect(lambda: self.mudar_pagina(-1))
+        
+        self.lbl_pagina = QLabel("Página 1")
+        self.lbl_pagina.setStyleSheet("font-weight: bold; color: #555;")
+        
+        self.btn_proxima = QPushButton("Próxima ▶")
+        self.btn_proxima.setStyleSheet("font-weight: bold; padding: 5px 15px; border-radius: 4px; background-color: #eee;")
+        self.btn_proxima.clicked.connect(lambda: self.mudar_pagina(1))
+        
+        layout_paginacao.addWidget(self.btn_anterior)
+        layout_paginacao.addWidget(self.lbl_pagina)
+        layout_paginacao.addWidget(self.btn_proxima)
+        
+        layout_principal.addLayout(layout_paginacao)
+
         # Tabela
         self.tabela = QTableWidget()
         self.tabela.setColumnCount(8)
@@ -192,8 +242,20 @@ class AbaEstoque(QWidget):
         else:
             self.spin_qtd.setDecimals(0)
 
+    def mudar_limite(self):
+        self.limite_atual = int(self.combo_limite.currentText())
+        self.offset_atual = 0 # Volta pra página 1 sempre que o limite muda
+        self.carregar_dados(atualizar_combos=False)
+        
+    def mudar_pagina(self, direcao):
+        novo_offset = self.offset_atual + (direcao * self.limite_atual)
+        if 0 <= novo_offset < self.total_movs:
+            self.offset_atual = novo_offset
+            self.carregar_dados(atualizar_combos=False)
+
     def carregar_historico(self):
-        # Quando o filtro de dias muda, NÃO recarrega os combos pra não apagar o que o usuário já digitou, só atualiza a tabela.
+        # Se mudar o filtro (Hoje, 7 dias, etc), a paginação zera e volta pro começo!
+        self.offset_atual = 0
         self.carregar_dados(atualizar_combos=False)
 
     def carregar_dados(self, atualizar_combos=True):
@@ -208,40 +270,23 @@ class AbaEstoque(QWidget):
             self.combo_motivo.clear()
             self.combo_motivo.addItem("Carregando...")
 
-        # Mágica do GIF na Tabela
-        self.tabela.setRowCount(1)
-        lbl_gif = QLabel()
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, "assets", 'hourglass.gif')
-        
-        self.movie = QMovie(caminho_gif)
-        self.movie.setScaledSize(QSize(20, 20))
-        lbl_gif.setMovie(self.movie)
-        lbl_gif.setAlignment(Qt.AlignCenter)
-        self.movie.start()
-        
-        self.tabela.setCellWidget(0, 1, lbl_gif) # GIF escondido na coluna ID
-        self.tabela.setItem(0, 1, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 2, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 3, QTableWidgetItem("Buscando dados nos EUA..."))
-        self.tabela.setItem(0, 4, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 5, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 6, QTableWidgetItem("..."))
+        self.tabela.setRowCount(0)
+        self.lbl_pagina.setText("Carregando...")
+        self.btn_anterior.setEnabled(False)
+        self.btn_proxima.setEnabled(False)
 
-        # Lê o combobox para saber quantos dias pedir pro trabalhador
         filtro_txt = self.combo_filtro.currentText()
         if filtro_txt == "Hoje": dias = 1
         elif filtro_txt == "Últimos 7 Dias": dias = 7
         else: dias = 30
 
-        # Manda o trabalhador pro porão
-        self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias)
+        self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias, getattr(self, 'limite_atual', 30), getattr(self, 'offset_atual', 0), atualizar_combos)
         self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.erro.connect(self.mostrar_erro)
         self.worker.start()
 
     def atualizar_tela(self, dados):
-        # Preenche os combos SOMENTE se for necessário
-        if self.atualizando_combos:
+        if self.atualizando_combos and "produtos" in dados:
             self.combo_produto.blockSignals(True)
             self.combo_produto.clear()
             for prod in dados["produtos"]:
@@ -253,15 +298,23 @@ class AbaEstoque(QWidget):
             for mot in dados["motivos"]:
                 self.combo_motivo.addItem(mot["descricao"], mot["id"])
 
-        # Preenche a tabela finalizando o GIF
+        # Matemática da Paginação
+        import math
+        self.total_movs = dados.get("total", 0)
+        pagina_atual = (self.offset_atual // self.limite_atual) + 1
+        total_paginas = math.ceil(self.total_movs / self.limite_atual) if self.total_movs > 0 else 1
+        
+        self.lbl_pagina.setText(f"Página {pagina_atual} de {total_paginas} (Total: {self.total_movs})")
+        self.btn_anterior.setEnabled(self.offset_atual > 0)
+        self.btn_proxima.setEnabled((self.offset_atual + self.limite_atual) < self.total_movs)
+
         self.tabela.setRowCount(0)
-        for i, mov in enumerate(dados["historico"]):
+        for i, mov in enumerate(dados.get("historico", [])):
             self.tabela.insertRow(i)
             self.tabela.setItem(i, 0, QTableWidgetItem(str(mov["id"])))
             self.tabela.setItem(i, 1, QTableWidgetItem(mov["data"]))
             
-            tipo_mov = mov.get("tipo", "") # Para evitar erros se vier vazio
-            # Se a API na nuvem devolver "Entrada" (como no seu novo back-end mobile) ou "ENTRADA", ele tratará como minúsculo
+            tipo_mov = mov.get("tipo", "")
             tipo_mov_lower = tipo_mov.lower()
 
             item_tipo = QTableWidgetItem(tipo_mov)
@@ -277,12 +330,14 @@ class AbaEstoque(QWidget):
             custo_str = f"R$ {mov['custo']:.2f}" if mov['custo'] else "-"
             self.tabela.setItem(i, 5, QTableWidgetItem(custo_str))
             
-            # Joga o nome do Operador na nova coluna (6)
             self.tabela.setItem(i, 6, QTableWidgetItem(mov.get("responsavel", "Desconhecido")))
 
-            # Empurra o Motivo para a última coluna (7)
             texto_motivo = mov.get("motivo", "") if tipo_mov_lower == "saida" else ""
             self.tabela.setItem(i, 7, QTableWidgetItem(texto_motivo))
+
+    def mostrar_erro(self, msg):
+        self.lbl_pagina.setText("Erro de Conexão")
+        QMessageBox.critical(self, "Falha na Nuvem", f"Ocorreu um erro ao buscar o histórico:\n\n{msg}")
 
     def registrar_movimentacao(self):
         dados_produto = self.combo_produto.currentData()

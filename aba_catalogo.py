@@ -15,25 +15,37 @@ class WorkerCatalogo(QThread):
     resultado = Signal(dict)
     erro = Signal(str)
 
-    def __init__(self, cliente_id):
+    def __init__(self, cliente_id, limit, offset, atualizar_combos=True):
         super().__init__()
         self.cliente_id = cliente_id
+        self.limit = limit
+        self.offset = offset
+        self.atualizar_combos = atualizar_combos
 
     def run(self):
         try:
-            # Faz as 3 buscas de uma vez
-            r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}")
-            r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
-            r_uni = requests.get(f"{API_BASE_URL}/unidades/{self.cliente_id}")
+            dados = {"atualizar_combos": self.atualizar_combos}
+            
+            # Só gasta internet buscando categoria e unidade se for a primeira vez
+            if self.atualizar_combos:
+                r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}")
+                r_uni = requests.get(f"{API_BASE_URL}/unidades/{self.cliente_id}")
+                dados["categorias"] = r_cat.json() if r_cat.status_code == 200 else []
+                dados["unidades"] = r_uni.json() if r_uni.status_code == 200 else []
 
-            # Empacota tudo num dicionário
-            dados = {
-                "categorias": r_cat.json() if r_cat.status_code == 200 else [],
-                "produtos": r_prod.json() if r_prod.status_code == 200 else [],
-                "unidades": r_uni.json() if r_uni.status_code == 200 else []
-            }
+            # Puxa APENAS a fatia paginada dos produtos na nova rota
+            r_prod = requests.get(f"{API_BASE_URL}/produtos/paginado", params={"cliente_id": self.cliente_id, "limit": self.limit, "offset": self.offset})
+            
+            if r_prod.status_code == 200:
+                json_prod = r_prod.json()
+                dados["produtos"] = json_prod.get("produtos", [])
+                dados["total"] = json_prod.get("total", 0)
+            else:
+                dados["produtos"] = []
+                dados["total"] = 0
+                
             self.resultado.emit(dados)
-        except Exception as e:
+        except Exception:
             self.erro.emit("Falha de conexão.")
             
 class UnidadeDelegate(QStyledItemDelegate):
@@ -123,22 +135,57 @@ class AbaCatalogo(QWidget):
         layout_principal.addLayout(layout_botoes_form)
 
         # ==========================================
-        # 2. TABELA DE PRODUTOS CADASTRADOS
+        # 2. PAGINAÇÃO (NO TOPO) E TABELA
         # ==========================================
+        self.limite_atual = 30
+        self.offset_atual = 0
+        self.total_produtos = 0
+        
+        layout_paginacao = QHBoxLayout()
+        layout_paginacao.setContentsMargins(0, 15, 0, 5)
+        
+        layout_paginacao.addWidget(QLabel("Mostrar:"))
+        self.combo_limite = QComboBox()
+        self.combo_limite.addItems(["10", "30", "50", "100"])
+        # TRAVA ANTI-CRASH: Evita que ele tente buscar dados antes da tela nascer
+        self.combo_limite.blockSignals(True) 
+        self.combo_limite.setCurrentText("30")
+        self.combo_limite.blockSignals(False)
+        
+        self.combo_limite.currentIndexChanged.connect(self.mudar_limite)
+        layout_paginacao.addWidget(self.combo_limite)
+        
+        layout_paginacao.addStretch()
+        
+        self.btn_anterior = QPushButton("◀ Anterior")
+        self.btn_anterior.setStyleSheet("font-weight: bold; padding: 5px 15px; border-radius: 4px; background-color: #eee;")
+        self.btn_anterior.clicked.connect(lambda: self.mudar_pagina(-1))
+        
+        self.lbl_pagina = QLabel("Página 1")
+        self.lbl_pagina.setStyleSheet("font-weight: bold; color: #555;")
+        
+        self.btn_proxima = QPushButton("Próxima ▶")
+        self.btn_proxima.setStyleSheet("font-weight: bold; padding: 5px 15px; border-radius: 4px; background-color: #eee;")
+        self.btn_proxima.clicked.connect(lambda: self.mudar_pagina(1))
+        
+        layout_paginacao.addWidget(self.btn_anterior)
+        layout_paginacao.addWidget(self.lbl_pagina)
+        layout_paginacao.addWidget(self.btn_proxima)
+        
+        # MENU INJETADO ACIMA DA TABELA
+        layout_principal.addLayout(layout_paginacao)
+
         self.tabela = QTableWidget()
         self.tabela.setColumnCount(5)
         self.tabela.setHorizontalHeaderLabels(["ID", "Nome", "Categoria", "Unidade", "Alerta Mínimo"])
         self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
-        
-        # PERMITE edição ao dar dois cliques na célula!
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.tabela.setEditTriggers(QAbstractItemView.DoubleClicked)
-        
         self.tabela.setColumnHidden(0, True)
-        # Ocultar a coluna 2 foi removido para a Categoria aparecer
+        
         layout_principal.addWidget(self.tabela)
 
-        # Layout horizontal para agrupar os botões do rodapé
+        # Layout horizontal para agrupar os botões do rodapé de ações
         layout_botoes_rodape = QHBoxLayout()
 
         self.btn_salvar_edicao = QPushButton("Salvar Edição do Produto")
@@ -221,65 +268,90 @@ class AbaCatalogo(QWidget):
         super().showEvent(event)
         self.carregar_dados()
 
-    def carregar_dados(self):
-        # Trava a tela e avisa que tá carregando
-        self.combo_unidade.blockSignals(True)
-        self.combo_categoria.clear()
-        self.combo_unidade.clear()
-        self.combo_categoria.addItem("Carregando...")
-        self.combo_unidade.addItem("Carregando...")
-        self.tabela.setRowCount(0)
-        self.combo_unidade.blockSignals(False)
+    def mudar_limite(self):
+        self.limite_atual = int(self.combo_limite.currentText())
+        self.offset_atual = 0 # Volta pra página 1 sempre que o limite muda
+        self.carregar_dados(atualizar_combos=False)
+        
+    def mudar_pagina(self, direcao):
+        novo_offset = self.offset_atual + (direcao * self.limite_atual)
+        if 0 <= novo_offset < self.total_produtos:
+            self.offset_atual = novo_offset
+            self.carregar_dados(atualizar_combos=False)
 
-        # Manda o trabalhador pro porão
-        self.worker = WorkerCatalogo(self.cliente_dados['cliente_id'])
+    def carregar_dados(self, atualizar_combos=True):
+        if atualizar_combos:
+            self.combo_unidade.blockSignals(True)
+            self.combo_categoria.clear()
+            self.combo_unidade.clear()
+            self.combo_categoria.addItem("Carregando...")
+            self.combo_unidade.addItem("Carregando...")
+            self.combo_unidade.blockSignals(False)
+
+        self.tabela.setRowCount(0)
+        self.lbl_pagina.setText("Carregando...")
+        self.btn_anterior.setEnabled(False)
+        self.btn_proxima.setEnabled(False)
+
+        # Manda pro porão com limite e offset
+        self.worker = WorkerCatalogo(self.cliente_dados['cliente_id'], self.limite_atual, self.offset_atual, atualizar_combos)
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.start()
 
     def atualizar_tela(self, dados):
-        # 1. Preenche Categorias
-        self.combo_categoria.clear()
-        for cat in dados["categorias"]:
-            self.combo_categoria.addItem(cat["nome"], cat["id"])
+        # 1. Atualiza os Combos SÓ se o trabalhador trouxe (cache inteligente)
+        if dados.get("atualizar_combos"):
+            self.combo_categoria.clear()
+            self.mapa_cats_cache = {}
+            for cat in dados.get("categorias", []):
+                self.combo_categoria.addItem(cat["nome"], cat["id"])
+                self.mapa_cats_cache[cat["id"]] = cat["nome"]
 
-        # 2. Preenche Unidades
-        self.combo_unidade.blockSignals(True)
-        self.combo_unidade.clear()
-        for uni in dados["unidades"]:
-            self.combo_unidade.addItem(uni["nome"].upper(), uni["nome"])
-        self.combo_unidade.addItem("+ Adicionar Nova...")
-        self.combo_unidade.blockSignals(False)
+            self.combo_unidade.blockSignals(True)
+            self.combo_unidade.clear()
+            self.nomes_unidades_cache = []
+            for uni in dados.get("unidades", []):
+                self.combo_unidade.addItem(uni["nome"].upper(), uni["nome"])
+                self.nomes_unidades_cache.append(uni["nome"].upper())
+            self.combo_unidade.addItem("+ Adicionar Nova...")
+            self.combo_unidade.blockSignals(False)
 
-        # 3. Preenche Tabela
-        self.tabela.blockSignals(True) # Manda o PySide fechar os olhos
+        # 2. Matemática da Paginação
+        import math
+        self.total_produtos = dados.get("total", 0)
+        pagina_atual = (self.offset_atual // self.limite_atual) + 1
+        total_paginas = math.ceil(self.total_produtos / self.limite_atual) if self.total_produtos > 0 else 1
+        
+        self.lbl_pagina.setText(f"Página {pagina_atual} de {total_paginas} (Total: {self.total_produtos})")
+        self.btn_anterior.setEnabled(self.offset_atual > 0)
+        self.btn_proxima.setEnabled((self.offset_atual + self.limite_atual) < self.total_produtos)
+
+        # 3. Preenche Tabela com a fatia
+        self.tabela.blockSignals(True)
         self.tabela.setRowCount(0)
         
-        # Mapa de categorias para pegar o nome bonitinho
-        mapa_cats = {c['id']: c['nome'] for c in dados.get("categorias", [])}
+        mapa = getattr(self, 'mapa_cats_cache', {})
         
-        for i, prod in enumerate(dados["produtos"]):
+        for i, prod in enumerate(dados.get("produtos", [])):
             self.tabela.insertRow(i)
             self.tabela.setItem(i, 0, QTableWidgetItem(str(prod["id"])))
             self.tabela.setItem(i, 1, QTableWidgetItem(prod["nome"]))
             
-            nome_categoria = mapa_cats.get(prod["categoria_id"], "Sem Categoria")
+            nome_categoria = mapa.get(prod["categoria_id"], "Sem Categoria")
             item_cat = QTableWidgetItem(nome_categoria)
-            item_cat.setFlags(item_cat.flags() & ~Qt.ItemIsEditable) # Blinda para não editarem a categoria digitando
+            item_cat.setFlags(item_cat.flags() & ~Qt.ItemIsEditable) 
             self.tabela.setItem(i, 2, item_cat)
             
-            # VOLTOU A SER TEXTO NORMAL!
             self.tabela.setItem(i, 3, QTableWidgetItem(prod["unidade_medida"]))
             
             alerta = str(prod["estoque_minimo"]) if prod["estoque_minimo"] > 0 else "Geral"
             item_alerta = QTableWidgetItem(alerta)
-            item_alerta.setFlags(item_alerta.flags() & ~Qt.ItemIsEditable) # <-- BLINDA A CÉLULA
+            item_alerta.setFlags(item_alerta.flags() & ~Qt.ItemIsEditable) 
             self.tabela.setItem(i, 4, item_alerta)
 
-        # 4. Aplica o espião na coluna da Unidade (Coluna 3)
-        nomes_unidades = [uni["nome"].upper() for uni in dados["unidades"]]
-        delegate = UnidadeDelegate(nomes_unidades, self.tabela)
+        delegate = UnidadeDelegate(getattr(self, 'nomes_unidades_cache', []), self.tabela)
         self.tabela.setItemDelegateForColumn(3, delegate)
-        self.tabela.blockSignals(False) # Pode abrir os olhos, terminou!
+        self.tabela.blockSignals(False)
 
     def cadastrar_produto(self):
         nome = self.input_nome.text().strip()
