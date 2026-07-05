@@ -45,3 +45,5 @@ config_local.json
 *.settings
 *.suo
 *.user
+
+/relatorios_gerados/*.pdf

@@ -1,11 +1,12 @@
 {
     "produto_id_master": 3,
     "nome": "VegaStock",
-    "versao_atual": "v1.4.0",
+    "versao_atual": "v1.5.4",
     "repo": "https://github.com/VegaPunkSquer/VegaStock",
     "builds": {
         "desktop": "C:\\APPS\\Vega Stock\\gerar_exe.bat",
         "mobile": "C:\\APPS\\Vega Stock\\mobile\\vegastock-mobile\\compilador_mobile.bat"
     },
-    "planos_precos": null
+    "planos_precos": null,
+    "package_name": ""
 }

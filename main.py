@@ -1146,6 +1146,54 @@ def listar_whitelist_admin(token_master: str = Header(None), db: Session = Depen
         })
     return lista_retorno
 
+# --- NOVA ROTA: EDITAR WHITELIST COM PRINTS DE DEBUG DE ALTO NÍVEL ---
+@app.put("/admin/whitelist/{cnpj}")
+def editar_whitelist_admin(cnpj: str, dados: dict, token_master: str = Header(None), db: Session = Depends(get_db)):
+    print(f"\n[API ADMIN] 🟡 REQUISIÇÃO PUT RECEBIDA - Rota: /admin/whitelist/{cnpj}")
+    print(f"[API ADMIN] 📦 Payload recebido do PySide: {dados}")
+    
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        print("[API ADMIN] 🔴 ERRO: Token Master inválido ou ausente.")
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+    
+    try:
+        # 1. Atualiza na tabela base de Whitelist
+        registro = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == cnpj_limpo).first()
+        if not registro:
+            print(f"[API ADMIN] 🔴 ERRO 404: CNPJ {cnpj_limpo} não encontrado na tabela CnpjWhitelist.")
+            raise HTTPException(status_code=404, detail="CNPJ não encontrado na base de testes.")
+            
+        nova_data_fim = datetime.fromisoformat(dados["data_fim"])
+        registro.plano = dados["plano"]
+        registro.data_fim = nova_data_fim
+        print(f"[API ADMIN] 🟢 CnpjWhitelist atualizado: Plano {registro.plano}, Fim {registro.data_fim}")
+        
+        # 2. Atualiza a Licença vinculada (caso o cliente ainda não tenha concluído o cadastro)
+        licenca = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_limpo, models.Licenca.usada == False).order_by(models.Licenca.id.desc()).first()
+        if licenca:
+            licenca.data_expiracao = nova_data_fim
+            print(f"[API ADMIN] 🟢 Licença vinculada (Token: {licenca.token}) teve validade estendida com sucesso.")
+            
+        # 3. GOLPE FINAL: Atualiza o Cliente (se ele já cadastrou e está usando o app, estende na hora!)
+        cliente = db.query(models.Cliente).filter(models.Cliente.cnpj == cnpj_limpo).first()
+        if cliente and "TESTE" in str(cliente.status_assinatura).upper():
+            cliente.plano = dados["plano"]
+            cliente.status_assinatura = f"TESTE_{dados['plano'].upper()}"
+            cliente.validade_pro = nova_data_fim
+            cliente.limite_contas = 6 if dados["plano"] == "PRO" else 2
+            print(f"[API ADMIN] 🟢 O Cliente ativo (ID: {cliente.id}) teve o prazo de testes estendido em tempo real.")
+
+        db.commit()
+        print(f"[API ADMIN] ✅ SUCESSO: Todas as tabelas do CNPJ {cnpj_limpo} foram atualizadas!")
+        return {"status": "sucesso", "mensagem": "Acesso de teste atualizado com sucesso!"}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"[API ADMIN] 💥 ERRO FATAL: Exceção disparada na linha do PUT: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro interno no servidor: {str(e)}")
+
 # 2. Rota que o App do Cliente vai bater para checar se ganha licença grátis
 @app.get("/verificar_whitelist/{cnpj}")
 def verificar_whitelist_cliente(cnpj: str, db: Session = Depends(get_db)):
