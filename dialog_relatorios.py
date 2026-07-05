@@ -170,14 +170,18 @@ class DialogGeradorRelatorio(QDialog):
             
     def construir_html_relatorio(self):
         import requests
+        from datetime import datetime
+        
         API_URL = "https://vegap-vega-stock.hf.space"
         
-        # 1. PUXANDO DADOS REAIS DA API (Substitui o SessionLocal incorreto)
         produtos = []
+        debug_prod = ""
         try:
             r = requests.get(f"{API_URL}/produtos/{self.cliente_id}", timeout=5)
             if r.status_code == 200: produtos = r.json()
-        except: pass
+            else: debug_prod = f"API falhou (Erro {r.status_code})"
+        except Exception as e:
+            debug_prod = f"Sem conexão com API: {str(e)}"
 
         movs = []
         try:
@@ -186,7 +190,7 @@ class DialogGeradorRelatorio(QDialog):
         except: pass
 
         logo_base64 = self.converter_logo_base64()
-        tag_img_logo = f'<p align="center" style="margin-bottom: 5px;"><img src="{logo_base64}"></p>' if logo_base64 else ''
+        tag_img_logo = f'<p align="center"><img src="{logo_base64}"></p>' if logo_base64 else ''
         
         data_atual = datetime.now().strftime("%d/%m/%Y às %H:%M")
         
@@ -196,27 +200,14 @@ class DialogGeradorRelatorio(QDialog):
         elif "Desperdícios" in opcao_selecionada: tipo_str = "ANÁLISE DE DESPERDÍCIOS E PREJUÍZOS"
         else: tipo_str = "GERAL COMPLETO DE OPERAÇÕES"
             
+        # HTML RAÍZ (Old-school) PARA GARANTIR QUE O PYSIDE DESENHE TUDO:
         html = f"""
         <html>
-        <head>
-            <style>
-                body {{ font-family: Arial, sans-serif; color: #1E293B; }}
-                h3 {{ color: #0F172A; font-size: 15px; border-left: 4px solid #2563EB; padding-left: 8px; margin-top: 25px; margin-bottom: 10px; }}
-                table {{ width: 100%; border-collapse: collapse; margin-bottom: 20px; font-size: 11px; }}
-                th {{ background-color: #0F172A; color: white; font-weight: bold; text-align: left; padding: 7px; border: 1px solid #0F172A; }}
-                td {{ padding: 7px; border: 1px solid #CBD5E1; }}
-                tr:nth-child(even) {{ background-color: #F8FAFC; }}
-                .numero {{ text-align: right; }}
-                .alerta {{ color: #DC2626; font-weight: bold; }}
-            </style>
-        </head>
-        <body>
-            <div style="text-align: center; margin-bottom: 20px;">
-                {tag_img_logo}
-                <h2 style="color: #0F172A; margin: 0; font-size: 18px;">RELATÓRIO {tipo_str} — {self.nome_fantasia.upper()}</h2>
-                <p style="color: #64748B; font-size: 12px; margin-top: 5px; font-weight: bold;">Emitido pelo Sistema em: {data_atual}</p>
-            </div>
-            <hr style="border: 1px solid #0F172A; margin-bottom: 20px;">
+        <body style="font-family: Arial, sans-serif; color: #1E293B;">
+            {tag_img_logo}
+            <h2 align="center" style="color: #0F172A; margin-bottom: 0;">RELATÓRIO {tipo_str} — {self.nome_fantasia.upper()}</h2>
+            <p align="center" style="color: #64748B; font-size: 14px;"><b>Emitido pelo Sistema em: {data_atual}</b></p>
+            <hr color="#0F172A">
         """
         
         is_completo = "Completo" in opcao_selecionada
@@ -226,10 +217,22 @@ class DialogGeradorRelatorio(QDialog):
 
         # --- MÓDULO 1: CATÁLOGO ---
         if is_catalogo:
-            html += "<h3>📦 Catálogo de Produtos Cadastrados</h3>"
-            html += "<table><tr><th>ID</th><th>Nome do Produto</th><th>Unidade</th><th class='numero'>Estoque Mínimo</th><th class='numero'>Custo Médio (R$)</th></tr>"
+            html += """<h3 style="color: #2563EB;">📦 Catálogo de Produtos Cadastrados</h3>"""
+            if debug_prod: html += f"<p><font color='red'>Aviso: {debug_prod}</font></p>"
+            
+            # TABELA FORÇADA COM BORDAS:
+            html += """
+            <table border="1" cellspacing="0" cellpadding="6" width="100%" bordercolor="#CBD5E1">
+                <tr bgcolor="#0F172A">
+                    <th><font color="white">ID</font></th>
+                    <th><font color="white">Nome do Produto</font></th>
+                    <th><font color="white">Unidade</font></th>
+                    <th><font color="white">Estoque Mínimo</font></th>
+                    <th><font color="white">Custo Médio (R$)</font></th>
+                </tr>
+            """
             if not produtos:
-                html += "<tr><td colspan='5' style='text-align:center;'>Nenhum produto cadastrado no catálogo.</td></tr>"
+                html += "<tr><td colspan='5' align='center'>Nenhum produto cadastrado encontrado.</td></tr>"
             else:
                 for p in produtos:
                     pid = p.get('id', '')
@@ -237,16 +240,32 @@ class DialogGeradorRelatorio(QDialog):
                     unid = p.get('unidade_medida', 'UN')
                     est_min = float(p.get('estoque_minimo', 0.0))
                     custo = float(p.get('custo_medio', 0.0))
-                    html += f"<tr><td>{pid}</td><td><b>{nome}</b></td><td>{unid}</td><td class='numero'>{est_min:.2f}</td><td class='numero'>R$ {custo:.2f}</td></tr>"
-            html += "</table>"
+                    html += f"""
+                    <tr>
+                        <td align="center">{pid}</td>
+                        <td><b>{nome}</b></td>
+                        <td align="center">{unid}</td>
+                        <td align="right">{est_min:.2f}</td>
+                        <td align="right">R$ {custo:.2f}</td>
+                    </tr>"""
+            html += "</table><br>"
             
         # --- MÓDULO 2: ESTOQUE ---
         if is_estoque:
-            html += "<h3>📊 Posição do Estoque Atual e Valoração</h3>"
-            html += "<table><tr><th>Produto</th><th>Unidade</th><th class='numero'>Qtd. Atual</th><th class='numero'>Custo Unitário (R$)</th><th class='numero'>Valoração Total (R$)</th><th>Status</th></tr>"
+            html += """<h3 style="color: #2563EB;">📊 Posição do Estoque Atual e Valoração</h3>
+            <table border="1" cellspacing="0" cellpadding="6" width="100%" bordercolor="#CBD5E1">
+                <tr bgcolor="#0F172A">
+                    <th><font color="white">Produto</font></th>
+                    <th><font color="white">Unidade</font></th>
+                    <th><font color="white">Qtd. Atual</font></th>
+                    <th><font color="white">Custo Unitário (R$)</font></th>
+                    <th><font color="white">Valoração Total (R$)</font></th>
+                    <th><font color="white">Status</font></th>
+                </tr>
+            """
             total_financeiro_estoque = 0.0
             if not produtos:
-                html += "<tr><td colspan='6' style='text-align:center;'>Nenhum dado de estoque disponível.</td></tr>"
+                html += "<tr><td colspan='6' align='center'>Nenhum dado de estoque disponível.</td></tr>"
             else:
                 for p in produtos:
                     qtd = float(p.get('quantidade_atual', 0.0))
@@ -254,38 +273,68 @@ class DialogGeradorRelatorio(QDialog):
                     est_min = float(p.get('estoque_minimo', 0.0))
                     val_total = qtd * custo
                     total_financeiro_estoque += val_total
-                    status_str = '<span class="alerta">⚠️ ABAIXO DO MÍNIMO</span>' if qtd <= est_min else '✅ Normal'
-                    html += f"<tr><td><b>{p.get('nome', '')}</b></td><td>{p.get('unidade_medida', '')}</td><td class='numero'><b>{qtd:.2f}</b></td><td class='numero'>R$ {custo:.2f}</td><td class='numero'><b>R$ {val_total:.2f}</b></td><td>{status_str}</td></tr>"
-                html += f"<tr style='background-color: #E2E8F0; font-weight: bold;'><td colspan='4' style='text-align: right;'>TOTAL FINANCEIRO EM ESTOQUE:</td><td class='numero' style='color: #0F172A;'>R$ {total_financeiro_estoque:.2f}</td><td></td></tr>"
-            html += "</table>"
+                    status_str = '<font color="#DC2626"><b>⚠️ ABAIXO DO MÍN.</b></font>' if qtd <= est_min else '<font color="green">✅ Normal</font>'
+                    html += f"""
+                    <tr>
+                        <td><b>{p.get('nome', '')}</b></td>
+                        <td align="center">{p.get('unidade_medida', '')}</td>
+                        <td align="right"><b>{qtd:.2f}</b></td>
+                        <td align="right">R$ {custo:.2f}</td>
+                        <td align="right"><b>R$ {val_total:.2f}</b></td>
+                        <td align="center">{status_str}</td>
+                    </tr>"""
+                html += f"""
+                <tr bgcolor="#E2E8F0">
+                    <td colspan="4" align="right"><b>TOTAL FINANCEIRO EM ESTOQUE:</b></td>
+                    <td align="right"><b>R$ {total_financeiro_estoque:.2f}</b></td>
+                    <td></td>
+                </tr>"""
+            html += "</table><br>"
 
         # --- MÓDULO 3: PREJUÍZO ---
         if is_prejuizo:
-            html += "<h3>⚠️ Análise de Desperdícios e Quebras de Estoque</h3>"
-            html += "<table><tr><th>Data/Hora</th><th>Produto</th><th>Motivo da Baixa</th><th class='numero'>Qtd. Perdida</th><th class='numero'>Custo Unitário</th><th class='numero'>Prejuízo Total (R$)</th></tr>"
-            
+            html += """<h3 style="color: #2563EB;">⚠️ Análise de Desperdícios e Quebras de Estoque</h3>
+            <table border="1" cellspacing="0" cellpadding="6" width="100%" bordercolor="#CBD5E1">
+                <tr bgcolor="#0F172A">
+                    <th><font color="white">Data/Hora</font></th>
+                    <th><font color="white">Produto</font></th>
+                    <th><font color="white">Motivo da Baixa</font></th>
+                    <th><font color="white">Qtd. Perdida</font></th>
+                    <th><font color="white">Custo Unitário (R$)</font></th>
+                    <th><font color="white">Prejuízo Total (R$)</font></th>
+                </tr>
+            """
             prejuizos = [m for m in movs if "saida" in str(m.get("tipo_movimento", "")).lower() and m.get("motivo_baixa_id")]
             total_prejuizo = 0.0
             
             if not prejuizos:
-                html += "<tr><td colspan='6' style='text-align:center;'>Nenhum registro de desperdício ou avaria encontrado no histórico.</td></tr>"
+                html += "<tr><td colspan='6' align='center'>Nenhum registro de desperdício encontrado no histórico.</td></tr>"
             else:
                 for m in prejuizos:
-                    # Relaciona as tabelas cruzando os IDs
                     pid = m.get("produto_id")
                     prod_relacionado = next((p for p in produtos if p.get("id") == pid), {})
-                    
                     nome_prod = m.get("produto_nome", prod_relacionado.get("nome", "Produto Removido"))
                     desc_motivo = m.get("motivo_descricao", "Motivo Interno")
-                    
                     qtd = float(m.get("quantidade", 0.0))
                     custo_base = float(m.get("custo_unitario") or prod_relacionado.get("custo_medio") or 0.0)
                     perda_financeira = qtd * custo_base
                     total_prejuizo += perda_financeira
-                    
                     data_str = m.get("data_hora", "--/--").replace("T", " ")[:16]
-                    html += f"<tr><td>{data_str}</td><td><b>{nome_prod}</b></td><td>{desc_motivo}</td><td class='numero'>{qtd:.2f}</td><td class='numero'>R$ {custo_base:.2f}</td><td class='numero alerta'>R$ {perda_financeira:.2f}</td></tr>"
-                html += f"<tr style='background-color: #FEE2E2; font-weight: bold;'><td colspan='5' style='text-align: right; color: #DC2626;'>TOTAL ACUMULADO DE PREJUÍZOS / PERDAS:</td><td class='numero alerta'>R$ {total_prejuizo:.2f}</td></tr>"
+                    
+                    html += f"""
+                    <tr>
+                        <td align="center">{data_str}</td>
+                        <td><b>{nome_prod}</b></td>
+                        <td>{desc_motivo}</td>
+                        <td align="right">{qtd:.2f}</td>
+                        <td align="right">R$ {custo_base:.2f}</td>
+                        <td align="right"><font color="#DC2626"><b>R$ {perda_financeira:.2f}</b></font></td>
+                    </tr>"""
+                html += f"""
+                <tr bgcolor="#FEE2E2">
+                    <td colspan="5" align="right"><font color="#DC2626"><b>TOTAL ACUMULADO DE PREJUÍZOS / PERDAS:</b></font></td>
+                    <td align="right"><font color="#DC2626"><b>R$ {total_prejuizo:.2f}</b></font></td>
+                </tr>"""
             html += "</table>"
             
         html += "</body></html>"
