@@ -16,6 +16,8 @@ import requests
 import os
 from dotenv import load_dotenv
 
+import uuid
+
 app = FastAPI(title="SaaS Restaurante - Estoque API")
 
 # Carrega o cofre invisível (.env)
@@ -59,12 +61,17 @@ def get_config(cliente_id: int, db: Session = Depends(get_db)):
         "logo_url": cliente.logo_url
     }
 
-# 2. Endpoint: Listar Estoque do Cliente
+# 2. Endpoint: Listar Estoque (Com Ordem Alfabética e Filtro de Categoria)
 @app.get("/produtos", response_model=List[schemas.ProdutoResponse])
-def listar_produtos(cliente_id: int, db: Session = Depends(get_db)):
-    # A cláusula multitenant em ação: só traz os produtos daquele restaurante
-    produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
-    return produtos
+def listar_produtos(cliente_id: int, categoria_id: int = None, db: Session = Depends(get_db)):
+    query = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id)
+    
+    # Se o frontend enviar uma categoria (ex: mercearia), filtra só ela!
+    if categoria_id:
+        query = query.filter(models.Produto.categoria_id == categoria_id)
+        
+    # .order_by(asc) obriga o banco a devolver SEMPRE em ordem alfabética bonita A->Z!
+    return query.order_by(models.Produto.nome.asc()).all()
 
 # 3. Endpoint Crítico: Dar Baixa / Movimentação
 # ==========================================
@@ -351,6 +358,11 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     if cliente.status_assinatura and "TESTE" in cliente.status_assinatura.upper() and cliente.validade_pro and cliente.validade_pro < datetime.utcnow():
         raise HTTPException(status_code=401, detail="O seu período de testes expirou. Faça uma assinatura para liberar os seus dados.")
 
+    # GERA UMA NOVA SESSÃO ÚNICA PARA ESTE TERMINAL E SALVA NO BANCO:
+    novo_token_sessao = uuid.uuid4().hex
+    usuario.token_sessao = novo_token_sessao
+    db.commit()
+
     # Devolve a chave do cofre para o PySide
     return {
         "status": "sucesso",
@@ -359,6 +371,7 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
         "cnpj": cliente.cnpj,                  # <--- CNPJ INJETADO AQUI!
         "nome_fantasia": cliente.nome_fantasia,
         "login_usuario": usuario.login,
+        "token_sessao": novo_token_sessao,     # <--- ENVIA O TOKEN PRO CLIENTE GUARDA-LO
         "nivel_acesso": getattr(usuario, 'nivel_acesso', 'normal'), 
         "cargo": getattr(usuario, 'cargo', 'Admin'),                
         "logo_url": cliente.logo_url,          
@@ -1343,16 +1356,19 @@ def listar_conversas_ativas(token_master: str = Header(None), db: Session = Depe
 # ROTAS PAGINADAS (Otimização para as Tabelas do PySide)
 # ==========================================
 
-# 1. Catálogo Paginado
+# 1. Catálogo Paginado (Com Ordem Alfabética A->Z e Filtro por Categoria)
 @app.get("/produtos/paginado")
-def listar_produtos_paginado(cliente_id: int, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+def listar_produtos_paginado(cliente_id: int, categoria_id: int = None, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
     query = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id)
     
-    # Conta o total absoluto para o PySide saber desenhar os botões de página (Ex: Página 1 de 20)
+    if categoria_id:
+        query = query.filter(models.Produto.categoria_id == categoria_id)
+    
+    # Conta o total absoluto para o PySide saber desenhar os botões de página
     total_itens = query.count()
     
-    # Puxa só a "fatia" que o PySide pediu
-    produtos = query.order_by(models.Produto.nome).offset(offset).limit(limit).all()
+    # Puxa a fatia em ordem alfabética A->Z
+    produtos = query.order_by(models.Produto.nome.asc()).offset(offset).limit(limit).all()
     
     return {
         "total": total_itens,
@@ -1371,13 +1387,15 @@ def listar_produtos_paginado(cliente_id: int, limit: int = 50, offset: int = 0, 
 
 # 2. Histórico de Estoque Paginado
 @app.get("/movimentacoes/paginado/{cliente_id}")
-def listar_movimentacoes_paginado(cliente_id: int, dias: int = 30, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
-    data_corte = datetime.utcnow() - timedelta(hours=3, days=dias)
-    
+def listar_movimentacoes_paginado(cliente_id: int, dias: int = 0, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
     query = db.query(models.MovimentacaoEstoque).filter(
-        models.MovimentacaoEstoque.cliente_id == cliente_id,
-        models.MovimentacaoEstoque.data_hora >= data_corte
+        models.MovimentacaoEstoque.cliente_id == cliente_id
     )
+    
+    # Se dias > 0, aplica filtro de tempo. Se for 0 (Tudo), traz absolutamente todo o histórico!
+    if dias > 0:
+        data_corte = datetime.utcnow() - timedelta(hours=3, days=dias)
+        query = query.filter(models.MovimentacaoEstoque.data_hora >= data_corte)
     
     total_itens = query.count()
     
@@ -1411,3 +1429,69 @@ def listar_movimentacoes_paginado(cliente_id: int, dias: int = 30, limit: int = 
         "total": total_itens,
         "movimentacoes": resultado
     }
+    
+# ==========================================
+# ROTAS NUCLEARES: RESET COM AUDITORIA (ADMIN ONLY)
+# ==========================================
+
+@app.delete("/estoque/resetar/{cliente_id}")
+def resetar_estoque_geral(cliente_id: int, usuario_id: int, db: Session = Depends(get_db)):
+    """Zera o saldo e apaga todo o histórico de entradas e saídas da empresa."""
+    # 1. TRAVA MESTRA: Verifica no banco se quem está clicando é o ADMIN da conta!
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.cliente_id == cliente_id).first()
+    if not usuario or usuario.nivel_acesso != "Admin":
+        raise HTTPException(status_code=403, detail="Acesso Negado! Apenas a conta Administradora pode zerar o estoque.")
+        
+    # 2. Apaga todas as movimentações do histórico
+    db.query(models.MovimentacaoEstoque).filter(models.MovimentacaoEstoque.cliente_id == cliente_id).delete()
+    
+    # 3. Zera a quantidade e o custo médio de todos os produtos do catálogo
+    produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
+    for p in produtos:
+        p.quantidade_atual = 0.0
+        p.custo_medio = 0.0
+        
+    # 4. Grava na Caixa-Preta (Log de Auditoria)
+    log = models.LogAuditoria(
+        cliente_id=cliente_id,
+        usuario_id=usuario.id,
+        operador_nome=usuario.login,
+        acao="ZEROU TODO O HISTÓRICO E SALDOS DO ESTOQUE"
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"status": "sucesso", "mensagem": f"O estoque foi completamente zerado por {usuario.login}."}
+
+@app.delete("/catalogo/limpar_tudo/{cliente_id}")
+def limpar_catalogo_geral(cliente_id: int, usuario_id: int, db: Session = Depends(get_db)):
+    """Apaga todos os produtos do catálogo da empresa."""
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.cliente_id == cliente_id).first()
+    if not usuario or usuario.nivel_acesso != "Admin":
+        raise HTTPException(status_code=403, detail="Acesso Negado! Apenas a conta Administradora pode apagar o catálogo.")
+        
+    # Apaga as movimentações primeiro (por causa do vínculo de chave estrangeira) e depois os produtos
+    db.query(models.MovimentacaoEstoque).filter(models.MovimentacaoEstoque.cliente_id == cliente_id).delete()
+    db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).delete()
+    
+    log = models.LogAuditoria(
+        cliente_id=cliente_id,
+        usuario_id=usuario.id,
+        operador_nome=usuario.login,
+        acao="APAGOU TODO O CATÁLOGO DE PRODUTOS DA EMPRESA"
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"status": "sucesso", "mensagem": f"O catálogo foi completamente limpo por {usuario.login}."}
+
+# ==========================================
+# ROTA: RADAR DE SESSÃO ÚNICA (ANTI-DUPLICIDADE)
+# ==========================================
+@app.get("/verificar_sessao/{usuario_id}/{token_client}")
+def verificar_sessao(usuario_id: int, token_client: str, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
+    if not usuario or usuario.token_sessao != token_client:
+        # Se o token do banco for diferente do token do PC, alguém logou por cima!
+        return {"valido": False}
+    return {"valido": True}

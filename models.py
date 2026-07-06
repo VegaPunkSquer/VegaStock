@@ -65,6 +65,7 @@ class Usuario(Base):
     data_expiracao = Column(DateTime) # Janela de 48h
     permissoes = Column(String, default="dashboard") # Dashboard é o acesso mínimo
     cargo = Column(String, nullable=True) # Ex: Estoquista, Gerente
+    token_sessao = Column(String, nullable=True) # <--- NOVO: Trava de sessão única por usuário
     
 class Categoria(Base):
     __tablename__ = "categorias"
@@ -119,3 +120,15 @@ class MensagemSuporte(Base):
     remetente = Column(String, nullable=False)  # 'CLIENTE' ou 'ADMIN'
     texto = Column(String, nullable=False)
     data_envio = Column(DateTime, default=datetime.utcnow)
+    
+# ==========================================
+# CAIXA-PRETA: AUDITORIA DE AÇÕES CRÍTICAS
+# ==========================================
+class LogAuditoria(Base):
+    __tablename__ = "logs_auditoria"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    usuario_id = Column(Integer, nullable=True)
+    operador_nome = Column(String, nullable=False) # Ex: "Admin" ou login de quem fez
+    acao = Column(String, nullable=False) # Ex: "ZEROU TODO O ESTOQUE" ou "APAGOU O CATÁLOGO"
+    data_hora = Column(DateTime, default=lambda: datetime.utcnow() - timedelta(hours=3))

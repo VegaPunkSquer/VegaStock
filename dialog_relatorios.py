@@ -10,10 +10,6 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QTextDocument, QPageLayout, QPageSize
 from PySide6.QtPrintSupport import QPrinter
 
-# Importa a sessão e modelos do seu backend
-from database import SessionLocal
-import models
-
 class DialogGeradorRelatorio(QDialog):
     def __init__(self, cliente_dados, parent=None):
         super().__init__(parent)
@@ -174,39 +170,52 @@ class DialogGeradorRelatorio(QDialog):
         
         API_URL = "https://vegap-vega-stock.hf.space"
         
+        # 1. Busca os Produtos com a rota GET correta (?cliente_id=)
         produtos = []
         debug_prod = ""
         try:
-            r = requests.get(f"{API_URL}/produtos/{self.cliente_id}", timeout=5)
-            if r.status_code == 200: produtos = r.json()
-            else: debug_prod = f"API falhou (Erro {r.status_code})"
+            r = requests.get(f"{API_URL}/produtos?cliente_id={self.cliente_id}", timeout=5)
+            if r.status_code == 200:
+                produtos = r.json()
+            else:
+                debug_prod = f"Aviso: API falhou ao buscar produtos (Erro {r.status_code})"
         except Exception as e:
-            debug_prod = f"Sem conexão com API: {str(e)}"
+            debug_prod = f"Sem conexão com a API: {str(e)}"
 
+        # 2. Busca as Movimentações
         movs = []
         try:
             r = requests.get(f"{API_URL}/movimentacoes/{self.cliente_id}", timeout=5)
-            if r.status_code == 200: movs = r.json()
-        except: pass
+            if r.status_code == 200:
+                movs = r.json()
+        except:
+            pass
 
         logo_base64 = self.converter_logo_base64()
-        tag_img_logo = f'<p align="center"><img src="{logo_base64}"></p>' if logo_base64 else ''
+        tag_img_logo = f'<img src="{logo_base64}">' if logo_base64 else ''
         
         data_atual = datetime.now().strftime("%d/%m/%Y às %H:%M")
         
         opcao_selecionada = self.combo_tipo.currentText()
-        if "Catálogo" in opcao_selecionada: tipo_str = "CATÁLOGO DE PRODUTOS"
-        elif "Estoque" in opcao_selecionada: tipo_str = "POSIÇÃO DO ESTOQUE E VALORAÇÃO"
-        elif "Desperdícios" in opcao_selecionada: tipo_str = "ANÁLISE DE DESPERDÍCIOS E PREJUÍZOS"
-        else: tipo_str = "GERAL COMPLETO DE OPERAÇÕES"
+        if "Catálogo" in opcao_selecionada:
+            tipo_str = "CATÁLOGO DE PRODUTOS"
+        elif "Estoque" in opcao_selecionada:
+            tipo_str = "POSIÇÃO DO ESTOQUE E VALORAÇÃO"
+        elif "Desperdícios" in opcao_selecionada:
+            tipo_str = "ANÁLISE DE DESPERDÍCIOS E PREJUÍZOS"
+        else:
+            tipo_str = "GERAL COMPLETO DE OPERAÇÕES"
             
-        # HTML RAÍZ (Old-school) PARA GARANTIR QUE O PYSIDE DESENHE TUDO:
+        # 3. CABEÇALHO EM TABELA INVISÍVEL (Garante que o PySide desenhe tudo sem sumir com a data)
         html = f"""
         <html>
         <body style="font-family: Arial, sans-serif; color: #1E293B;">
-            {tag_img_logo}
-            <h2 align="center" style="color: #0F172A; margin-bottom: 0;">RELATÓRIO {tipo_str} — {self.nome_fantasia.upper()}</h2>
-            <p align="center" style="color: #64748B; font-size: 14px;"><b>Emitido pelo Sistema em: {data_atual}</b></p>
+            <table width="100%" border="0" cellspacing="0" cellpadding="3">
+                <tr><td align="center">{tag_img_logo}</td></tr>
+                <tr><td align="center"><h2><font color="#0F172A">RELATÓRIO {tipo_str} — {self.nome_fantasia.upper()}</font></h2></td></tr>
+                <tr><td align="center"><b><font color="#D84315" size="4">DATA E HORA DA EMISSÃO: {data_atual}</font></b></td></tr>
+            </table>
+            <br>
             <hr color="#0F172A">
         """
         
@@ -215,12 +224,12 @@ class DialogGeradorRelatorio(QDialog):
         is_estoque = "Estoque" in opcao_selecionada or is_completo
         is_prejuizo = "Desperdícios" in opcao_selecionada or is_completo
 
-        # --- MÓDULO 1: CATÁLOGO ---
+        # --- MÓDULO 1: CATÁLOGO (Aqui sim exibe todos os cadastrados) ---
         if is_catalogo:
             html += """<h3 style="color: #2563EB;">📦 Catálogo de Produtos Cadastrados</h3>"""
-            if debug_prod: html += f"<p><font color='red'>Aviso: {debug_prod}</font></p>"
+            if debug_prod:
+                html += f"<p><font color='red'>{debug_prod}</font></p>"
             
-            # TABELA FORÇADA COM BORDAS:
             html += """
             <table border="1" cellspacing="0" cellpadding="6" width="100%" bordercolor="#CBD5E1">
                 <tr bgcolor="#0F172A">
@@ -250,7 +259,7 @@ class DialogGeradorRelatorio(QDialog):
                     </tr>"""
             html += "</table><br>"
             
-        # --- MÓDULO 2: ESTOQUE ---
+        # --- MÓDULO 2: ESTOQUE (Filtra e só exibe produtos que realmente têm saldo físico!) ---
         if is_estoque:
             html += """<h3 style="color: #2563EB;">📊 Posição do Estoque Atual e Valoração</h3>
             <table border="1" cellspacing="0" cellpadding="6" width="100%" bordercolor="#CBD5E1">
@@ -263,11 +272,14 @@ class DialogGeradorRelatorio(QDialog):
                     <th><font color="white">Status</font></th>
                 </tr>
             """
+            # FILTRO ANTI-POLUIÇÃO: Remove itens com saldo zerado (0.0) da lista de estoque!
+            produtos_com_saldo = [p for p in produtos if float(p.get('quantidade_atual', 0.0)) != 0.0]
+            
             total_financeiro_estoque = 0.0
-            if not produtos:
-                html += "<tr><td colspan='6' align='center'>Nenhum dado de estoque disponível.</td></tr>"
+            if not produtos_com_saldo:
+                html += "<tr><td colspan='6' align='center'>Nenhum produto com saldo físico em estoque no momento.</td></tr>"
             else:
-                for p in produtos:
+                for p in produtos_com_saldo:
                     qtd = float(p.get('quantidade_atual', 0.0))
                     custo = float(p.get('custo_medio', 0.0))
                     est_min = float(p.get('estoque_minimo', 0.0))

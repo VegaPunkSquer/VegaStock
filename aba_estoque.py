@@ -25,12 +25,15 @@ class WorkerEstoque(QThread):
         try:
             dados = {"atualizar_combos": self.atualizar_combos}
             
-            # Só atualiza combos (produtos e motivos) se for a primeira vez ou após dar baixa
+            # Só atualiza combos (produtos, motivos E categorias) se for a primeira vez ou após dar baixa
             if self.atualizar_combos:
                 r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
                 r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
+                r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}")
+                
                 dados["produtos"] = r_prod.json() if r_prod.status_code == 200 else []
                 dados["motivos"] = r_mot.json() if r_mot.status_code == 200 else []
+                dados["categorias"] = r_cat.json() if r_cat.status_code == 200 else []
 
             # Puxa o histórico paginado da nuvem
             r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/paginado/{self.cliente_id}", params={"dias": self.dias, "limit": self.limit, "offset": self.offset})
@@ -105,7 +108,19 @@ class AbaEstoque(QWidget):
 
         # --- Campos do Formulário ---
         self.combo_produto = QComboBox()
-        self.combo_produto.setPlaceholderText("Selecione o Produto...")
+        self.combo_produto.setPlaceholderText("Selecione ou digite para pesquisar...")
+        
+        # MÁGICA DA PESQUISA: Permite digitar, mas bloqueia cadastro de novos itens por aqui
+        self.combo_produto.setEditable(True)
+        self.combo_produto.setInsertPolicy(QComboBox.NoInsert)
+        
+        # Configura o autocompletar para buscar em qualquer parte do texto (MatchContains)
+        from PySide6.QtWidgets import QCompleter  # Importação local segura
+        completer = self.combo_produto.completer()
+        completer.setCompletionMode(QCompleter.PopupCompletion)  # Corrigido para QCompleter!
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        
         self.combo_produto.currentIndexChanged.connect(self.ajustar_decimais)
 
         # O SpinBox é perfeito: evita que digitem letras e já formata os números
@@ -146,8 +161,13 @@ class AbaEstoque(QWidget):
         lbl_historico.setStyleSheet("font-size: 16px; font-weight: bold;")
         
         self.combo_filtro = QComboBox()
-        self.combo_filtro.addItems(["Hoje", "Últimos 7 Dias", "Últimos 30 Dias"])
+        self.combo_filtro.addItems(["Tudo (Todo o Histórico)", "Hoje", "Últimos 7 Dias", "Últimos 30 Dias"])
         self.combo_filtro.currentIndexChanged.connect(self.carregar_historico)
+        
+        # --- NOVO COMBO DE FILTRO POR CATEGORIA ---
+        self.combo_cat_filtro = QComboBox()
+        self.combo_cat_filtro.addItem("Todas as Categorias", None)
+        self.combo_cat_filtro.currentIndexChanged.connect(self.carregar_historico)
         
         # --- O BOTÃO ENTRA EXATAMENTE AQUI ---
         self.btn_atualizar = QPushButton("Atualizar Tabela")
@@ -157,8 +177,10 @@ class AbaEstoque(QWidget):
         
         layout_filtro.addWidget(lbl_historico)
         layout_filtro.addStretch()
-        layout_filtro.addWidget(QLabel("Filtrar por:"))
+        layout_filtro.addWidget(QLabel("Período:"))
         layout_filtro.addWidget(self.combo_filtro)
+        layout_filtro.addWidget(QLabel("Categoria:"))
+        layout_filtro.addWidget(self.combo_cat_filtro)
         layout_filtro.addWidget(self.btn_atualizar) # O botão é injetado na tela aqui
         layout_principal.addLayout(layout_filtro)
 
@@ -210,6 +232,19 @@ class AbaEstoque(QWidget):
         self.tabela.setColumnHidden(0, True) # Esconde o ID
         
         layout_principal.addWidget(self.tabela)
+        
+        # --- BOTÃO NUCLEAR: ZERAR ESTOQUE E HISTÓRICO (SÓ APARECE PARA O ADMIN) ---
+        self.btn_zerar_estoque = QPushButton("⚠️ Zerar Histórico e Saldo")
+        self.btn_zerar_estoque.setCursor(Qt.PointingHandCursor)
+        self.btn_zerar_estoque.setStyleSheet("background-color: #d32f2f; color: white; font-weight: bold; padding: 8px; border-radius: 5px;")
+        self.btn_zerar_estoque.clicked.connect(self.confirmar_reset_estoque)
+        
+        # Se o usuário logado NÃO FOR ADMIN, o botão nem aparece na tela!
+        if self.cliente_dados.get("nivel_acesso") != "Admin":
+            self.btn_zerar_estoque.hide()
+            
+        # (Adicione self.btn_zerar_estoque ao seu layout, por exemplo junto com o botão self.btn_atualizar)
+        layout_filtro.addWidget(self.btn_zerar_estoque)
 
         # Prepara a tela inicial
         self.alternar_modo()
@@ -278,7 +313,8 @@ class AbaEstoque(QWidget):
         filtro_txt = self.combo_filtro.currentText()
         if filtro_txt == "Hoje": dias = 1
         elif filtro_txt == "Últimos 7 Dias": dias = 7
-        else: dias = 30
+        elif filtro_txt == "Últimos 30 Dias": dias = 30
+        else: dias = 0  # 0 representa "Tudo", sem corte de data
 
         self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias, getattr(self, 'limite_atual', 30), getattr(self, 'offset_atual', 0), atualizar_combos)
         self.worker.resultado.connect(self.atualizar_tela)
@@ -290,13 +326,25 @@ class AbaEstoque(QWidget):
             self.combo_produto.blockSignals(True)
             self.combo_produto.clear()
             for prod in dados["produtos"]:
-                self.combo_produto.addItem(f"{prod['nome']} ({prod['unidade_medida']})", {"id": prod["id"], "unidade": prod["unidade_medida"]})
+                # Mostra o saldo físico na própria caixinha de seleção!
+                qtd_atual = float(prod.get('quantidade_atual', 0.0))
+                self.combo_produto.addItem(
+                    f"{prod['nome']} — [Saldo: {qtd_atual} {prod['unidade_medida']}]", 
+                    {"id": prod["id"], "unidade": prod["unidade_medida"]}
+                )
             self.combo_produto.blockSignals(False)
             self.ajustar_decimais()
 
             self.combo_motivo.clear()
             for mot in dados["motivos"]:
                 self.combo_motivo.addItem(mot["descricao"], mot["id"])
+                
+            # Preenche também o nosso novo filtro de categorias da tabela!
+            self.combo_cat_filtro.blockSignals(True)
+            while self.combo_cat_filtro.count() > 1: self.combo_cat_filtro.removeItem(1)
+            for cat in dados.get("categorias", []):
+                self.combo_cat_filtro.addItem(cat["nome"], cat["id"])
+            self.combo_cat_filtro.blockSignals(False)
 
         # Matemática da Paginação
         import math
@@ -407,3 +455,31 @@ class AbaEstoque(QWidget):
             self.player.setSource(QUrl.fromLocalFile(caminho_som))
             self.player.setVolume(1.0)
             self.player.play()
+            
+    def confirmar_reset_estoque(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("⚠️ ALERTA DE RISCO CRÍTICO")
+        msg.setText("<b>Você está prestes a ZERAR TODO O ESTOQUE e o HISTÓRICO da empresa!</b>")
+        msg.setInformativeText("Essa ação é irreversível. Todas as entradas e saídas serão apagadas e os produtos voltarão a ter saldo 0.0.\n\nDeseja realmente continuar?")
+        msg.setIcon(QMessageBox.Warning)
+        
+        btn_sim = msg.addButton("Sim, Zerar Tudo", QMessageBox.ActionRole)
+        btn_sim.setStyleSheet("background-color: #d32f2f; color: white; font-weight: bold; padding: 6px 15px;")
+        
+        btn_nao = msg.addButton("Cancelar", QMessageBox.RejectRole)
+        btn_nao.setStyleSheet("background-color: #555; color: white; font-weight: bold; padding: 6px 15px;")
+        msg.setDefaultButton(btn_nao)
+        
+        msg.exec()
+        
+        if msg.clickedButton() == btn_sim:
+            try:
+                url = f"{API_BASE_URL}/estoque/resetar/{self.cliente_dados['cliente_id']}?usuario_id={self.cliente_dados['usuario_id']}"
+                resp = requests.delete(url)
+                if resp.status_code == 200:
+                    QMessageBox.information(self, "Sucesso", resp.json().get("mensagem", "Estoque zerado com sucesso!"))
+                    self.carregar_dados(atualizar_combos=True) # Atualiza a tabela na hora
+                else:
+                    QMessageBox.critical(self, "Acesso Negado", resp.json().get("detail", "Erro ao executar ação."))
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Falha na comunicação com o servidor: {e}")

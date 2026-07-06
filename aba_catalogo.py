@@ -15,12 +15,13 @@ class WorkerCatalogo(QThread):
     resultado = Signal(dict)
     erro = Signal(str)
 
-    def __init__(self, cliente_id, limit, offset, atualizar_combos=True):
+    def __init__(self, cliente_id, limit, offset, atualizar_combos=True, categoria_id=None):
         super().__init__()
         self.cliente_id = cliente_id
         self.limit = limit
         self.offset = offset
         self.atualizar_combos = atualizar_combos
+        self.categoria_id = categoria_id
 
     def run(self):
         try:
@@ -33,8 +34,12 @@ class WorkerCatalogo(QThread):
                 dados["categorias"] = r_cat.json() if r_cat.status_code == 200 else []
                 dados["unidades"] = r_uni.json() if r_uni.status_code == 200 else []
 
+            params_prod = {"cliente_id": self.cliente_id, "limit": self.limit, "offset": self.offset}
+            if self.categoria_id:
+                params_prod["categoria_id"] = self.categoria_id
+
             # Puxa APENAS a fatia paginada dos produtos na nova rota
-            r_prod = requests.get(f"{API_BASE_URL}/produtos/paginado", params={"cliente_id": self.cliente_id, "limit": self.limit, "offset": self.offset})
+            r_prod = requests.get(f"{API_BASE_URL}/produtos/paginado", params=params_prod)
             
             if r_prod.status_code == 200:
                 json_prod = r_prod.json()
@@ -155,6 +160,13 @@ class AbaCatalogo(QWidget):
         self.combo_limite.currentIndexChanged.connect(self.mudar_limite)
         layout_paginacao.addWidget(self.combo_limite)
         
+        # --- FILTRO POR CATEGORIA ACIMA DA TABELA ---
+        layout_paginacao.addWidget(QLabel("   Filtrar Categoria:"))
+        self.combo_filtro_cat = QComboBox()
+        self.combo_filtro_cat.addItem("Todas as Categorias", None)
+        self.combo_filtro_cat.currentIndexChanged.connect(self.mudar_categoria_filtro)
+        layout_paginacao.addWidget(self.combo_filtro_cat)
+        
         layout_paginacao.addStretch()
         
         self.btn_anterior = QPushButton("◀ Anterior")
@@ -273,6 +285,10 @@ class AbaCatalogo(QWidget):
         self.offset_atual = 0 # Volta pra página 1 sempre que o limite muda
         self.carregar_dados(atualizar_combos=False)
         
+    def mudar_categoria_filtro(self):
+        self.offset_atual = 0 # Volta pra página 1 ao filtrar por categoria
+        self.carregar_dados(atualizar_combos=False)
+        
     def mudar_pagina(self, direcao):
         novo_offset = self.offset_atual + (direcao * self.limite_atual)
         if 0 <= novo_offset < self.total_produtos:
@@ -293,8 +309,12 @@ class AbaCatalogo(QWidget):
         self.btn_anterior.setEnabled(False)
         self.btn_proxima.setEnabled(False)
 
-        # Manda pro porão com limite e offset
-        self.worker = WorkerCatalogo(self.cliente_dados['cliente_id'], self.limite_atual, self.offset_atual, atualizar_combos)
+        # Lê a categoria selecionada no filtro superior
+        cat_id = getattr(self, 'combo_filtro_cat', None)
+        cat_val = cat_id.currentData() if cat_id and cat_id.count() > 0 else None
+
+        # Manda pro porão com limite, offset e categoria
+        self.worker = WorkerCatalogo(self.cliente_dados['cliente_id'], self.limite_atual, self.offset_atual, atualizar_combos, cat_val)
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.start()
 
@@ -303,9 +323,19 @@ class AbaCatalogo(QWidget):
         if dados.get("atualizar_combos"):
             self.combo_categoria.clear()
             self.mapa_cats_cache = {}
+            
+            if hasattr(self, 'combo_filtro_cat'):
+                self.combo_filtro_cat.blockSignals(True)
+                while self.combo_filtro_cat.count() > 1: self.combo_filtro_cat.removeItem(1)
+            
             for cat in dados.get("categorias", []):
                 self.combo_categoria.addItem(cat["nome"], cat["id"])
                 self.mapa_cats_cache[cat["id"]] = cat["nome"]
+                if hasattr(self, 'combo_filtro_cat'):
+                    self.combo_filtro_cat.addItem(cat["nome"], cat["id"])
+                    
+            if hasattr(self, 'combo_filtro_cat'):
+                self.combo_filtro_cat.blockSignals(False)
 
             self.combo_unidade.blockSignals(True)
             self.combo_unidade.clear()

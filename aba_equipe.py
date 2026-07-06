@@ -212,8 +212,10 @@ class AbaEquipe(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # Trava Mestra de Acesso
-        if self.cliente_dados.get('status_assinatura') == "PRO":
+        # Trava Mestra de Acesso (Agora aceita PRO oficial e TESTE_PRO)
+        status_atual = str(self.cliente_dados.get('status_assinatura', '')).upper()
+        
+        if "PRO" in status_atual:
             self.frame_bloqueado.hide()
             self.frame_livre.show()
             self.carregar_equipe()

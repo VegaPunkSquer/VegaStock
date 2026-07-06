@@ -293,6 +293,15 @@ class MainWindow(QMainWindow):
         # Verifica se o atualizador deixou algum recado de novidades
         self.checar_notas_atualizacao()
 
+        # --- RADAR DE SESSÃO ÚNICA (ANTI-DUPLICIDADE) ---
+        self.token_sessao = self.cliente_dados.get("token_sessao")
+        self.usuario_id_logado = self.cliente_dados.get("usuario_id")
+        
+        from PySide6.QtCore import QTimer
+        self.timer_sessao = QTimer(self)
+        self.timer_sessao.timeout.connect(self.checar_sessao_ativa)
+        self.timer_sessao.start(10000) # Checa a cada 10 segundos
+
     def checar_notas_atualizacao(self):
         notas_path = os.path.join(base_dir, "release_notes.txt")
         if os.path.exists(notas_path):
@@ -311,6 +320,34 @@ class MainWindow(QMainWindow):
                 os.remove(notas_path)
             except Exception:
                 pass
+
+    def checar_sessao_ativa(self):
+        # Se por algum motivo o login não gerou token, ignora
+        if not getattr(self, 'usuario_id_logado', None) or not getattr(self, 'token_sessao', None):
+            return
+            
+        try:
+            import requests
+            url = f"https://vegap-vega-stock.hf.space/verificar_sessao/{self.usuario_id_logado}/{self.token_sessao}"
+            resp = requests.get(url, timeout=4)
+            
+            if resp.status_code == 200:
+                resultado = resp.json()
+                if not resultado.get("valido", True):
+                    # Desliga o radar para não apitar duas vezes
+                    self.timer_sessao.stop()
+                    
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("⛔ Sessão Encerrada")
+                    msg.setText("A sua conta acabou de ser conectada em outro computador!")
+                    msg.setInformativeText("Por motivos de segurança e auditoria, o VegaStock não permite o uso simultâneo do mesmo login em máquinas diferentes.\n\nO aplicativo será encerrado.")
+                    msg.setIcon(QMessageBox.Critical)
+                    msg.exec()
+                    
+                    # Expulsa fechando a tela (o while do app.py vai jogar pra tela de login)
+                    self.close()
+        except:
+            pass # Faltou internet/piscou, fica quieto e tenta de novo em 10s
         
     def mudar_aba(self, index):
         # O Cão de Guarda: Se o cara der um alt+tab e a meia-noite virar, ele é deslogado no próximo clique
