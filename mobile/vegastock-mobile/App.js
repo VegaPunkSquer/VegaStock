@@ -3,8 +3,76 @@ import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, I
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Audio } from 'expo-av';
+import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 export default function App() {
+  // =========================================================================
+  // 🚀 AUTO-UPDATE NATIVO (100% AUTOMATIZADO COM A FÁBRICA VEGATECH)
+  // =========================================================================
+  useEffect(() => {
+    const checarAtualizacaoAPK = async () => {
+      try {
+        // MÁGICA: Lê a versão exata que a Fábrica acabou de escrever no app.json!
+        const VERSAO_ATUAL_MOBILE = Constants.expoConfig.version; 
+        
+        // Bate na mesma rota do MasterApp que o Desktop usa!
+        const PRODUTO_ID_MASTER = 2; // ID do VegaStock no Master
+        const res = await fetch(`https://vegap-masterapp.hf.space/master/atualizacao/${PRODUTO_ID_MASTER}`);
+        
+        if (res.ok) {
+          const dados = await res.json();
+          
+          // A Fábrica manda "v1.0.5". O app.json salva "1.0.5". Tiramos o "v" para comparar.
+          const versaoNuvem = dados.versao_atual ? dados.versao_atual.replace("v", "") : "";
+          
+          // 🚨 ALERTA DE ARQUITETURA: Como Desktop e Mobile usam o mesmo ID 2, 
+          // certifique-se de que sua API Master devolve o link do mobile separado do EXE.
+          // Ex: dados.link_download_mobile ou garanta que o link retornado termina em .apk
+          const linkApk = dados.link_download_mobile || dados.link_download;
+
+          // Se a versão da nuvem for diferente e for um arquivo APK válido:
+          if (versaoNuvem && versaoNuvem !== VERSAO_ATUAL_MOBILE && linkApk && linkApk.endsWith(".apk")) {
+            
+            Alert.alert(
+              "🚀 Nova Versão Disponível!",
+              `O aplicativo foi atualizado para a versão ${versaoNuvem}!\n\nDeseja instalar a atualização agora?`,
+              [
+                { text: "Depois", style: "cancel" },
+                { 
+                  text: "Atualizar Agora", 
+                  onPress: () => baixarEInstalarAPK(linkApk) 
+                }
+              ]
+            );
+          }
+        }
+      } catch (e) {
+        console.log("Falha ao checar atualização mobile silenciosamente:", e);
+      }
+    };
+
+    const baixarEInstalarAPK = async (urlApk) => {
+      try {
+        Alert.alert("⏳ Baixando...", "O novo aplicativo está sendo baixado em segundo plano. Por favor, aguarde uns segundos.");
+        
+        const caminhoLocal = FileSystem.documentDirectory + "vegastock_update.apk";
+        const { uri } = await FileSystem.downloadAsync(urlApk, caminhoLocal);
+        const contentUri = await FileSystem.getContentUriAsync(uri);
+        
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1, 
+          type: 'application/vnd.android.package-archive',
+        });
+      } catch (erro) {
+        Alert.alert("Erro de Atualização", "Não foi possível abrir o instalador nativo.");
+      }
+    };
+
+    checarAtualizacaoAPK();
+  }, []);
   const [permission, requestPermission] = useCameraPermissions();
 
   // MÁGICA DA MEMÓRIA: Carrega o restaurante salvo assim que o app abre

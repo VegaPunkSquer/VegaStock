@@ -13,7 +13,7 @@ else:
 # ==========================================
 # O SEGREDO DA VELOCIDADE: SPLASH SCREEN NO TOPO
 # ==========================================
-from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel, QProgressBar
+from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel, QProgressBar, QSystemTrayIcon
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import Qt
 
@@ -47,25 +47,35 @@ if app_instancia is None:
 caminho_splash = os.path.join(bundle_dir, "assets", "logo.png")
 splash = SplashScreenVega(caminho_splash)
 splash.show()
-splash.atualizar(10, "Carregando núcleo de interface gráfica...")
+splash.atualizar(10, "Verificando radares de atualizações...")
 
-# ==========================================
-# IMPORTS PESADOS (Carregam enquanto a Splash está na tela)
-# ==========================================
+# =========================================================================
+# 🚨 BOOTLOADER DEFENSIVO: CHECA ATUALIZAÇÃO ANTES DOS IMPORTS PESADOS!
+# Se houver correção na nuvem, ele atualiza e fecha ANTES de qualquer crash!
+# =========================================================================
 import requests
 import ctypes
+from atualizador import checar_e_atualizar
+
+if checar_e_atualizar(splash):
+    os._exit(0) # Se atualizou, encerra o processo antigo na hora!
+
+splash.atualizar(30, "Carregando núcleo de interface gráfica...")
+
+# ==========================================
+# IMPORTS PESADOS (Agora estão seguros contra bugs passados)
+# ==========================================
 import re
 from datetime import datetime
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
                                QLabel, QHBoxLayout, QStackedWidget, QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout)
 from PySide6.QtGui import QPainter, QPainterPath, QColor, QBrush, QIcon
 from PySide6.QtCore import QSize
-splash.atualizar(40, "Conectando módulos e banco de dados...")
+splash.atualizar(60, "Conectando módulos e banco de dados...")
 import estilos
 from tela_login import TelaLogin
 from tela_cadastro import TelaCadastro
 from tela_recuperacao import TelaRecuperacao
-from atualizador import checar_e_atualizar
 from aba_dashboard import AbaDashboard
 from aba_catalogo import AbaCatalogo
 from aba_estoque import AbaEstoque
@@ -301,6 +311,24 @@ class MainWindow(QMainWindow):
         self.timer_sessao = QTimer(self)
         self.timer_sessao.timeout.connect(self.checar_sessao_ativa)
         self.timer_sessao.start(10000) # Checa a cada 10 segundos
+        
+        # ===============================================================
+        # 🔔 RADAR DE ATUALIZAÇÃO EM SEGUNDO PLANO (BANDEJA DO WINDOWS)
+        # ===============================================================
+        from PySide6.QtWidgets import QSystemTrayIcon
+        
+        # 1. Cria o ícone invisível na bandeja do Windows (ao lado do relógio)
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self.windowIcon()) # Usa o mesmo logo.ico do app
+        self.tray_icon.setVisible(True)
+        
+        # 2. Se o usuário CLICAR na notificação do Windows, abre a janela de atualização!
+        self.tray_icon.messageClicked.connect(self.abrir_janela_atualizacao_tray)
+        
+        # 3. Timer silencioso: Checa a cada 1 hora (3600000 ms) em segundo plano
+        self.timer_update_bg = QTimer(self)
+        self.timer_update_bg.timeout.connect(self.radar_silencioso_atualizacao)
+        self.timer_update_bg.start(3600000)
 
     def checar_notas_atualizacao(self):
         notas_path = os.path.join(base_dir, "release_notes.txt")
@@ -348,6 +376,56 @@ class MainWindow(QMainWindow):
                     self.close()
         except:
             pass # Faltou internet/piscou, fica quieto e tenta de novo em 10s
+
+    # --- MÓDULO DE NOTIFICAÇÃO NATIVA DO WINDOWS (STYLE OLLAMA) ---
+    def radar_silencioso_atualizacao(self):
+        """Roda em segundo plano sem travar a tela. Se achar versão nova, chama o balão do Windows!"""
+        try:
+            # Aqui você faz uma checagem rápida na sua API ou arquivo de versão da nuvem
+            # Exemplo: bate na sua rota para ver se a versão da nuvem é maior que a local
+            url = "https://vegap-vega-stock.hf.space/desktop/versao"
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                dados = resp.json()
+                versao_nuvem = dados.get("versao", "")
+                
+                # Se a versão for nova e diferente da atual:
+                if versao_nuvem and versao_nuvem != "1.0.0": # Substitua pela sua variável de versão atual
+                    self.release_notes_nuvem = dados.get("release_notes", "Melhorias de estabilidade e velocidade.")
+                    
+                    # DISPARA A NOTIFICAÇÃO NATIVA ACIMA DO RELÓGIO DO WINDOWS!
+                    self.tray_icon.showMessage(
+                        "🚀 Nova Versão do VegaStock Disponível!",
+                        f"A versão {versao_nuvem} acabou de sair do forno!\nClique aqui para ver o que mudou e atualizar.",
+                        QSystemTrayIcon.Information,
+                        10000 # O balão fica 10 segundos na tela
+                    )
+        except:
+            pass # Se estiver sem internet, ignora em silêncio
+
+    def abrir_janela_atualizacao_tray(self):
+        """É acionado na hora que o usuário clica com o mouse em cima da notificação do Windows."""
+        notas = getattr(self, 'release_notes_nuvem', 'Atualização importante de sistema disponível.')
+        
+        msg = QMessageBox(self)
+        msg.setWindowTitle("🚀 Atualização Disponível")
+        msg.setText("<b>Uma nova versão do VegaStock está pronta para ser instalada!</b>")
+        msg.setInformativeText(f"<b>O que há de novo nesta versão:</b>\n\n{notas}\n\nDeseja fechar e atualizar agora?")
+        msg.setIcon(QMessageBox.Information)
+        
+        btn_atualizar = msg.addButton("🚀 Atualizar Agora", QMessageBox.AcceptRole)
+        btn_atualizar.setStyleSheet("background-color: #00E5FF; color: #000; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
+        
+        btn_depois = msg.addButton("❌ Depois", QMessageBox.RejectRole)
+        btn_depois.setStyleSheet("background-color: #555; color: white; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
+        
+        msg.exec()
+        
+        if msg.clickedButton() == btn_atualizar:
+            # Chama o seu atualizador original e fecha o app para substituir o .exe!
+            from atualizador import checar_e_atualizar
+            if checar_e_atualizar(None):
+                os._exit(0)
         
     def mudar_aba(self, index):
         # O Cão de Guarda: Se o cara der um alt+tab e a meia-noite virar, ele é deslogado no próximo clique
@@ -603,12 +681,6 @@ def iniciar_app():
     sys.exit()
 
 if __name__ == "__main__":
-    splash.atualizar(80, "Verificando radares de atualizações...")
-    # O TRUQUE: Passamos a splash como "pai" para a caixa de aviso nascer na frente dela!
-    if checar_e_atualizar(splash):
-        os._exit(0)
-        
     splash.atualizar(100, "Pronto! Iniciando VegaStock...")
-    time.sleep(0.5)
-    
+    time.sleep(0.3)
     iniciar_app()
