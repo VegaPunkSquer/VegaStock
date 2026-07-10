@@ -197,7 +197,13 @@ class AbaRelatorios(QWidget):
             motivo_id = self.combo_motivo.currentData()
             if motivo_id: url += f"&motivo_id={motivo_id}"
 
-        # 4. Envia o trabalhador pro porão
+        # 4. Envia o trabalhador pro porão (Com proteção anti-crash de threads simultâneas!)
+        if not hasattr(self, 'cemiterio_threads'):
+            self.cemiterio_threads = []
+        self.cemiterio_threads = [t for t in self.cemiterio_threads if t.isRunning()]
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.cemiterio_threads.append(self.worker)
+
         self.worker = WorkerRelatorios(self.cliente_dados['cliente_id'], url, atualizar_filtros)
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.start()

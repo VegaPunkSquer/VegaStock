@@ -425,6 +425,10 @@ class AbaEstoque(QWidget):
                 return
             payload["motivo_baixa_id"] = motivo_id
 
+        # TRAVA ANTI-DUPLICIDADE: Desativa o botão na hora para impedir clique duplo!
+        self.btn_registrar.setEnabled(False)
+        self.btn_registrar.setText("⏳ Salvando na Nuvem...")
+
         try:
             resp = requests.post(f"{API_BASE_URL}/movimentacao", json=payload)
             if resp.status_code == 200:
@@ -442,6 +446,10 @@ class AbaEstoque(QWidget):
                 QMessageBox.warning(self, "Erro", resp.json().get("detail", "Erro ao registrar."))
         except Exception:
             QMessageBox.critical(self, "Erro", "Falha de conexão com o servidor.")
+        finally:
+            # Garante que o botão sempre volte ao normal no final, mesmo se der erro ou alerta
+            self.btn_registrar.setEnabled(True)
+            self.btn_registrar.setText("REGISTRAR MOVIMENTAÇÃO")
             
     def tocar_alerta_sonoro(self):
         if not hasattr(self, 'player'):

@@ -20,7 +20,8 @@ from PySide6.QtCore import Qt
 class SplashScreenVega(QSplashScreen):
     def __init__(self, caminho_img):
         pixmap = QPixmap(caminho_img).scaled(600, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
-        super().__init__(pixmap, Qt.WindowStaysOnTopHint | Qt.FramelessWindowHint)
+        # REMOVIDO WindowStaysOnTopHint: Evita que a splash fique presa na frente de caixas de diálogo ou atualizações!
+        super().__init__(pixmap, Qt.FramelessWindowHint)
         
         self.lbl_status = QLabel("Iniciando VegaStock...", self)
         self.lbl_status.setStyleSheet("color: white; font-weight: bold; font-size: 13px; background-color: rgba(0,0,0,150); padding: 2px; border-radius: 4px;")
@@ -647,11 +648,13 @@ class MainWindow(QMainWindow):
                 
     def showEvent(self, event):
         super().showEvent(event)
-        # O GOLPE FINAL: Centraliza no exato milissegundo em que a janela aparece, impedindo o Windows de interferir
-        monitor = self.screen().availableGeometry()
-        x = monitor.x() + (monitor.width() - self.width()) // 2
-        y = monitor.y() + (monitor.height() - self.height()) // 2
-        self.move(x, y)
+        # Centraliza apenas na PRIMEIRA vez que abre, permitindo que o usuário mova a janela livremente depois!
+        if not hasattr(self, '_ja_centralizou'):
+            self._ja_centralizou = True
+            monitor = self.screen().availableGeometry()
+            x = monitor.x() + (monitor.width() - self.width()) // 2
+            y = monitor.y() + (monitor.height() - self.height()) // 2
+            self.move(x, y)
 
 def iniciar_app():
     app_instancia.setStyleSheet(estilos.ESTILO_GLOBAL)

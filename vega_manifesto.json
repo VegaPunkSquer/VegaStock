@@ -1,7 +1,7 @@
 {
     "produto_id_master": 3,
     "nome": "VegaStock",
-    "versao_atual": "v1.8.0",
+    "versao_atual": "v1.8.4",
     "repo": "https://github.com/VegaPunkSquer/VegaStock",
     "builds": {
         "desktop": "C:\\APPS\\Vega Stock\\gerar_exe.bat",
@@ -9,5 +9,5 @@
     },
     "planos_precos": null,
     "package_name": "",
-    "alvo_mobile_selecionado": null
+    "alvo_mobile_selecionado": "S\u00f3 APK (Site)"
 }
