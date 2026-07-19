@@ -12,6 +12,7 @@ API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerEstoque(QThread):
     resultado = Signal(dict)
     erro = Signal(str)
+    alerta_ui = Signal(str) # <--- SINAL DE COMUNICAÇÃO DE RETRY
 
     def __init__(self, cliente_id, dias, limit, offset, atualizar_combos=True):
         super().__init__()
@@ -22,31 +23,53 @@ class WorkerEstoque(QThread):
         self.atualizar_combos = atualizar_combos
 
     def run(self):
-        try:
-            dados = {"atualizar_combos": self.atualizar_combos}
-            
-            # Só atualiza combos (produtos, motivos E categorias) se for a primeira vez ou após dar baixa
-            if self.atualizar_combos:
-                r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
-                r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
-                r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}")
+        import time
+        max_tentativas = 3
+        
+        for tentativa in range(1, max_tentativas + 1):
+            try:
+                dados = {"atualizar_combos": self.atualizar_combos}
                 
-                dados["produtos"] = r_prod.json() if r_prod.status_code == 200 else []
-                dados["motivos"] = r_mot.json() if r_mot.status_code == 200 else []
-                dados["categorias"] = r_cat.json() if r_cat.status_code == 200 else []
+                if self.atualizar_combos:
+                    r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id}, timeout=8)
+                    r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}", timeout=8)
+                    r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}", timeout=8)
+                    
+                    dados["produtos"] = r_prod.json() if r_prod.status_code == 200 else []
+                    dados["motivos"] = r_mot.json() if r_mot.status_code == 200 else []
+                    dados["categorias"] = r_cat.json() if r_cat.status_code == 200 else []
 
-            # Puxa o histórico paginado da nuvem
-            r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/paginado/{self.cliente_id}", params={"dias": self.dias, "limit": self.limit, "offset": self.offset})
+                r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/paginado/{self.cliente_id}", params={"dias": self.dias, "limit": self.limit, "offset": self.offset}, timeout=10)
 
-            if r_hist.status_code == 200:
-                json_hist = r_hist.json()
-                dados["historico"] = json_hist.get("movimentacoes", [])
-                dados["total"] = json_hist.get("total", 0)
-                self.resultado.emit(dados)
-            else:
-                self.erro.emit(f"Erro na API Paginada: {r_hist.status_code} - {r_hist.text}")
-        except Exception as e:
-            self.erro.emit(f"Falha de conexão física: {str(e)}")
+                # Se for sucesso absoluto, emite e mata o loop
+                if r_hist.status_code == 200:
+                    json_hist = r_hist.json()
+                    dados["historico"] = json_hist.get("movimentacoes", [])
+                    dados["total"] = json_hist.get("total", 0)
+                    self.resultado.emit(dados)
+                    return 
+                    
+                # Se o Hugging Face estiver capengando (HTML gigante, 500, 503)
+                elif r_hist.status_code in [500, 502, 503, 504]:
+                    if tentativa < max_tentativas:
+                        self.alerta_ui.emit(f"Servidor instável. Tentando reconectar ({tentativa}/{max_tentativas})...")
+                        time.sleep(3) # Pausa segura dentro do Porão
+                        continue
+                    else:
+                        self.erro.emit(f"Nuvem inacessível no momento. Tente novamente em instantes.")
+                        return
+                else:
+                    self.erro.emit(f"Erro na API Paginada: {r_hist.status_code}")
+                    return
+
+            except Exception as e:
+                if tentativa < max_tentativas:
+                    self.alerta_ui.emit(f"Falha na rede. Tentando reconectar ({tentativa}/{max_tentativas})...")
+                    time.sleep(3)
+                    continue
+                else:
+                    self.erro.emit(f"Falha de conexão física: {str(e)}")
+                    return
 
 class AbaEstoque(QWidget):
     def __init__(self, cliente_dados):
@@ -319,6 +342,8 @@ class AbaEstoque(QWidget):
         self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias, getattr(self, 'limite_atual', 30), getattr(self, 'offset_atual', 0), atualizar_combos)
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.erro.connect(self.mostrar_erro)
+        # O GANCHO VISUAL: O trabalhador fala e o Label do meio da tela atualiza na hora!
+        self.worker.alerta_ui.connect(lambda msg: self.lbl_pagina.setText(msg))
         self.worker.start()
 
     def atualizar_tela(self, dados):

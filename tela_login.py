@@ -9,9 +9,9 @@ from atualizador import checar_e_atualizar
 
 API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerLogin(QThread):
-    # O "telefone" para avisar a tela se deu bom ou ruim
     resultado = Signal(dict)
     erro = Signal(str)
+    alerta_ui = Signal(str) # <--- SINAL NOVO PARA AVISAR O USUÁRIO DO RETRY
 
     def __init__(self, login, senha):
         super().__init__()
@@ -19,19 +19,45 @@ class WorkerLogin(QThread):
         self.senha = senha
 
     def run(self):
-        # Tudo que está aqui dentro roda em paralelo sem travar a tela
-        try:
-            response = requests.post(f"{API_BASE_URL}/login", json={"login": self.login, "senha": self.senha})
-            if response.status_code == 200:
-                self.resultado.emit(response.json()) # Liga avisando sucesso
-            else:
-                try:
-                    msg_erro = response.json().get("detail", "Erro desconhecido")
-                except:
-                    msg_erro = f"Erro interno (Status {response.status_code})."
-                self.erro.emit(msg_erro) # Liga avisando erro
-        except requests.exceptions.ConnectionError:
-            self.erro.emit("Não foi possível conectar à API.")
+        import time
+        max_tentativas = 3
+        
+        for tentativa in range(1, max_tentativas + 1):
+            try:
+                response = requests.post(f"{API_BASE_URL}/login", json={"login": self.login, "senha": self.senha}, timeout=10)
+                
+                # Sucesso absoluto
+                if response.status_code == 200:
+                    self.resultado.emit(response.json())
+                    return 
+                    
+                # Se bater nos erros HTML gigantes do Hugging Face
+                elif response.status_code in [500, 502, 503, 504]:
+                    if tentativa < max_tentativas:
+                        self.alerta_ui.emit(f"Reconectando ({tentativa}/{max_tentativas})...")
+                        time.sleep(3) # Espera 3 segundos no porão antes de tentar de novo
+                        continue
+                    else:
+                        self.erro.emit("Servidor reiniciando. Tente novamente em 1 minuto.")
+                        return
+                
+                # Se for senha errada ou usuário não encontrado (Erro 401, 404, etc)
+                else:
+                    try:
+                        msg_erro = response.json().get("detail", "Erro desconhecido")
+                    except:
+                        msg_erro = f"Erro interno (Status {response.status_code})."
+                    self.erro.emit(msg_erro)
+                    return
+                    
+            except Exception:
+                if tentativa < max_tentativas:
+                    self.alerta_ui.emit(f"Reconectando ({tentativa}/{max_tentativas})...")
+                    time.sleep(3)
+                    continue
+                else:
+                    self.erro.emit("Não foi possível conectar à API.")
+                    return
 
 class TelaLogin(QDialog):
     def __init__(self):
@@ -132,6 +158,8 @@ class TelaLogin(QDialog):
         self.worker = WorkerLogin(login, senha)
         self.worker.resultado.connect(self.login_sucesso)
         self.worker.erro.connect(self.login_erro)
+        # O GANCHO VISUAL: Se falhar na primeira, o botão avisa as tentativas!
+        self.worker.alerta_ui.connect(lambda msg: self.btn_entrar.setText(msg))
         self.worker.start() # Dá a ordem de trabalhar
 
     # Função que atende o telefone de sucesso
