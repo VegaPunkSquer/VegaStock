@@ -507,7 +507,8 @@ class AbaEstoque(QWidget):
         
         if msg.clickedButton() == btn_sim:
             try:
-                url = f"{API_BASE_URL}/estoque/resetar/{self.cliente_dados['cliente_id']}?usuario_id={self.cliente_dados['usuario_id']}"
+                # O token_sessao agora viaja junto na URL para o FastAPI verificar a identidade do Admin
+                url = f"{API_BASE_URL}/estoque/resetar/{self.cliente_dados['cliente_id']}?usuario_id={self.cliente_dados['usuario_id']}&token_sessao={self.cliente_dados.get('token_sessao', '')}"
                 resp = requests.delete(url)
                 if resp.status_code == 200:
                     QMessageBox.information(self, "Sucesso", resp.json().get("mensagem", "Estoque zerado com sucesso!"))

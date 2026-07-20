@@ -16,9 +16,20 @@ import requests
 import os
 from dotenv import load_dotenv
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
 import uuid
 
+# Cria o vigia que anota o IP de quem tenta acessar
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="SaaS Restaurante - Estoque API")
+
+# Diz para o FastAPI usar o nosso vigia e como responder quando alguém passar do limite
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Carrega o cofre invisível (.env)
 load_dotenv() 
@@ -43,6 +54,18 @@ def get_db():
         yield db
     finally:
         db.close()
+
+# --- REGRAS DE SEGURANÇA GLOBAIS (CRACHÁ DE ACESSO) ---
+def get_usuario_logado(usuario_id: int, token_sessao: str, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.token_sessao == token_sessao).first()
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Sessão inválida. Faça login novamente.")
+    return usuario
+
+def verificar_admin(usuario: models.Usuario = Depends(get_usuario_logado)):
+    if usuario.nivel_acesso != "Admin" and getattr(usuario, 'cargo', '') != "Admin":
+        raise HTTPException(status_code=403, detail="Acesso negado. Apenas administradores podem fazer isso.")
+    return usuario
 
 # 1. Endpoint: White-Label (Cor e Logo)
 @app.get("/config/{cliente_id}") # <--- REMOVIDO O 'response_model' QUE CENSURAVA OS DADOS
@@ -340,7 +363,8 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
     return {"status": "sucesso", "mensagem": "Restaurante cadastrado com sucesso!"}
 
 @app.post("/login")
-def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute") # A TRAVA DA MAGALU: Bloqueia IPs atacantes!
+def fazer_login(request: Request, dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     # Criptografa a senha digitada e compara com a que está no banco
     senha_hash = gerar_hash(dados.senha)
     usuario = db.query(models.Usuario).filter(
@@ -1435,23 +1459,19 @@ def listar_movimentacoes_paginado(cliente_id: int, dias: int = 0, limit: int = 5
 # ==========================================
 
 @app.delete("/estoque/resetar/{cliente_id}")
-def resetar_estoque_geral(cliente_id: int, usuario_id: int, db: Session = Depends(get_db)):
+def resetar_estoque_geral(cliente_id: int, usuario_id: int, token_sessao: str, usuario: models.Usuario = Depends(verificar_admin), db: Session = Depends(get_db)):
     """Zera o saldo e apaga todo o histórico de entradas e saídas da empresa."""
-    # 1. TRAVA MESTRA: Verifica no banco se quem está clicando é o ADMIN da conta!
-    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.cliente_id == cliente_id).first()
-    if not usuario or usuario.nivel_acesso != "Admin":
-        raise HTTPException(status_code=403, detail="Acesso Negado! Apenas a conta Administradora pode zerar o estoque.")
+    # Validação cruzada: Impede um admin de apagar a empresa de outro admin
+    if usuario.cliente_id != cliente_id:
+        raise HTTPException(status_code=403, detail="Você não tem permissão para apagar este restaurante.")
         
-    # 2. Apaga todas as movimentações do histórico
     db.query(models.MovimentacaoEstoque).filter(models.MovimentacaoEstoque.cliente_id == cliente_id).delete()
     
-    # 3. Zera a quantidade e o custo médio de todos os produtos do catálogo
     produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
     for p in produtos:
         p.quantidade_atual = 0.0
         p.custo_medio = 0.0
         
-    # 4. Grava na Caixa-Preta (Log de Auditoria)
     log = models.LogAuditoria(
         cliente_id=cliente_id,
         usuario_id=usuario.id,
@@ -1464,13 +1484,11 @@ def resetar_estoque_geral(cliente_id: int, usuario_id: int, db: Session = Depend
     return {"status": "sucesso", "mensagem": f"O estoque foi completamente zerado por {usuario.login}."}
 
 @app.delete("/catalogo/limpar_tudo/{cliente_id}")
-def limpar_catalogo_geral(cliente_id: int, usuario_id: int, db: Session = Depends(get_db)):
+def limpar_catalogo_geral(cliente_id: int, usuario_id: int, token_sessao: str, usuario: models.Usuario = Depends(verificar_admin), db: Session = Depends(get_db)):
     """Apaga todos os produtos do catálogo da empresa."""
-    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.cliente_id == cliente_id).first()
-    if not usuario or usuario.nivel_acesso != "Admin":
-        raise HTTPException(status_code=403, detail="Acesso Negado! Apenas a conta Administradora pode apagar o catálogo.")
+    if usuario.cliente_id != cliente_id:
+        raise HTTPException(status_code=403, detail="Você não tem permissão para apagar o catálogo deste restaurante.")
         
-    # Apaga as movimentações primeiro (por causa do vínculo de chave estrangeira) e depois os produtos
     db.query(models.MovimentacaoEstoque).filter(models.MovimentacaoEstoque.cliente_id == cliente_id).delete()
     db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).delete()
     
@@ -1495,3 +1513,22 @@ def verificar_sessao(usuario_id: int, token_client: str, db: Session = Depends(g
         # Se o token do banco for diferente do token do PC, alguém logou por cima!
         return {"valido": False}
     return {"valido": True}
+
+# ==========================================
+# ROTA: LOGOFF (TRITURADOR DE TOKENS)
+# ==========================================
+@app.post("/logoff")
+def fazer_logoff_api(dados: dict, db: Session = Depends(get_db)):
+    try:
+        usuario_id = dados.get("usuario_id")
+        token_sessao = dados.get("token_sessao")
+        
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.token_sessao == token_sessao).first()
+        if usuario:
+            usuario.token_sessao = None # O token vira poeira e não serve mais para nada
+            db.commit()
+            
+        return {"mensagem": "Logout seguro efetuado."}
+    except Exception as e:
+        print(f"Erro no logoff: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno no servidor.")

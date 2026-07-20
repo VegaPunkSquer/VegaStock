@@ -550,8 +550,17 @@ class MainWindow(QMainWindow):
         resposta = msg.exec()
         
         if resposta == QMessageBox.Yes:
+            try:
+                import requests
+                dados = {
+                    "usuario_id": self.cliente_dados.get('usuario_id'),
+                    "token_sessao": self.cliente_dados.get('token_sessao')
+                }
+                requests.post(f"https://vegap-vega-stock.hf.space/logoff", json=dados, timeout=3)
+            except:
+                pass 
+                
             import os, sys
-            # Reinicia o aplicativo inteiro do zero, limpando a memória
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
@@ -648,12 +657,19 @@ class MainWindow(QMainWindow):
                 
     def showEvent(self, event):
         super().showEvent(event)
-        # Centraliza apenas na PRIMEIRA vez que abre, permitindo que o usuário mova a janela livremente depois!
         if not hasattr(self, '_ja_centralizou'):
             self._ja_centralizou = True
+            # Pega a área útil real do monitor (desconsiderando a barra de tarefas do Windows)
             monitor = self.screen().availableGeometry()
-            x = monitor.x() + (monitor.width() - self.width()) // 2
-            y = monitor.y() + (monitor.height() - self.height()) // 2
+            
+            # Se a janela for maior que a tela do notebook, redimensiona para caber perfeitamente
+            largura_final = min(self.width(), monitor.width())
+            altura_final = min(self.height(), monitor.height())
+            self.resize(largura_final, altura_final)
+            
+            # Centraliza de forma blindada, impedindo valores negativos (que jogam a barra para fora)
+            x = max(monitor.x(), monitor.x() + (monitor.width() - largura_final) // 2)
+            y = max(monitor.y(), monitor.y() + (monitor.height() - altura_final) // 2)
             self.move(x, y)
 
 def iniciar_app():
@@ -670,7 +686,7 @@ def iniciar_app():
 
         if resultado_login == TelaLogin.Accepted:
             janela_principal = MainWindow(tela_login.cliente_dados)
-            janela_principal.show()
+            janela_principal.showMaximized() # <--- FORÇA ABRIR EM TELA CHEIA PERFEITA
             sys.exit(app_instancia.exec())
         elif tela_login.ir_para_cadastro:
             tela_cadastro = TelaCadastro()
