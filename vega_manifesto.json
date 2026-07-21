@@ -1,7 +1,7 @@
 {
     "produto_id_master": 3,
     "nome": "VegaStock",
-    "versao_atual": "v1.8.6",
+    "versao_atual": "v1.9.0",
     "repo": "https://github.com/VegaPunkSquer/VegaStock",
     "builds": {
         "desktop": "C:\\APPS\\Vega Stock\\gerar_exe.bat",
