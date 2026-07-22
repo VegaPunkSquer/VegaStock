@@ -1,17 +1,82 @@
 import sys
 import os
+import time
+
+# --- RESOLUÇÃO DE CAMINHOS ABSOLUTOS ---
+if getattr(sys, 'frozen', False):
+    base_dir = os.path.dirname(sys.executable)
+    bundle_dir = sys._MEIPASS
+else:
+    base_dir = os.path.dirname(os.path.abspath(__file__))
+    bundle_dir = base_dir
+
+# ==========================================
+# O SEGREDO DA VELOCIDADE: SPLASH SCREEN NO TOPO
+# ==========================================
+from PySide6.QtWidgets import QApplication, QSplashScreen, QLabel, QProgressBar, QSystemTrayIcon
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import Qt
+
+class SplashScreenVega(QSplashScreen):
+    def __init__(self, caminho_img):
+        pixmap = QPixmap(caminho_img).scaled(600, 400, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        # REMOVIDO WindowStaysOnTopHint: Evita que a splash fique presa na frente de caixas de diálogo ou atualizações!
+        super().__init__(pixmap, Qt.FramelessWindowHint)
+        
+        self.lbl_status = QLabel("Iniciando VegaStock...", self)
+        self.lbl_status.setStyleSheet("color: white; font-weight: bold; font-size: 13px; background-color: rgba(0,0,0,150); padding: 2px; border-radius: 4px;")
+        self.lbl_status.setAlignment(Qt.AlignCenter)
+        self.lbl_status.setGeometry(20, pixmap.height() - 70, pixmap.width() - 40, 25)
+        
+        self.barra = QProgressBar(self)
+        self.barra.setGeometry(20, pixmap.height() - 40, pixmap.width() - 40, 20)
+        self.barra.setStyleSheet("""
+            QProgressBar { border: 1px solid #555; border-radius: 5px; background-color: #222; text-align: center; color: white; font-weight: bold; }
+            QProgressBar::chunk { background-color: #00E5FF; border-radius: 4px; }
+        """)
+
+    def atualizar(self, valor, texto):
+        self.barra.setValue(valor)
+        self.lbl_status.setText(texto)
+        QApplication.processEvents()
+
+# Inicia o núcleo visual ANTES dos imports pesados
+app_instancia = QApplication.instance()
+if app_instancia is None:
+    app_instancia = QApplication(sys.argv)
+
+caminho_splash = os.path.join(bundle_dir, "assets", "logo.png")
+splash = SplashScreenVega(caminho_splash)
+splash.show()
+splash.atualizar(10, "Verificando radares de atualizações...")
+
+# =========================================================================
+# 🚨 BOOTLOADER DEFENSIVO: CHECA ATUALIZAÇÃO ANTES DOS IMPORTS PESADOS!
+# Se houver correção na nuvem, ele atualiza e fecha ANTES de qualquer crash!
+# =========================================================================
 import requests
 import ctypes
+from atualizador import checar_e_atualizar
+
+if checar_e_atualizar(splash):
+    os._exit(0) # Se atualizou, encerra o processo antigo na hora!
+
+splash.atualizar(30, "Carregando núcleo de interface gráfica...")
+
+# ==========================================
+# IMPORTS PESADOS (Agora estão seguros contra bugs passados)
+# ==========================================
+import re
 from datetime import datetime
-from PySide6.QtWidgets import (QApplication, QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
-                               QLabel, QHBoxLayout, QStackedWidget,QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout) # ADICIONADO QFrame
-from PySide6.QtGui import QPixmap, QPainter, QPainterPath, QColor, QBrush, QIcon
-from PySide6.QtCore import Qt, QSize
+from PySide6.QtWidgets import (QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
+                               QLabel, QHBoxLayout, QStackedWidget, QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout)
+from PySide6.QtGui import QPainter, QPainterPath, QColor, QBrush, QIcon
+from PySide6.QtCore import QSize
+splash.atualizar(60, "Conectando módulos e banco de dados...")
 import estilos
 from tela_login import TelaLogin
 from tela_cadastro import TelaCadastro
 from tela_recuperacao import TelaRecuperacao
-
 from aba_dashboard import AbaDashboard
 from aba_catalogo import AbaCatalogo
 from aba_estoque import AbaEstoque
@@ -19,21 +84,21 @@ from aba_relatorios import AbaRelatorios
 from aba_equipe import AbaEquipe
 from aba_conta import AbaConta
 from aba_configuracoes import AbaConfiguracoes
+from aba_sobre import AbaSobre
 
-myappid = 'vegasotck.versao1' # Pode ser qualquer string única
+myappid = 'vegasotck.versao1'
 ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(myappid)
 
 class MainWindow(QMainWindow):
     def __init__(self, cliente_dados):
         super().__init__()
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        caminho_icone = os.path.join(BASE_DIR, "assets", 'logo.ico')
         
         self.setWindowIcon(QIcon(caminho_icone))
         self.cliente_dados = cliente_dados
         self.setWindowTitle(f"VegaStock - Gerenciamento de Estoque - {self.cliente_dados['nome_fantasia']}")
         self.resize(900, 600)
-
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
         # --- INÍCIO DO LAYOUT GRID DEFINITIVO ---
@@ -86,19 +151,24 @@ class MainWindow(QMainWindow):
 
         self.nomes_abas = [
             "DASHBOARD", "CATÁLOGO DE PRODUTOS", "OPERAÇÃO DE ESTOQUE",
-            "ANÁLISE DE DESPERDÍCIO", "EQUIPE E PERMISSÕES 🔒", "MINHA CONTA", "CONFIGURAÇÕES"
+            "ANÁLISE DE DESPERDÍCIO", "EQUIPE E PERMISSÕES 🔒", "MINHA CONTA", "CONFIGURAÇÕES", "ℹ️ SOBRE"
         ]
         
+        # DESIGN DO MENU PREMIUM: Sem blocos cinzas, apenas linhas de marcação
         estilo_btn = """
             QPushButton {
-                background-color: 
-                #EAEAEA; border: 1px solid #CCCCCC;
-                text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; color: #333;
-                border-radius: 5px; /* Cantos arredondados de volta */
+                background-color: transparent; 
+                border: none;
+                border-left: 3px solid transparent;
+                text-align: left; 
+                padding: 12px 15px; 
+                font-weight: bold; 
+                font-size: 12px; 
+                color: #64748B;
+                border-radius: 0px;
             }
-            QPushButton:hover { background-color: #DCDCDC; }
-           
-            QPushButton:checked { background-color: #FFD700; border: 1px solid #E6C200; color: #000; }
+            QPushButton:hover { background-color: #F1F5F9; color: #0F172A; }
+            QPushButton:checked { background-color: #FFFBEB; border-left: 3px solid #FFD700; color: #0F172A; }
         """
         
         # --- BOTÃO LOGOFF ---
@@ -125,7 +195,8 @@ class MainWindow(QMainWindow):
             "ANÁLISE DE DESPERDÍCIO": "relatorios",
             "EQUIPE E PERMISSÕES 🔒": "admin", # Apenas Admin/Dono
             "MINHA CONTA": "livre",           # Todos veem
-            "CONFIGURAÇÕES": "configuracoes"
+            "CONFIGURAÇÕES": "configuracoes",
+            "ℹ️ SOBRE": "livre"
         }
 
         # Descobre quem é o cara logado
@@ -142,7 +213,8 @@ class MainWindow(QMainWindow):
             btn.clicked.connect(lambda _, idx=i: self.mudar_aba(idx))
             
             if "🔒" in nome:
-                if self.cliente_dados.get('status_assinatura') == "PRO":
+                status = str(self.cliente_dados.get('status_assinatura', '')).upper()
+                if status == "PRO" or status == "TESTE_PRO":
                     btn.setText(nome.replace(" 🔒", ""))
                 else:
                     estilo_bloqueado = """
@@ -153,6 +225,7 @@ class MainWindow(QMainWindow):
                         QPushButton:checked { background-color: #e0e0e0; color: #555; border: 1px solid #ccc; }
                     """
                     btn.setStyleSheet(estilo_bloqueado)
+                    btn.setEnabled(False)
                     
             self.layout_abas.addWidget(btn)
             self.botoes_abas.append(btn)
@@ -185,6 +258,7 @@ class MainWindow(QMainWindow):
         self.aba_eqp = AbaEquipe(self.cliente_dados)
         self.aba_cnt = AbaConta(self.cliente_dados, self)
         self.aba_cfg = AbaConfiguracoes(self.cliente_dados)
+        self.aba_abt = AbaSobre(self)
 
         self.area_central.addWidget(self.aba_dash)
         self.area_central.addWidget(self.aba_cat)
@@ -193,6 +267,7 @@ class MainWindow(QMainWindow):
         self.area_central.addWidget(self.aba_eqp)
         self.area_central.addWidget(self.aba_cnt)
         self.area_central.addWidget(self.aba_cfg)
+        self.area_central.addWidget(self.aba_abt)
         
         layout_dir.addWidget(self.area_central)
 
@@ -212,8 +287,160 @@ class MainWindow(QMainWindow):
         # Chama a função que tranca tudo logo que o app abre!
         # ========================================================
         self.atualizar_bloqueios_interface()
+        self.atualizar_bloqueios_interface()
+        
+        # Gatilho automático para verificar os 80% do prazo de testes
+        self.verificar_trigger_feedback()
+        
+        # Aplica a escala salva na inicialização chamando o loop correto da própria aba_cnt que já criamos
+        from PySide6.QtCore import QSettings
+        config = QSettings("VegaStock", "Preferencias")
+        indice_salvo = int(config.value("escala_fonte_index", 0))
+        
+        # Dispara o loop usando a aba real que acabamos de setar na linha acima
+        if hasattr(self, 'aba_cnt'):
+            self.aba_cnt.mudar_escala_aplicativo(indice_salvo)
+            
+        # Verifica se o atualizador deixou algum recado de novidades
+        self.checar_notas_atualizacao()
+
+        # --- RADAR DE SESSÃO ÚNICA (ANTI-DUPLICIDADE) ---
+        self.token_sessao = self.cliente_dados.get("token_sessao")
+        self.usuario_id_logado = self.cliente_dados.get("usuario_id")
+        
+        from PySide6.QtCore import QTimer
+        self.timer_sessao = QTimer(self)
+        self.timer_sessao.timeout.connect(self.checar_sessao_ativa)
+        self.timer_sessao.start(10000) # Checa a cada 10 segundos
+        
+        # ===============================================================
+        # 🔔 RADAR DE ATUALIZAÇÃO EM SEGUNDO PLANO (BANDEJA DO WINDOWS)
+        # ===============================================================
+        from PySide6.QtWidgets import QSystemTrayIcon
+        
+        # 1. Cria o ícone invisível na bandeja do Windows (ao lado do relógio)
+        self.tray_icon = QSystemTrayIcon(self)
+        self.tray_icon.setIcon(self.windowIcon()) # Usa o mesmo logo.ico do app
+        self.tray_icon.setVisible(True)
+        
+        # 2. Se o usuário CLICAR na notificação do Windows, abre a janela de atualização!
+        self.tray_icon.messageClicked.connect(self.abrir_janela_atualizacao_tray)
+        
+        # 3. Timer silencioso: Checa a cada 1 hora (3600000 ms) em segundo plano
+        self.timer_update_bg = QTimer(self)
+        self.timer_update_bg.timeout.connect(self.radar_silencioso_atualizacao)
+        self.timer_update_bg.start(3600000)
+
+    def checar_notas_atualizacao(self):
+        notas_path = os.path.join(base_dir, "release_notes.txt")
+        if os.path.exists(notas_path):
+            try:
+                with open(notas_path, "r", encoding="utf-8") as f:
+                    texto_notas = f.read().strip()
+                
+                if texto_notas:
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("🚀 Aplicativo Atualizado!")
+                    msg.setText("O VegaStock foi atualizado com sucesso!\n\nVeja o que há de novo nesta versão:\n\n" + texto_notas)
+                    msg.setIcon(QMessageBox.Information)
+                    msg.setStandardButtons(QMessageBox.Ok)
+                    msg.exec()
+                
+                os.remove(notas_path)
+            except Exception:
+                pass
+
+    def checar_sessao_ativa(self):
+        # Se por algum motivo o login não gerou token, ignora
+        if not getattr(self, 'usuario_id_logado', None) or not getattr(self, 'token_sessao', None):
+            return
+            
+        try:
+            import requests
+            url = f"https://vegap-vega-stock.hf.space/verificar_sessao/{self.usuario_id_logado}/{self.token_sessao}"
+            resp = requests.get(url, timeout=4)
+            
+            if resp.status_code == 200:
+                resultado = resp.json()
+                if not resultado.get("valido", True):
+                    # Desliga o radar para não apitar duas vezes
+                    self.timer_sessao.stop()
+                    
+                    msg = QMessageBox(self)
+                    msg.setWindowTitle("⛔ Sessão Encerrada")
+                    msg.setText("A sua conta acabou de ser conectada em outro computador!")
+                    msg.setInformativeText("Por motivos de segurança e auditoria, o VegaStock não permite o uso simultâneo do mesmo login em máquinas diferentes.\n\nO aplicativo será encerrado.")
+                    msg.setIcon(QMessageBox.Critical)
+                    msg.exec()
+                    
+                    # Expulsa fechando a tela (o while do app.py vai jogar pra tela de login)
+                    self.close()
+        except:
+            pass # Faltou internet/piscou, fica quieto e tenta de novo em 10s
+
+    # --- MÓDULO DE NOTIFICAÇÃO NATIVA DO WINDOWS (STYLE OLLAMA) ---
+    def radar_silencioso_atualizacao(self):
+        """Roda em segundo plano sem travar a tela. Se achar versão nova, chama o balão do Windows!"""
+        try:
+            # Aqui você faz uma checagem rápida na sua API ou arquivo de versão da nuvem
+            # Exemplo: bate na sua rota para ver se a versão da nuvem é maior que a local
+            url = "https://vegap-vega-stock.hf.space/desktop/versao"
+            resp = requests.get(url, timeout=5)
+            if resp.status_code == 200:
+                dados = resp.json()
+                versao_nuvem = dados.get("versao", "")
+                
+                # Se a versão for nova e diferente da atual:
+                if versao_nuvem and versao_nuvem != "1.0.0": # Substitua pela sua variável de versão atual
+                    self.release_notes_nuvem = dados.get("release_notes", "Melhorias de estabilidade e velocidade.")
+                    
+                    # DISPARA A NOTIFICAÇÃO NATIVA ACIMA DO RELÓGIO DO WINDOWS!
+                    self.tray_icon.showMessage(
+                        "🚀 Nova Versão do VegaStock Disponível!",
+                        f"A versão {versao_nuvem} acabou de sair do forno!\nClique aqui para ver o que mudou e atualizar.",
+                        QSystemTrayIcon.Information,
+                        10000 # O balão fica 10 segundos na tela
+                    )
+        except:
+            pass # Se estiver sem internet, ignora em silêncio
+
+    def abrir_janela_atualizacao_tray(self):
+        """É acionado na hora que o usuário clica com o mouse em cima da notificação do Windows."""
+        notas = getattr(self, 'release_notes_nuvem', 'Atualização importante de sistema disponível.')
+        
+        msg = QMessageBox(self)
+        msg.setWindowTitle("🚀 Atualização Disponível")
+        msg.setText("<b>Uma nova versão do VegaStock está pronta para ser instalada!</b>")
+        msg.setInformativeText(f"<b>O que há de novo nesta versão:</b>\n\n{notas}\n\nDeseja fechar e atualizar agora?")
+        msg.setIcon(QMessageBox.Information)
+        
+        btn_atualizar = msg.addButton("🚀 Atualizar Agora", QMessageBox.AcceptRole)
+        btn_atualizar.setStyleSheet("background-color: #00E5FF; color: #000; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
+        
+        btn_depois = msg.addButton("❌ Depois", QMessageBox.RejectRole)
+        btn_depois.setStyleSheet("background-color: #555; color: white; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
+        
+        msg.exec()
+        
+        if msg.clickedButton() == btn_atualizar:
+            # Chama o seu atualizador original e fecha o app para substituir o .exe!
+            from atualizador import checar_e_atualizar
+            if checar_e_atualizar(None):
+                os._exit(0)
         
     def mudar_aba(self, index):
+        # O Cão de Guarda: Se o cara der um alt+tab e a meia-noite virar, ele é deslogado no próximo clique
+        status = str(self.cliente_dados.get('status_assinatura', '')).upper()
+        validade_str = self.cliente_dados.get('validade_pro')
+        
+        if "TESTE" in status and validade_str:
+            validade_limpa = validade_str.split(".")[0].replace("Z", "")
+            data_validade = datetime.fromisoformat(validade_limpa)
+            if data_validade < datetime.utcnow():
+                QMessageBox.critical(self, "Tempo Esgotado", "O seu período de testes expirou! O sistema será bloqueado.")
+                self.fazer_logoff()
+                return
+                
         self.area_central.setCurrentIndex(index)
 
     def carregar_logo_redondo(self, caminho_logo):
@@ -272,7 +499,7 @@ class MainWindow(QMainWindow):
         
     def sincronizar_dados_nuvem(self):
         try:
-            url = f"https://vegastock.onrender.com/config/{self.cliente_dados['cliente_id']}"
+            url = f"https://vegap-vega-stock.hf.space/config/{self.cliente_dados['cliente_id']}"
             resp = requests.get(url, timeout=10)
             
             if resp.status_code == 200:
@@ -323,8 +550,17 @@ class MainWindow(QMainWindow):
         resposta = msg.exec()
         
         if resposta == QMessageBox.Yes:
+            try:
+                import requests
+                dados = {
+                    "usuario_id": self.cliente_dados.get('usuario_id'),
+                    "token_sessao": self.cliente_dados.get('token_sessao')
+                }
+                requests.post(f"https://vegap-vega-stock.hf.space/logoff", json=dados, timeout=3)
+            except:
+                pass 
+                
             import os, sys
-            # Reinicia o aplicativo inteiro do zero, limpando a memória
             os.execl(sys.executable, sys.executable, *sys.argv)
             
     def atualizar_bloqueios_interface(self):
@@ -348,7 +584,8 @@ class MainWindow(QMainWindow):
             "ANÁLISE DE DESPERDÍCIO": "relatorios",
             "EQUIPE E PERMISSÕES": "aba_equipe",
             "MINHA CONTA": "livre",
-            "CONFIGURAÇÕES": "configuracoes"
+            "CONFIGURAÇÕES": "configuracoes",
+            "SOBRE": "sobre"
         }
 
         # 4. PASSA POR TODOS OS BOTÕES E APLICA A SUA REGRA
@@ -374,40 +611,95 @@ class MainWindow(QMainWindow):
                 btn.show() # A caixinha foi marcada na criação? Libera!
             else:
                 btn.hide() # Caixinha não foi marcada? Bloqueia!
+                
+    def verificar_trigger_feedback(self):
+        status = self.cliente_dados.get("status_assinatura")
+        validade_str = self.cliente_dados.get("validade_pro")
+        cliente_id = self.cliente_dados.get("cliente_id") or self.cliente_dados.get("id")
+        plano = self.cliente_dados.get("plano", "BÁSICO")
+
+        if "TESTE" in status and validade_str and cliente_id:
+            try:
+                # Trata a string de data vinda do JSON do backend
+                validade_limpa = validade_str.split(".")[0].replace("Z", "")
+                data_validade = datetime.fromisoformat(validade_limpa)
+                agora = datetime.utcnow()
+                
+                dias_restantes = (data_validade - agora).total_seconds() / 86400
+                
+                # Heurística dos 80% passados (20% ou menos de tempo restante):
+                disparar = False
+                
+                # Trava de segurança extra: Se o tempo já acabou (menor que zero), nem pede feedback, aborta a missão.
+                if dias_restantes <= 0:
+                    return
+
+                if 0 < dias_restantes <= 1.5:
+                    disparar = True
+                elif 2.0 < dias_restantes <= 6.0:
+                    disparar = True
+
+                if disparar:
+                    # Uso estrito de caminhos absolutos dinâmicos para a trava local
+                    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+                    caminho_trava = os.path.join(BASE_DIR, f".feedback_enviado_{cliente_id}.txt")
+                    
+                    # Se o arquivo de trava não existir, abre a janela e bloqueia repetições
+                    if not os.path.exists(caminho_trava):
+                        from dialog_feedback import DialogFeedback
+                        API_URL = "https://vegap-vega-stock.hf.space"
+                        dialogo = DialogFeedback(API_URL, cliente_id, plano, self)
+                        if dialogo.exec() == DialogFeedback.Accepted:
+                            with open(caminho_trava, "w") as f:
+                                f.write(f"Enviado em {agora.isoformat()}")
+            except Exception as e:
+                print(f"Erro no trigger de feedback: {e}")
+                
+    def showEvent(self, event):
+        super().showEvent(event)
+        if not hasattr(self, '_ja_centralizou'):
+            self._ja_centralizou = True
+            # Pega a área útil real do monitor (desconsiderando a barra de tarefas do Windows)
+            monitor = self.screen().availableGeometry()
+            
+            # Se a janela for maior que a tela do notebook, redimensiona para caber perfeitamente
+            largura_final = min(self.width(), monitor.width())
+            altura_final = min(self.height(), monitor.height())
+            self.resize(largura_final, altura_final)
+            
+            # Centraliza de forma blindada, impedindo valores negativos (que jogam a barra para fora)
+            x = max(monitor.x(), monitor.x() + (monitor.width() - largura_final) // 2)
+            y = max(monitor.y(), monitor.y() + (monitor.height() - altura_final) // 2)
+            self.move(x, y)
 
 def iniciar_app():
-    app = QApplication(sys.argv)
-    
-    # Injeta a paleta de cores da empresa do seu tio no aplicativo inteiro
-    app.setStyleSheet(estilos.ESTILO_GLOBAL)
+    app_instancia.setStyleSheet(estilos.ESTILO_GLOBAL)
 
-    # Loop de Navegação (Roteador do PySide)
     while True:
         tela_login = TelaLogin()
+        
+        # Fecha a Splash quando a tela de login aparecer!
+        if splash:
+            splash.finish(tela_login)
+            
         resultado_login = tela_login.exec()
 
         if resultado_login == TelaLogin.Accepted:
-            # Login deu certo! Abre a tela principal e quebra o loop
             janela_principal = MainWindow(tela_login.cliente_dados)
-            janela_principal.show()
-            sys.exit(app.exec())
-        
+            janela_principal.showMaximized() # <--- FORÇA ABRIR EM TELA CHEIA PERFEITA
+            sys.exit(app_instancia.exec())
         elif tela_login.ir_para_cadastro:
-            # Clicou no botão "Cadastrar-se"
             tela_cadastro = TelaCadastro()
             tela_cadastro.exec()
-            # Ao fechar o cadastro (sucesso ou "Voltar"), o loop reinicia e abre o Login de novo
-            
         elif tela_login.ir_para_recuperacao:
             tela_rec = TelaRecuperacao()
             tela_rec.exec()
-            # Ao fechar, o loop reinicia e volta para o Login
-        
         else:
-            # Usuário clicou no "X" vermelho da janela, fecha tudo.
             break
 
     sys.exit()
 
 if __name__ == "__main__":
+    splash.atualizar(100, "Pronto! Iniciando VegaStock...")
+    time.sleep(0.3)
     iniciar_app()

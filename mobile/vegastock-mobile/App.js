@@ -1,9 +1,98 @@
-import React, { useState } from 'react';
-import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, Image, ActivityIndicator } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { StyleSheet, Text, View, TouchableOpacity, TextInput, Alert, FlatList, Image, ActivityIndicator, Vibration } from 'react-native';
 import { CameraView, useCameraPermissions } from 'expo-camera';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Audio } from 'expo-av';
+import Constants from 'expo-constants';
+import * as FileSystem from 'expo-file-system';
+import * as IntentLauncher from 'expo-intent-launcher';
 
 export default function App() {
+  // =========================================================================
+  // 🚀 AUTO-UPDATE NATIVO (100% AUTOMATIZADO COM A FÁBRICA VEGATECH)
+  // =========================================================================
+  useEffect(() => {
+    const checarAtualizacaoAPK = async () => {
+      try {
+        // MÁGICA: Lê a versão exata que a Fábrica acabou de escrever no app.json!
+        const VERSAO_ATUAL_MOBILE = Constants.expoConfig.version; 
+        
+        // Bate na mesma rota do MasterApp que o Desktop usa!
+        const PRODUTO_ID_MASTER = 2; // ID do VegaStock no Master
+        const res = await fetch(`https://vegap-masterapp.hf.space/master/atualizacao/${PRODUTO_ID_MASTER}`);
+        
+        if (res.ok) {
+          const dados = await res.json();
+          
+          // A Fábrica manda "v1.0.5". O app.json salva "1.0.5". Tiramos o "v" para comparar.
+          const versaoNuvem = dados.versao_atual ? dados.versao_atual.replace("v", "") : "";
+          
+          // 🚨 ALERTA DE ARQUITETURA: Como Desktop e Mobile usam o mesmo ID 2, 
+          // certifique-se de que sua API Master devolve o link do mobile separado do EXE.
+          // Ex: dados.link_download_mobile ou garanta que o link retornado termina em .apk
+          const linkApk = dados.link_download_mobile || dados.link_download;
+
+          // Se a versão da nuvem for diferente e for um arquivo APK válido:
+          if (versaoNuvem && versaoNuvem !== VERSAO_ATUAL_MOBILE && linkApk && linkApk.endsWith(".apk")) {
+            
+            Alert.alert(
+              "🚀 Nova Versão Disponível!",
+              `O aplicativo foi atualizado para a versão ${versaoNuvem}!\n\nDeseja instalar a atualização agora?`,
+              [
+                { text: "Depois", style: "cancel" },
+                { 
+                  text: "Atualizar Agora", 
+                  onPress: () => baixarEInstalarAPK(linkApk) 
+                }
+              ]
+            );
+          }
+        }
+      } catch (e) {
+        console.log("Falha ao checar atualização mobile silenciosamente:", e);
+      }
+    };
+
+    const baixarEInstalarAPK = async (urlApk) => {
+      try {
+        Alert.alert("⏳ Baixando...", "O novo aplicativo está sendo baixado em segundo plano. Por favor, aguarde uns segundos.");
+        
+        const caminhoLocal = FileSystem.documentDirectory + "vegastock_update.apk";
+        const { uri } = await FileSystem.downloadAsync(urlApk, caminhoLocal);
+        const contentUri = await FileSystem.getContentUriAsync(uri);
+        
+        await IntentLauncher.startActivityAsync('android.intent.action.VIEW', {
+          data: contentUri,
+          flags: 1, 
+          type: 'application/vnd.android.package-archive',
+        });
+      } catch (erro) {
+        Alert.alert("Erro de Atualização", "Não foi possível abrir o instalador nativo.");
+      }
+    };
+
+    checarAtualizacaoAPK();
+  }, []);
   const [permission, requestPermission] = useCameraPermissions();
+
+  // MÁGICA DA MEMÓRIA: Carrega o restaurante salvo assim que o app abre
+  useEffect(() => {
+    const carregarPareamento = async () => {
+      try {
+        const idSalvo = await AsyncStorage.getItem('vegastock_cliente_id');
+        if (idSalvo !== null) {
+          setClienteIdContexto(parseInt(idSalvo, 10));
+          setEmpresaPareada(true);
+          setEtapaAuth('LOGIN_UNIFICADO');
+        }
+      } catch (e) {}
+    };
+    carregarPareamento();
+  }, []);
+  
+  // Controle da Câmera vs Busca Manual
+  const [modoCamera, setModoCamera] = useState(true); 
+  const [textoBuscaManual, setTextoBuscaManual] = useState('');
   
   // ==========================================
   // ESTADOS DE AUTENTICAÇÃO (O SEU FLUXO ORIGINAL)
@@ -22,6 +111,11 @@ export default function App() {
   const [senhaUsuario, setSenhaUsuario] = useState('');
   const [pinDigitado, setPinDigitado] = useState('');
 
+  // Controle de Pareamento e Olhinhos (Novos e sem duplicidade)
+  const [empresaPareada, setEmpresaPareada] = useState(false); 
+  const [ocultarSenha, setOcultarSenha] = useState(true);
+  const [ocultarPin, setOcultarPin] = useState(true);
+
   // ==========================================
   // ESTADOS DO ESTOQUE
   // ==========================================
@@ -34,8 +128,12 @@ export default function App() {
   const [produtoReconhecido, setProdutoReconhecido] = useState(null);
   const [quantidade, setQuantidade] = useState('');
   const [produtosCatalogo, setProdutosCatalogo] = useState([]);
+  // Controle do Novo Cadastro pelo Celular
+  const [cadastrandoNovo, setCadastrandoNovo] = useState(false);
+  const [nomeNovoProd, setNomeNovoProd] = useState('');
+  const [unidadeNovoProd, setUnidadeNovoProd] = useState('');
 
-  const API_URL = "https://vegastock.onrender.com";
+  const API_URL = "https://vegap-vega-stock.hf.space";
 
   if (!permission) return <View />;
   if (!permission.granted) {
@@ -50,22 +148,20 @@ export default function App() {
   }
 
   // --- LOGIN VIA SENHA (EQUIPE PRO) ---
-  const handleLoginSenha = async () => {
-    if(!loginUsuario || !senhaUsuario) { Alert.alert("Erro", "Preencha login e senha."); return; }
+  const fazerLoginAPI_Senha = async (loginStr, senhaStr) => {
     setCarregando(true);
     try {
       let res = await fetch(`${API_URL}/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ login: loginUsuario, senha: senhaUsuario })
+        body: JSON.stringify({ login: loginStr, senha: senhaStr })
       });
       if (res.ok) {
         let dados = await res.json();
         setClienteIdContexto(dados.cliente_id);
         setNomeFantasia(dados.nome_fantasia || "Restaurante");
         setLogoRestaurante(dados.logo_url);
-        setOperadorLogado(loginUsuario.toUpperCase()); // Carimba o nome do cara
-        
+        setOperadorLogado(loginStr.toUpperCase());
         setLoginUsuario(''); setSenhaUsuario('');
         setEtapaAuth('LOGADO');
       } else {
@@ -76,26 +172,43 @@ export default function App() {
   };
 
   // --- LOGIN VIA PIN (OPERADOR BÁSICO) ---
-  const handleLoginPin = async () => {
-    if(pinDigitado.length !== 4) { Alert.alert("Erro", "O PIN deve ter 4 dígitos."); return; }
+  const fazerLoginAPI_PIN = async (pinStr) => {
     setCarregando(true);
     try {
       let res = await fetch(`${API_URL}/validar_pin`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cliente_id: clienteIdContexto, pin: pinDigitado })
+        body: JSON.stringify({ cliente_id: clienteIdContexto, pin: pinStr })
       });
       if (res.ok) {
         let dados = await res.json();
         setOperadorLogado(dados.nome);
-        setPinDigitado('');
+        setLoginUsuario(''); setSenhaUsuario('');
         setEtapaAuth('LOGADO');
       } else {
         Alert.alert("Erro", "PIN incorreto.");
-        setPinDigitado('');
       }
     } catch(e) { Alert.alert("Conexão", "Servidor offline."); }
     finally { setCarregando(false); }
+  };
+
+  // Função para tocar o Bip
+  const tocarBip = async () => {
+    try {
+      const { sound } = await Audio.Sound.createAsync(
+        require('./assets/beep.mp3') // Certifique-se de que este arquivo existe!
+      );
+      await sound.playAsync();
+      
+      // Limpa a memória depois de tocar para o app não explodir de memória
+      sound.setOnPlaybackStatusUpdate((status) => {
+        if (status.didJustFinish) {
+          sound.unloadAsync();
+        }
+      });
+    } catch (error) {
+      console.log("Erro ao tocar o bip", error);
+    }
   };
 
   // --- FUNÇÕES DA CÂMERA E ESTOQUE ---
@@ -103,6 +216,28 @@ export default function App() {
     setScanned(true);
     const codigoLimpo = String(data).trim();
 
+    // Toca o som e vibra o celular por 100 milissegundos
+    Vibration.vibrate(100);
+    tocarBip();
+
+    // ========================================================
+    // INTERCEPTADOR DE PAREAMENTO: Se não tiver pareado, o bip é do monitor!
+    // ========================================================
+    if (!empresaPareada) {
+      const idCapturado = parseInt(codigoLimpo, 10);
+      if (!isNaN(idCapturado)) {
+        setClienteIdContexto(idCapturado);
+        setEmpresaPareada(true);
+        AsyncStorage.setItem('vegastock_cliente_id', idCapturado.toString()); // <-- GRAVA NO CELULAR!
+        setEtapaAuth('LOGIN_UNIFICADO'); 
+        Alert.alert("Sucesso", "Celular vinculado ao estabelecimento com sucesso!");
+      } else {
+        Alert.alert("Erro", "QR Code de pareamento inválido.");
+      }
+      return; // Para a execução aqui para não tentar buscar o ID como produto
+    }
+
+    // Fluxo original de bipes de produtos mantido intacto
     try {
       let resposta = await fetch(`${API_URL}/produto_por_codigo/${clienteIdContexto}/${codigoLimpo}`);
       if (resposta.status === 200) {
@@ -163,74 +298,171 @@ export default function App() {
     } catch (error) { Alert.alert("Erro", "Sem conexão."); }
   };
 
+  const cadastrarProdutoPeloCelular = async () => {
+    if (!nomeNovoProd || !unidadeNovoProd) {
+      Alert.alert("Aviso", "Preencha o nome e a unidade (ex: un, kg).");
+      return;
+    }
+    
+    try {
+      const res = await fetch(`${API_URL}/produtos`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          cliente_id: clienteIdContexto,
+          nome: nomeNovoProd,
+          categoria_id: null,
+          unidade_medida: unidadeNovoProd.toLowerCase(),
+          estoque_minimo: 0,
+          codigo_barras: codigoNovo // Já nasce vinculado!
+        })
+      });
+
+      if (res.ok) {
+        const resposta = await res.json();
+        Alert.alert("Sucesso", "Produto cadastrado e vinculado!");
+        
+        // Joga o funcionário direto pra tela de dar a entrada no produto novinho
+        setProdutoReconhecido(resposta.produto);
+        setCodigoNovo(null);
+        setCadastrandoNovo(false);
+        setNomeNovoProd('');
+        setUnidadeNovoProd('');
+      } else {
+        Alert.alert("Erro", "Não foi possível cadastrar.");
+      }
+    } catch (e) { Alert.alert("Erro", "Sem conexão."); }
+  };
+
   // ==========================================
   // RENDERIZAÇÃO DAS TELAS
   // ==========================================
   
-  // TELA 1: ESCOLHA DE ACESSO
+  // TELA 1: ESCOLHA DE ACESSO (UNIFICADA COM PAREAMENTO)
   if (etapaAuth === 'INICIO') {
+    // Se o celular já guardou o pareamento do monitor, pula o bloqueio e abre direto o Login Unificado
+    if (empresaPareada) {
+      setEtapaAuth('LOGIN_UNIFICADO');
+    }
+
     return (
       <View style={styles.containerEscuro}>
         <Text style={styles.tituloSecundario}>Bem-vindo ao</Text>
-        <Text style={{fontSize: 40, fontWeight: 'bold', color: '#FFD700', marginBottom: 50}}>VegaStock</Text>
+        <Text style={{fontSize: 40, fontWeight: 'bold', color: '#FFD700', marginBottom: 20}}>VegaStock</Text>
         
-        <TouchableOpacity style={styles.botaoGigante} onPress={() => setEtapaAuth('SENHA')}>
-          <Text style={styles.btnTextEscuro}>Acesso da Equipe</Text>
-          <Text style={{color: '#333'}}>Login e Senha</Text>
-        </TouchableOpacity>
+        <Text style={{color: '#aaa', fontSize: 15, textAlign: 'center', marginHorizontal: 25, marginBottom: 40, lineHeight: 22}}>
+          Para iniciar, vincule este aplicativo ao painel administrativo do seu computador.
+        </Text>
 
-        <TouchableOpacity style={[styles.botaoGigante, {backgroundColor: '#333', borderColor: '#555', borderWidth: 1}]} onPress={() => setEtapaAuth('PIN')}>
-          <Text style={styles.btnText}>Acesso Rápido</Text>
-          <Text style={{color: '#aaa'}}>PIN Operacional</Text>
+        <TouchableOpacity 
+          style={[styles.botaoGigante, {backgroundColor: '#2196F3', borderColor: '#2196F3', borderWidth: 0}]} 
+          onPress={() => { setScanned(false); setEtapaAuth('CAMERA_PAREAMENTO'); }}
+        >
+          <Text style={[styles.btnTextEscuro, {color: '#fff', fontSize: 18}]}>📷 Vincular Estabelecimento</Text>
+          <Text style={{color: '#e0e0e0', fontSize: 13, marginTop: 4}}>Escanear QR Code no Monitor</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // TELA 2: LOGIN DA EQUIPE (Senha)
-  if (etapaAuth === 'SENHA') {
+  // ========================================================
+  // TELA 1.5: CÂMERA DE PAREAMENTO (LENDO QR CODE DO PC)
+  // ========================================================
+  if (etapaAuth === 'CAMERA_PAREAMENTO') {
+    return (
+      <View style={styles.containerCamera}>
+        <CameraView 
+          style={StyleSheet.absoluteFillObject} 
+          facing="back" 
+          onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} 
+          barcodeScannerSettings={{ barcodeTypes: ["qr"] }} 
+        />
+        <View style={styles.overlay}>
+          <Text style={styles.textoScan}>Lendo QR Code do Monitor...</Text>
+          {scanned && (
+            <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#FFD700', marginBottom: 10}]} onPress={() => setScanned(false)}>
+               <Text style={styles.btnTextEscuro}>TOCAR PARA LER NOVAMENTE</Text>
+            </TouchableOpacity>
+          )}
+          <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#F44336'}]} onPress={() => setEtapaAuth('INICIO')}>
+            <Text style={styles.btnText}>VOLTAR</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  // ========================================================
+  // TELA 2: PORTA DE LOGIN UNIFICADA (SENHA OU PIN NA MESMA CAIXA)
+  // ========================================================
+  if (etapaAuth === 'LOGIN_UNIFICADO') {
+    const executarLoginInteligente = () => {
+      const credencial = senhaUsuario.trim();
+      
+      if (!credencial) {
+        Alert.alert("Aviso", "Preencha a senha ou o PIN.");
+        return;
+      }
+
+      // Se for só 4 números, tenta entrar como PIN de funcionário
+      if (credencial.length === 4 && /^\d+$/.test(credencial)) {
+        fazerLoginAPI_PIN(credencial);
+      } else {
+        // Se for senha normal, exige o usuário preenchido
+        if (!loginUsuario.trim()) {
+          Alert.alert("Aviso", "Preencha o usuário.");
+          return;
+        }
+        fazerLoginAPI_Senha(loginUsuario.trim(), credencial);
+      }
+    };
+
     return (
       <View style={styles.containerEscuro}>
-        <Text style={styles.tituloSecundario}>Acesso da Equipe</Text>
-        <TextInput style={styles.inputAuth} placeholder="Login" placeholderTextColor="#777" value={loginUsuario} onChangeText={setLoginUsuario} />
-        <TextInput style={styles.inputAuth} placeholder="Senha" placeholderTextColor="#777" secureTextEntry value={senhaUsuario} onChangeText={setSenhaUsuario} />
+        <Text style={styles.tituloSecundario}>Acesso ao Estoque</Text>
+        <Text style={{color: '#aaa', fontSize: 14, marginBottom: 25, textAlign: 'center', marginHorizontal: 20}}>
+          Digite seu usuário e sua senha de acesso ou seu PIN operacional de 4 números.
+        </Text>
+
+        <TextInput 
+          style={styles.inputAuth} 
+          placeholder="Usuário / Operador" 
+          placeholderTextColor="#777" 
+          value={loginUsuario} 
+          onChangeText={setLoginUsuario} 
+          autoCapitalize="none"
+        />
         
-        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginSenha} disabled={carregando}>
-          {carregando ? (
-            <ActivityIndicator size="small" color="#000" />
-          ) : (
-            <Text style={styles.btnTextEscuro}>ENTRAR</Text>
-          )}
+        <View style={{ width: '90%', flexDirection: 'row', alignItems: 'center', backgroundColor: '#2b2b36', borderRadius: 10, marginBottom: 25, borderWidth: 1, borderColor: '#444' }}>
+          <TextInput 
+            style={{ flex: 1, color: '#fff', fontSize: 18, padding: 15, textAlign: 'center' }} 
+            placeholder="Senha ou PIN" 
+            placeholderTextColor="#777" 
+            secureTextEntry={ocultarSenha} 
+            value={senhaUsuario} 
+            onChangeText={setSenhaUsuario} 
+          />
+          <TouchableOpacity style={{ padding: 15 }} onPress={() => setOcultarSenha(!ocultarSenha)}>
+            <Text style={{ fontSize: 20 }}>{ocultarSenha ? '👁️' : '🔒'}</Text>
+          </TouchableOpacity>
+        </View>
+        
+        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={executarLoginInteligente}>
+          <Text style={styles.btnTextEscuro}>{carregando ? "Conectando..." : "Conectar"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity style={{marginTop: 25}} onPress={() => { 
+            AsyncStorage.removeItem('vegastock_cliente_id'); // <-- DELETA DA MEMÓRIA
+            setEmpresaPareada(false); 
+            setEtapaAuth('INICIO'); 
+          }}>
+          <Text style={{color: '#f44336', fontWeight: 'bold'}}>🔄 Desvincular Empresa</Text>
         </TouchableOpacity>
       </View>
     );
   }
 
-  // TELA 3: LOGIN RÁPIDO (PIN)
-  if (etapaAuth === 'PIN') {
-    return (
-      <View style={styles.containerEscuro}>
-        <Text style={styles.tituloSecundario}>Operador de Turno</Text>
-        <Text style={{color: '#fff', fontSize: 18, marginBottom: 15}}>Digite seu PIN de 4 dígitos</Text>
-        
-        <TextInput style={styles.inputPin} placeholder="****" placeholderTextColor="#777" keyboardType="numeric" secureTextEntry maxLength={4} value={pinDigitado} onChangeText={setPinDigitado} />
-        
-        <TouchableOpacity style={styles.btnConfirmarAuth} onPress={handleLoginPin}  disabled={carregando}>
-          {carregando ? (
-            <ActivityIndicator size="small" color="#000" />
-          ) : ( 
-            <Text style={styles.btnTextEscuro}>ACESSAR</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity style={{marginTop: 30}} onPress={() => setEtapaAuth('INICIO')}>
-          <Text style={{color: '#aaa'}}>Voltar</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  // TELA 4: OPERAÇÃO (Logado)
+  // TELA 3: OPERAÇÃO (Logado)
   if (etapaAuth === 'LOGADO') {
     // Inteligência do Avatar Visual
     const ehLinkWeb = logoRestaurante && logoRestaurante.startsWith('http');
@@ -282,26 +514,55 @@ export default function App() {
     }
 
     if (codigoNovo) {
-      // (Mantido igual: Tela de Batismo)
+      if (cadastrandoNovo) {
+        return (
+          <View style={styles.containerBranco}>
+            <Text style={{fontSize: 28, fontWeight: 'bold', color: '#2196F3', marginBottom: 10}}>Novo Produto</Text>
+            <Text style={{fontSize: 16, marginBottom: 20, textAlign: 'center'}}>Cadastrando código: {codigoNovo}</Text>
+            
+            <TextInput style={[styles.inputAuth, {backgroundColor: '#fff', color: '#000', borderWidth: 2, borderColor: '#ccc'}]} placeholder="Nome (Ex: Cebola Roxa)" placeholderTextColor="#999" value={nomeNovoProd} onChangeText={setNomeNovoProd} />
+            <TextInput style={[styles.inputAuth, {backgroundColor: '#fff', color: '#000', borderWidth: 2, borderColor: '#ccc'}]} placeholder="Unidade (Ex: kg, un, litro)" placeholderTextColor="#999" value={unidadeNovoProd} onChangeText={setUnidadeNovoProd} />
+            
+            <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#4CAF50', width: '90%'}]} onPress={cadastrarProdutoPeloCelular}>
+              <Text style={styles.btnText}>SALVAR E CONTINUAR</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#999', width: '90%', marginTop: 10}]} onPress={() => setCadastrandoNovo(false)}>
+              <Text style={styles.btnText}>VOLTAR</Text>
+            </TouchableOpacity>
+          </View>
+        );
+      }
+
       return (
         <View style={styles.containerBranco}>
-          <Text style={{fontSize: 28, fontWeight: 'bold', color: '#FF9800', marginBottom: 10}}>Código Novo!</Text>
-          <Text style={{fontSize: 18, marginBottom: 20, textAlign: 'center', paddingHorizontal: 20}}>A qual produto o código {codigoNovo} pertence?</Text>
-          <FlatList data={produtosCatalogo} keyExtractor={(item) => item.id.toString()} style={{ width: '90%', marginBottom: 20 }} renderItem={({ item }) => (
-              <TouchableOpacity style={{backgroundColor: '#fff', padding: 18, marginVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#ddd'}} onPress={() => realizarBatismo(item.id)}>
-                <Text style={{fontSize: 18, fontWeight: 'bold', color: '#333'}}>{item.nome}</Text>
+          <Text style={{fontSize: 28, fontWeight: 'bold', color: '#FF9800', marginBottom: 10}}>Código Desconhecido</Text>
+          <Text style={{fontSize: 16, marginBottom: 15, textAlign: 'center', paddingHorizontal: 20}}>O código {codigoNovo} não existe no sistema. O que deseja fazer?</Text>
+          
+          <TouchableOpacity style={[styles.botaoAcao, {backgroundColor: '#2196F3', marginBottom: 15}]} onPress={() => setCadastrandoNovo(true)}>
+            <Text style={styles.btnText}>➕ CADASTRAR NOVO PRODUTO</Text>
+          </TouchableOpacity>
+          
+          <Text style={{fontSize: 14, fontWeight: 'bold', marginVertical: 10, color: '#666'}}>OU VINCULAR A UM EXISTENTE:</Text>
+
+          <FlatList data={produtosCatalogo} keyExtractor={(item) => item.id.toString()} style={{ width: '90%', marginBottom: 10 }} renderItem={({ item }) => (
+              <TouchableOpacity style={{backgroundColor: '#fff', padding: 15, marginVertical: 4, borderRadius: 8, borderWidth: 1, borderColor: '#ddd'}} onPress={() => realizarBatismo(item.id)}>
+                <Text style={{fontSize: 16, fontWeight: 'bold', color: '#333', textAlign: 'center'}}>{item.nome}</Text>
               </TouchableOpacity>
             )} />
           <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#F44336', width: '90%'}]} onPress={() => { setCodigoNovo(null); setScanned(false); }}>
-            <Text style={styles.btnText}>CANCELAR BATISMO</Text>
+            <Text style={styles.btnText}>CANCELAR TUDO</Text>
           </TouchableOpacity>
         </View>
       );
     }
 
     if (modo) {
-      // (Mantido igual: Tela da Câmera)
-      return (
+      // Filtra os produtos do catálogo com base no que for digitado
+      const produtosFiltrados = produtosCatalogo.filter(p =>
+        p.nome.toLowerCase().includes(textoBuscaManual.toLowerCase())
+      );
+
+      return modoCamera ? (
         <View style={styles.containerCamera}>
           <CameraView style={StyleSheet.absoluteFillObject} facing="back" onBarcodeScanned={scanned ? undefined : handleBarCodeScanned} barcodeScannerSettings={{ barcodeTypes: ["ean13", "ean8", "qr", "upc_a"] }} />
           <View style={styles.overlay}>
@@ -311,10 +572,63 @@ export default function App() {
                  <Text style={styles.btnTextEscuro}>TOCAR PARA LER NOVAMENTE</Text>
               </TouchableOpacity>
             )}
+            
+            {/* NOVO BOTÃO DE BUSCA MANUAL */}
+            <TouchableOpacity 
+              style={[styles.btnConfirmarAuth, {backgroundColor: '#2196F3', marginBottom: 10}]} 
+              onPress={async () => {
+                setModoCamera(false);
+                // Já garante que a lista de produtos está baixada pra pesquisa
+                try {
+                  let res = await fetch(`${API_URL}/produtos_mobile/${clienteIdContexto}`);
+                  if (res.ok) setProdutosCatalogo(await res.json());
+                } catch(e) {}
+              }}
+            >
+              <Text style={styles.btnText}>SEM CÓDIGO? DIGITAR MANUALMENTE</Text>
+            </TouchableOpacity>
+
             <TouchableOpacity style={[styles.btnConfirmarAuth, {backgroundColor: '#F44336'}]} onPress={() => setModo(null)}>
               <Text style={styles.btnText}>VOLTAR</Text>
             </TouchableOpacity>
           </View>
+        </View>
+      ) : (
+        <View style={styles.containerEscuro}>
+          <Text style={styles.tituloSecundario}>Busca Manual - {modo}</Text>
+
+          <TextInput
+            style={[styles.inputAuth, { marginTop: 20 }]}
+            placeholder="Digite o nome do produto..."
+            placeholderTextColor="#777"
+            value={textoBuscaManual}
+            onChangeText={setTextoBuscaManual}
+          />
+
+          <FlatList
+            data={produtosFiltrados}
+            keyExtractor={(item) => item.id.toString()}
+            style={{ width: '90%', marginBottom: 20 }}
+            renderItem={({ item }) => (
+              <TouchableOpacity
+                style={{ backgroundColor: '#2b2b36', padding: 15, marginVertical: 5, borderRadius: 8, borderWidth: 1, borderColor: '#444' }}
+                onPress={() => {
+                  setProdutoReconhecido(item);
+                  setTextoBuscaManual('');
+                  setModoCamera(true); // Volta a câmera ao normal para a próxima leitura
+                }}
+              >
+                <Text style={{ fontSize: 18, fontWeight: 'bold', color: '#fff' }}>{item.nome}</Text>
+              </TouchableOpacity>
+            )}
+          />
+
+          <TouchableOpacity
+            style={[styles.btnConfirmarAuth, {backgroundColor: '#444'}]}
+            onPress={() => { setModoCamera(true); setTextoBuscaManual(''); }}
+          >
+            <Text style={styles.btnText}>VOLTAR PARA A CÂMERA</Text>
+          </TouchableOpacity>
         </View>
       );
     }
@@ -348,10 +662,13 @@ export default function App() {
           <Text style={styles.btnText}>⬆️ REGISTRAR SAÍDA</Text>
         </TouchableOpacity>
 
-        <TouchableOpacity style={{marginTop: 50, padding: 15, backgroundColor: '#eee', borderRadius: 8}} onPress={() => {
+        {/* Adicionado largura fixa de 90% idêntica aos outros botões e centralização de texto flexível */}
+        <TouchableOpacity style={{width: '90%', marginTop: 40, padding: 15, backgroundColor: '#eee', borderRadius: 12, alignItems: 'center', justifyContent: 'center'}} onPress={() => {
             setOperadorLogado(''); setEtapaAuth('INICIO'); 
           }}>
-          <Text style={{color: '#f44336', fontWeight: 'bold', fontSize: 16}}>🚪 SAIR DA CONTA</Text>
+          <Text style={{color: '#f44336', fontWeight: 'bold', fontSize: 16, textAlign: 'center'}}>
+            🚪 SAIR DA CONTA
+          </Text>
         </TouchableOpacity>
       </View>
     );

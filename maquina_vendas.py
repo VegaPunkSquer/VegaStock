@@ -8,8 +8,7 @@ from PySide6.QtWidgets import (QApplication, QDialog, QVBoxLayout, QHBoxLayout, 
 from PySide6.QtCore import QTimer, Qt
 from PySide6.QtGui import QIcon
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class MaquinaVendas(QDialog):
     def __init__(self, tela_cadastro_pai=None):
         super().__init__(tela_cadastro_pai)
@@ -17,7 +16,7 @@ class MaquinaVendas(QDialog):
         self.cnpj_limpo_atual = ""
         
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_icone = os.path.join(BASE_DIR, 'logo.ico')
+        caminho_icone = os.path.join(BASE_DIR, "assets", 'logo.ico')
         
         self.setWindowIcon(QIcon(caminho_icone))
         self.setWindowTitle("VegaStock - Comprar Licença")

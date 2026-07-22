@@ -16,7 +16,20 @@ import requests
 import os
 from dotenv import load_dotenv
 
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+import uuid
+
+# Cria o vigia que anota o IP de quem tenta acessar
+limiter = Limiter(key_func=get_remote_address)
+
 app = FastAPI(title="SaaS Restaurante - Estoque API")
+
+# Diz para o FastAPI usar o nosso vigia e como responder quando alguém passar do limite
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Carrega o cofre invisível (.env)
 load_dotenv() 
@@ -42,6 +55,18 @@ def get_db():
     finally:
         db.close()
 
+# --- REGRAS DE SEGURANÇA GLOBAIS (CRACHÁ DE ACESSO) ---
+def get_usuario_logado(usuario_id: int, token_sessao: str, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.token_sessao == token_sessao).first()
+    if not usuario:
+        raise HTTPException(status_code=401, detail="Sessão inválida. Faça login novamente.")
+    return usuario
+
+def verificar_admin(usuario: models.Usuario = Depends(get_usuario_logado)):
+    if usuario.nivel_acesso != "Admin" and getattr(usuario, 'cargo', '') != "Admin":
+        raise HTTPException(status_code=403, detail="Acesso negado. Apenas administradores podem fazer isso.")
+    return usuario
+
 # 1. Endpoint: White-Label (Cor e Logo)
 @app.get("/config/{cliente_id}") # <--- REMOVIDO O 'response_model' QUE CENSURAVA OS DADOS
 def get_config(cliente_id: int, db: Session = Depends(get_db)):
@@ -59,12 +84,17 @@ def get_config(cliente_id: int, db: Session = Depends(get_db)):
         "logo_url": cliente.logo_url
     }
 
-# 2. Endpoint: Listar Estoque do Cliente
+# 2. Endpoint: Listar Estoque (Com Ordem Alfabética e Filtro de Categoria)
 @app.get("/produtos", response_model=List[schemas.ProdutoResponse])
-def listar_produtos(cliente_id: int, db: Session = Depends(get_db)):
-    # A cláusula multitenant em ação: só traz os produtos daquele restaurante
-    produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
-    return produtos
+def listar_produtos(cliente_id: int, categoria_id: int = None, db: Session = Depends(get_db)):
+    query = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id)
+    
+    # Se o frontend enviar uma categoria (ex: mercearia), filtra só ela!
+    if categoria_id:
+        query = query.filter(models.Produto.categoria_id == categoria_id)
+        
+    # .order_by(asc) obriga o banco a devolver SEMPRE em ordem alfabética bonita A->Z!
+    return query.order_by(models.Produto.nome.asc()).all()
 
 # 3. Endpoint Crítico: Dar Baixa / Movimentação
 # ==========================================
@@ -72,6 +102,11 @@ def listar_produtos(cliente_id: int, db: Session = Depends(get_db)):
 # ==========================================
 @app.post("/movimentacao")
 def registrar_movimentacao(mov: schemas.MovimentacaoCreate, db: Session = Depends(get_db)):
+    # A Guilhotina da API: Corta a operação na raiz se o teste venceu, mesmo com app aberto
+    cliente = db.query(models.Cliente).filter(models.Cliente.id == mov.cliente_id).first()
+    if cliente and cliente.status_assinatura and "TESTE" in cliente.status_assinatura.upper() and cliente.validade_pro and cliente.validade_pro < datetime.utcnow():
+        raise HTTPException(status_code=403, detail="O seu período de testes expirou. Sistema bloqueado.")
+
     produto = db.query(models.Produto).filter(models.Produto.id == mov.produto_id, models.Produto.cliente_id == mov.cliente_id).first()
     if not produto:
         raise HTTPException(status_code=404, detail="Produto não encontrado")
@@ -110,7 +145,12 @@ def registrar_movimentacao(mov: schemas.MovimentacaoCreate, db: Session = Depend
 
     db.add(nova_movimentacao)
     db.commit()
-    return {"status": "sucesso", "novo_saldo": produto.quantidade_atual, "novo_custo": produto.custo_medio}
+    
+    # Nova lógica: Verifica se ficou abaixo do mínimo
+    precisa_alerta = produto.quantidade_atual < produto.estoque_minimo
+    
+    
+    return {"status": "sucesso", "novo_saldo": produto.quantidade_atual, "novo_custo": produto.custo_medio, "alerta": precisa_alerta}
 
 @app.get("/movimentacoes/{cliente_id}")
 def listar_movimentacoes(cliente_id: int, dias: int = 30, db: Session = Depends(get_db)):
@@ -264,8 +304,27 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
         raise HTTPException(status_code=400, detail="Licença expirada (prazo de 48h esgotado).")
     
     # 2. Verificar se CNPJ ou Login já existem para evitar duplicidade
-    if db.query(models.Cliente).filter(models.Cliente.cnpj == dados.cnpj).first():
-        raise HTTPException(status_code=400, detail="CNPJ já cadastrado.")
+    cliente_existente = db.query(models.Cliente).filter(models.Cliente.cnpj == dados.cnpj).first()
+    if cliente_existente:
+        # Se for um período de testes que já expirou, permite o "recadastro" para salvar a assinatura definitiva
+        if cliente_existente.status_assinatura == "TESTE" and cliente_existente.validade_pro < datetime.utcnow():
+            cliente_existente.status_assinatura = "Ativo"
+            cliente_existente.plano = "BÁSICO"
+            cliente_existente.limite_contas = 2
+            cliente_existente.validade_pro = None
+            
+            # Atualiza as credenciais do usuário Admin para as novas digitadas na tela
+            usuario_admin = db.query(models.Usuario).filter(models.Usuario.cliente_id == cliente_existente.id, models.Usuario.nivel_acesso == "Admin").first()
+            if usuario_admin:
+                usuario_admin.login = dados.login
+                usuario_admin.senha = gerar_hash(dados.senha)
+                
+            licenca.usada = True
+            licenca.cliente_id = cliente_existente.id
+            db.commit()
+            return {"status": "sucesso", "mensagem": "Sua conta de testes foi convertida em assinatura com sucesso! Todos os dados foram preservados."}
+        else:
+            raise HTTPException(status_code=400, detail="CNPJ já cadastrado.")
     if db.query(models.Usuario).filter(models.Usuario.login == dados.login).first():
         raise HTTPException(status_code=400, detail="Nome de usuário já em uso.")
 
@@ -278,6 +337,14 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
     db.add(novo_cliente)
     db.commit() # Força o banco a gravar fisicamente e gerar o ID real agora
     db.refresh(novo_cliente) # Puxa o ID gerado de volta pro Python
+    
+    # Se o CNPJ constar na Whitelist de testes, aplica as regras de expiração temporária
+    whitelist = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == dados.cnpj).first()
+    if whitelist:
+        novo_cliente.status_assinatura = f"TESTE_{whitelist.plano.upper()}"
+        novo_cliente.plano = whitelist.plano
+        novo_cliente.limite_contas = 6 if whitelist.plano == "PRO" else 2
+        novo_cliente.validade_pro = whitelist.data_fim
 
     # 4. Criar o Usuário Admin trancado dentro do bloco
     novo_usuario = models.Usuario(
@@ -296,7 +363,8 @@ def cadastrar_restaurante(dados: schemas.CadastroRequest, db: Session = Depends(
     return {"status": "sucesso", "mensagem": "Restaurante cadastrado com sucesso!"}
 
 @app.post("/login")
-def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/minute") # A TRAVA DA MAGALU: Bloqueia IPs atacantes!
+def fazer_login(request: Request, dados: schemas.LoginRequest, db: Session = Depends(get_db)):
     # Criptografa a senha digitada e compara com a que está no banco
     senha_hash = gerar_hash(dados.senha)
     usuario = db.query(models.Usuario).filter(
@@ -309,6 +377,15 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
 
     # Puxa os dados do restaurante (bloco) atrelado a este usuário
     cliente = db.query(models.Cliente).filter(models.Cliente.id == usuario.cliente_id).first()
+    
+    # Corta o acesso imediatamente se o período de demonstração gratuita expirou
+    if cliente.status_assinatura and "TESTE" in cliente.status_assinatura.upper() and cliente.validade_pro and cliente.validade_pro < datetime.utcnow():
+        raise HTTPException(status_code=401, detail="O seu período de testes expirou. Faça uma assinatura para liberar os seus dados.")
+
+    # GERA UMA NOVA SESSÃO ÚNICA PARA ESTE TERMINAL E SALVA NO BANCO:
+    novo_token_sessao = uuid.uuid4().hex
+    usuario.token_sessao = novo_token_sessao
+    db.commit()
 
     # Devolve a chave do cofre para o PySide
     return {
@@ -318,6 +395,7 @@ def fazer_login(dados: schemas.LoginRequest, db: Session = Depends(get_db)):
         "cnpj": cliente.cnpj,                  # <--- CNPJ INJETADO AQUI!
         "nome_fantasia": cliente.nome_fantasia,
         "login_usuario": usuario.login,
+        "token_sessao": novo_token_sessao,     # <--- ENVIA O TOKEN PRO CLIENTE GUARDA-LO
         "nivel_acesso": getattr(usuario, 'nivel_acesso', 'normal'), 
         "cargo": getattr(usuario, 'cargo', 'Admin'),                
         "logo_url": cliente.logo_url,          
@@ -551,11 +629,22 @@ def criar_produto(dados: schemas.ProdutoCreate, db: Session = Depends(get_db)):
         nome=dados.nome,
         categoria_id=dados.categoria_id,
         unidade_medida=dados.unidade_medida,
-        estoque_minimo=dados.estoque_minimo
+        estoque_minimo=dados.estoque_minimo,
+        codigo_barras=dados.codigo_barras
     )
     db.add(novo_produto)
     db.commit()
-    return {"mensagem": "Produto criado com sucesso!"}
+    db.refresh(novo_produto) # Puxa o ID gerado pelo banco
+    
+    # Devolve o pacote completo pro celular
+    return {
+        "mensagem": "Produto criado com sucesso!",
+        "produto": {
+            "id": novo_produto.id,
+            "nome": novo_produto.nome,
+            "unidade_medida": novo_produto.unidade_medida
+        }
+    }
 
 @app.delete("/produtos/{produto_id}")
 def deletar_produto(produto_id: int, db: Session = Depends(get_db)):
@@ -712,6 +801,9 @@ def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
     cliente_id = dados.get("cliente_id")
     user_id = dados.get("id")
 
+    if not cliente_id:
+        raise HTTPException(status_code=400, detail="cliente_id é obrigatório.")
+
     # ========================================================
     # A BARREIRA DA NUVEM: Só bloqueia se for cadastro NOVO
     # ========================================================
@@ -723,21 +815,20 @@ def salvar_funcionario(dados: dict, db: Session = Depends(get_db)):
             raise HTTPException(status_code=400, detail=f"Limite de {cliente.limite_contas} contas atingido.")
     # ========================================================
 
-    # Se passou da barreira e tem ID, edita. Se não, cria novo.
     if user_id:
         usuario = db.query(models.Usuario).filter(models.Usuario.id == user_id).first()
+        if not usuario:
+            raise HTTPException(status_code=404, detail="Funcionário não encontrado.")
     else:
         usuario = models.Usuario(cliente_id=cliente_id)
         db.add(usuario)
     
-    usuario.login = dados["login"]
+    usuario.login = dados.get("login")
     if dados.get("senha"): 
         usuario.senha = gerar_hash(dados["senha"]) 
-    usuario.cargo = dados["cargo"]
-    usuario.nivel_acesso = "Equipe" # <--- A BALA DE PRATA: Garante que a API não vai inventar de ser Admin
-    
-    # Transforma a lista do front ['estoque', 'relatorios'] em string "estoque,relatorios"
-    usuario.permissoes = ",".join(dados["permissoes"])
+    usuario.cargo = dados.get("cargo")
+    usuario.nivel_acesso = "Equipe"
+    usuario.permissoes = ",".join(dados.get("permissoes", []))
     
     db.commit()
     return {"status": "sucesso"}
@@ -1029,3 +1120,415 @@ def salvar_operador(dados: dict, db: Session = Depends(get_db)):
         db.add(novo_op)
     db.commit()
     return {"mensagem": "Operador salvo!"}
+
+# ==========================================
+# ROTAS DE ADMINISTRAÇÃO MASTER (VEGA ONLY)
+# ==========================================
+
+# 1. Rota para o seu App Admin inserir um CNPJ na Whitelist de testes
+@app.post("/admin/whitelist")
+def adicionar_cnpj_whitelist(dados: schemas.WhitelistCreate, token_master: str = Header(None), db: Session = Depends(get_db)):
+    # Proteção simples: define uma variável MASTER_TOKEN no painel do Hugging Face Settings
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    # Limpa o CNPJ de qualquer máscara antes de salvar
+    cnpj_limpo = "".join(filter(str.isdigit, dados.cnpj))
+    
+    existe = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == cnpj_limpo).first()
+    if existe:
+        raise HTTPException(status_code=400, detail="Este CNPJ já está liberado para testes.")
+        
+    novo_teste = models.CnpjWhitelist(cnpj=cnpj_limpo, plano=dados.plano, data_fim=datetime.fromisoformat(dados.data_fim))
+    db.add(novo_teste)
+    
+    # ESTRATÉGIA VEGA: Fabrica o Token para o cara usar no Cadastro ou Recuperação agora!
+    caracteres = string.ascii_letters + string.digits
+    token_gratis = ''.join(random.choice(caracteres) for _ in range(12))
+    
+    nova_licenca = models.Licenca(
+        token=token_gratis,
+        usada=False,
+        cnpj_esperado=cnpj_limpo,
+        data_expiracao=datetime.fromisoformat(dados.data_fim)
+    )
+    db.add(nova_licenca)
+    db.commit()
+    
+    return {
+        "status": "sucesso", 
+        "mensagem": f"CNPJ {cnpj_limpo} liberado!\n\nA Licença gerada foi: {token_gratis}\n\nCopie e envie ao cliente, ela será exigida no cadastro."
+    }
+
+# --- NOVA ROTA JÁ DISPONÍVEL NO SEU BACKEND PARA O PAINEL ADMIN ---
+@app.get("/admin/whitelist")
+def listar_whitelist_admin(token_master: str = Header(None), db: Session = Depends(get_db)):
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    # Puxa todas as pré-autorizações direto do banco Neon
+    itens = db.query(models.CnpjWhitelist).order_by(models.CnpjWhitelist.id.desc()).all()
+    
+    lista_retorno = []
+    for item in itens:
+        # Pesca a última licença gerada para esse CNPJ específico
+        licenca = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == item.cnpj).order_by(models.Licenca.id.desc()).first()
+        token_str = licenca.token if licenca else "Sem Token"
+        
+        lista_retorno.append({
+            "cnpj_whitelist": item.cnpj,  
+            "plano": item.plano,
+            "data_fim": item.data_fim.isoformat() if item.data_fim else "",
+            "token": token_str  # <--- ENVIA O TOKEN PRO SEU HUB AQUI
+        })
+    return lista_retorno
+
+# --- NOVA ROTA: EDITAR WHITELIST COM PRINTS DE DEBUG DE ALTO NÍVEL ---
+@app.put("/admin/whitelist/{cnpj}")
+def editar_whitelist_admin(cnpj: str, dados: dict, token_master: str = Header(None), db: Session = Depends(get_db)):
+    print(f"\n[API ADMIN] 🟡 REQUISIÇÃO PUT RECEBIDA - Rota: /admin/whitelist/{cnpj}")
+    print(f"[API ADMIN] 📦 Payload recebido do PySide: {dados}")
+    
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        print("[API ADMIN] 🔴 ERRO: Token Master inválido ou ausente.")
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+    
+    try:
+        # 1. Atualiza na tabela base de Whitelist
+        registro = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == cnpj_limpo).first()
+        if not registro:
+            print(f"[API ADMIN] 🔴 ERRO 404: CNPJ {cnpj_limpo} não encontrado na tabela CnpjWhitelist.")
+            raise HTTPException(status_code=404, detail="CNPJ não encontrado na base de testes.")
+            
+        nova_data_fim = datetime.fromisoformat(dados["data_fim"])
+        registro.plano = dados["plano"]
+        registro.data_fim = nova_data_fim
+        print(f"[API ADMIN] 🟢 CnpjWhitelist atualizado: Plano {registro.plano}, Fim {registro.data_fim}")
+        
+        # 2. Atualiza a Licença vinculada (caso o cliente ainda não tenha concluído o cadastro)
+        licenca = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_limpo, models.Licenca.usada == False).order_by(models.Licenca.id.desc()).first()
+        if licenca:
+            licenca.data_expiracao = nova_data_fim
+            print(f"[API ADMIN] 🟢 Licença vinculada (Token: {licenca.token}) teve validade estendida com sucesso.")
+            
+        # 3. GOLPE FINAL: Atualiza o Cliente (se ele já cadastrou e está usando o app, estende na hora!)
+        cliente = db.query(models.Cliente).filter(models.Cliente.cnpj == cnpj_limpo).first()
+        if cliente and "TESTE" in str(cliente.status_assinatura).upper():
+            cliente.plano = dados["plano"]
+            cliente.status_assinatura = f"TESTE_{dados['plano'].upper()}"
+            cliente.validade_pro = nova_data_fim
+            cliente.limite_contas = 6 if dados["plano"] == "PRO" else 2
+            print(f"[API ADMIN] 🟢 O Cliente ativo (ID: {cliente.id}) teve o prazo de testes estendido em tempo real.")
+
+        db.commit()
+        print(f"[API ADMIN] ✅ SUCESSO: Todas as tabelas do CNPJ {cnpj_limpo} foram atualizadas!")
+        return {"status": "sucesso", "mensagem": "Acesso de teste atualizado com sucesso!"}
+        
+    except Exception as e:
+        db.rollback()
+        print(f"[API ADMIN] 💥 ERRO FATAL: Exceção disparada na linha do PUT: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Erro interno no servidor: {str(e)}")
+
+# 2. Rota que o App do Cliente vai bater para checar se ganha licença grátis
+@app.get("/verificar_whitelist/{cnpj}")
+def verificar_whitelist_cliente(cnpj: str, db: Session = Depends(get_db)):
+    cnpj_limpo = "".join(filter(str.isdigit, cnpj))
+    
+    # Busca se o CNPJ está na lista de autorizados por você
+    autorizado = db.query(models.CnpjWhitelist).filter(models.CnpjWhitelist.cnpj == cnpj_limpo).first()
+    
+    if not autorizado:
+        return {"whitelist": False}
+        
+    # Se está na whitelist, vamos gerar uma Licenca válida no banco automaticamente!
+    # Verifica se já não criamos uma licença idêntica para evitar duplicidade
+    ja_tem_licenca = db.query(models.Licenca).filter(models.Licenca.cnpj_esperado == cnpj_limpo, models.Licenca.usada == False).first()
+    
+    if ja_tem_licenca:
+        return {"whitelist": True, "token_licenca": ja_tem_licenca.token}
+        
+    # Fabrica um token aleatório de 12 dígitos
+    caracteres = string.ascii_letters + string.digits
+    token_gratis = ''.join(random.choice(caracteres) for _ in range(12))
+    
+    # Cria a licença grátis com validade de 48 horas para ele concluir o cadastro
+    nova_licenca = models.Licenca(
+        token=token_gratis,
+        usada=False,
+        cnpj_esperado=cnpj_limpo,
+        data_expiracao=datetime.utcnow() + timedelta(hours=48)
+    )
+    db.add(nova_licenca)
+    db.commit()
+    
+    return {"whitelist": True, "token_licenca": token_gratis}
+
+# ==========================================
+# ROTAS DO SISTEMA DE FEEDBACK & RETENÇÃO
+# ==========================================
+
+# 1. Rota para o App do Cliente enviar a avaliação de 80% do prazo
+@app.post("/feedback")
+def enviar_feedback_cliente(dados: schemas.FeedbackCreate, db: Session = Depends(get_db)):
+    if dados.estrelas < 1 or dados.estrelas > 5:
+        raise HTTPException(status_code=400, detail="A nota deve ser entre 1 e 5 estrelas.")
+        
+    cliente = db.query(models.Cliente).filter(models.Cliente.id == dados.cliente_id).first()
+    if not cliente:
+        raise HTTPException(status_code=404, detail="Cliente não encontrado.")
+        
+    novo_feedback = models.FeedbackCliente(
+        cliente_id=dados.cliente_id,
+        estrelas=dados.estrelas,
+        comentario=dados.comentario
+    )
+    db.add(novo_feedback)
+    db.commit()
+    return {"status": "sucesso", "mensagem": "Obrigado pelo seu feedback!"}
+
+# 2. Rota para o seu App Admin coletar todas as avaliações do mercado
+@app.get("/admin/feedbacks")
+def listar_feedbacks_admin(token_master: str = Header(None), db: Session = Depends(get_db)):
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+        
+    # Faz um JOIN maroto para trazer o feedback junto com o nome fantasia do restaurante
+    resultados = db.query(
+        models.FeedbackCliente.id,
+        models.Cliente.nome_fantasia,
+        models.FeedbackCliente.estrelas,
+        models.FeedbackCliente.comentario,
+        models.FeedbackCliente.data_envio
+    ).join(models.Cliente, models.FeedbackCliente.cliente_id == models.Cliente.id).order_by(desc(models.FeedbackCliente.data_envio)).all()
+    
+    # Formata a resposta para bater certinho com o schema do Pydantic
+    lista_feedbacks = []
+    for res in resultados:
+        lista_feedbacks.append({
+            "id": res.id,
+            "nome_fantasia": res.nome_fantasia,
+            "estrelas": res.estrelas,
+            "comentario": res.comentario,
+            "data_envio": res.data_envio
+        })
+        
+    return lista_feedbacks
+
+# ==========================================
+# ROTAS DO SISTEMA DE CHAT DE SUPORTE INTERNO
+# ==========================================
+
+# 1. Rota para enviar uma nova mensagem (usada tanto pelo Cliente quanto pelo Admin)
+@app.post("/suporte/enviar")
+def enviar_mensagem_suporte(dados: schemas.MensagemSuporteCreate, db: Session = Depends(get_db)):
+    nova_msg = models.MensagemSuporte(
+        cliente_id=dados.cliente_id,
+        remetente=dados.remetente,
+        texto=dados.texto
+    )
+    db.add(nova_msg)
+    db.commit()
+    db.refresh(nova_msg)
+    return {"status": "sucesso", "mensagem": nova_msg}
+
+# 2. Rota para carregar o histórico completo de uma conversa
+@app.get("/suporte/historico/{cliente_id}")
+def obter_historico_suporte(cliente_id: int, db: Session = Depends(get_db)):
+    mensagens = db.query(models.MensagemSuporte)\
+                  .filter(models.MensagemSuporte.cliente_id == cliente_id)\
+                  .order_by(models.MensagemSuporte.data_envio.asc()).all()
+    return mensagens
+
+# 3. Rota Master (Admin) para listar quais empresas estão falando com o suporte
+@app.get("/admin/suporte/conversas_actives")
+def listar_conversas_ativas(token_master: str = Header(None), db: Session = Depends(get_db)):
+    from sqlalchemy import func, desc  # Import local seguro para evitar quebras no topo
+    
+    if token_master != os.getenv("MASTER_TOKEN", "VegaChaveMestre123"):
+        raise HTTPException(status_code=403, detail="Acesso administrativo negado.")
+    
+    # Subquery inteligente para capturar o ID da última mensagem enviada por cada cliente
+    subquery = db.query(
+        models.MensagemSuporte.cliente_id,
+        func.max(models.MensagemSuporte.id).label("max_id")
+    ).group_by(models.MensagemSuporte.cliente_id).subquery()
+
+    # Faz o JOIN com a tabela de Clientes para trazer o Nome Fantasia e o texto final
+    resultados = db.query(
+        models.MensagemSuporte.cliente_id,
+        models.Cliente.nome_fantasia,
+        models.MensagemSuporte.texto,
+        models.MensagemSuporte.data_envio
+    ).join(subquery, models.MensagemSuporte.id == subquery.c.max_id)\
+     .join(models.Cliente, models.MensagemSuporte.cliente_id == models.Cliente.id)\
+     .order_by(desc(models.MensagemSuporte.data_envio)).all()
+
+    lista_conversas = []
+    for r in resultados:
+        lista_conversas.append({
+            "cliente_id": r.cliente_id,
+            "nome_fantasia": r.nome_fantasia,
+            "ultima_mensagem": r.texto,
+            "data_ultima": r.data_envio
+        })
+        
+    return lista_conversas
+
+# ==========================================
+# ROTAS PAGINADAS (Otimização para as Tabelas do PySide)
+# ==========================================
+
+# 1. Catálogo Paginado (Com Ordem Alfabética A->Z e Filtro por Categoria)
+@app.get("/produtos/paginado")
+def listar_produtos_paginado(cliente_id: int, categoria_id: int = None, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    query = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id)
+    
+    if categoria_id:
+        query = query.filter(models.Produto.categoria_id == categoria_id)
+    
+    # Conta o total absoluto para o PySide saber desenhar os botões de página
+    total_itens = query.count()
+    
+    # Puxa a fatia em ordem alfabética A->Z
+    produtos = query.order_by(models.Produto.nome.asc()).offset(offset).limit(limit).all()
+    
+    return {
+        "total": total_itens,
+        "produtos": [
+            {
+                "id": p.id,
+                "nome": p.nome,
+                "categoria_id": p.categoria_id,
+                "unidade_medida": p.unidade_medida,
+                "estoque_minimo": p.estoque_minimo,
+                "quantidade_atual": p.quantidade_atual,
+                "codigo_barras": p.codigo_barras
+            } for p in produtos
+        ]
+    }
+
+# 2. Histórico de Estoque Paginado
+@app.get("/movimentacoes/paginado/{cliente_id}")
+def listar_movimentacoes_paginado(cliente_id: int, dias: int = 0, limit: int = 50, offset: int = 0, db: Session = Depends(get_db)):
+    query = db.query(models.MovimentacaoEstoque).filter(
+        models.MovimentacaoEstoque.cliente_id == cliente_id
+    )
+    
+    # Se dias > 0, aplica filtro de tempo. Se for 0 (Tudo), traz absolutamente todo o histórico!
+    if dias > 0:
+        data_corte = datetime.utcnow() - timedelta(hours=3, days=dias)
+        query = query.filter(models.MovimentacaoEstoque.data_hora >= data_corte)
+    
+    total_itens = query.count()
+    
+    # order_by(desc) para trazer as movimentações mais recentes primeiro, limitando a fatia
+    movimentacoes = query.order_by(desc(models.MovimentacaoEstoque.id)).offset(offset).limit(limit).all()
+
+    resultado = []
+    for m in movimentacoes:
+        produto = db.query(models.Produto).filter(models.Produto.id == m.produto_id).first()
+        nome_produto = produto.nome if produto else "Deletado"
+        unidade = produto.unidade_medida if produto else ""
+
+        nome_motivo = ""
+        if m.motivo_baixa_id and m.tipo_movimento.lower() == "saida":
+            motivo = db.query(models.MotivoBaixa).filter(models.MotivoBaixa.id == m.motivo_baixa_id).first()
+            nome_motivo = motivo.descricao if motivo else ""
+
+        resultado.append({
+            "id": m.id,
+            "data": m.data_hora.strftime("%d/%m/%Y\n%H:%M"),
+            "tipo": m.tipo_movimento.upper(),
+            "produto": nome_produto,
+            "quantidade": m.quantidade,
+            "unidade": unidade,
+            "custo": m.custo_unitario,
+            "responsavel": m.operador_nome if m.operador_nome else "Desconhecido",
+            "motivo": nome_motivo
+        })
+        
+    return {
+        "total": total_itens,
+        "movimentacoes": resultado
+    }
+    
+# ==========================================
+# ROTAS NUCLEARES: RESET COM AUDITORIA (ADMIN ONLY)
+# ==========================================
+
+@app.delete("/estoque/resetar/{cliente_id}")
+def resetar_estoque_geral(cliente_id: int, usuario_id: int, token_sessao: str, usuario: models.Usuario = Depends(verificar_admin), db: Session = Depends(get_db)):
+    """Zera o saldo e apaga todo o histórico de entradas e saídas da empresa."""
+    # Validação cruzada: Impede um admin de apagar a empresa de outro admin
+    if usuario.cliente_id != cliente_id:
+        raise HTTPException(status_code=403, detail="Você não tem permissão para apagar este restaurante.")
+        
+    db.query(models.MovimentacaoEstoque).filter(models.MovimentacaoEstoque.cliente_id == cliente_id).delete()
+    
+    produtos = db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).all()
+    for p in produtos:
+        p.quantidade_atual = 0.0
+        p.custo_medio = 0.0
+        
+    log = models.LogAuditoria(
+        cliente_id=cliente_id,
+        usuario_id=usuario.id,
+        operador_nome=usuario.login,
+        acao="ZEROU TODO O HISTÓRICO E SALDOS DO ESTOQUE"
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"status": "sucesso", "mensagem": f"O estoque foi completamente zerado por {usuario.login}."}
+
+@app.delete("/catalogo/limpar_tudo/{cliente_id}")
+def limpar_catalogo_geral(cliente_id: int, usuario_id: int, token_sessao: str, usuario: models.Usuario = Depends(verificar_admin), db: Session = Depends(get_db)):
+    """Apaga todos os produtos do catálogo da empresa."""
+    if usuario.cliente_id != cliente_id:
+        raise HTTPException(status_code=403, detail="Você não tem permissão para apagar o catálogo deste restaurante.")
+        
+    db.query(models.MovimentacaoEstoque).filter(models.MovimentacaoEstoque.cliente_id == cliente_id).delete()
+    db.query(models.Produto).filter(models.Produto.cliente_id == cliente_id).delete()
+    
+    log = models.LogAuditoria(
+        cliente_id=cliente_id,
+        usuario_id=usuario.id,
+        operador_nome=usuario.login,
+        acao="APAGOU TODO O CATÁLOGO DE PRODUTOS DA EMPRESA"
+    )
+    db.add(log)
+    db.commit()
+    
+    return {"status": "sucesso", "mensagem": f"O catálogo foi completamente limpo por {usuario.login}."}
+
+# ==========================================
+# ROTA: RADAR DE SESSÃO ÚNICA (ANTI-DUPLICIDADE)
+# ==========================================
+@app.get("/verificar_sessao/{usuario_id}/{token_client}")
+def verificar_sessao(usuario_id: int, token_client: str, db: Session = Depends(get_db)):
+    usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id).first()
+    if not usuario or usuario.token_sessao != token_client:
+        # Se o token do banco for diferente do token do PC, alguém logou por cima!
+        return {"valido": False}
+    return {"valido": True}
+
+# ==========================================
+# ROTA: LOGOFF (TRITURADOR DE TOKENS)
+# ==========================================
+@app.post("/logoff")
+def fazer_logoff_api(dados: dict, db: Session = Depends(get_db)):
+    try:
+        usuario_id = dados.get("usuario_id")
+        token_sessao = dados.get("token_sessao")
+        
+        usuario = db.query(models.Usuario).filter(models.Usuario.id == usuario_id, models.Usuario.token_sessao == token_sessao).first()
+        if usuario:
+            usuario.token_sessao = None # O token vira poeira e não serve mais para nada
+            db.commit()
+            
+        return {"mensagem": "Logout seguro efetuado."}
+    except Exception as e:
+        print(f"Erro no logoff: {e}")
+        raise HTTPException(status_code=500, detail="Erro interno no servidor.")

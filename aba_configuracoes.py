@@ -5,8 +5,7 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                                QListWidget, QListWidgetItem, QCheckBox, QInputDialog, QDialog, QRadioButton, QButtonGroup)
 from PySide6.QtCore import Qt, QTimer, QThread, Signal
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerConfiguracoes(QThread):
     resultado = Signal(dict)
     erro = Signal(str)

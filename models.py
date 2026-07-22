@@ -65,6 +65,7 @@ class Usuario(Base):
     data_expiracao = Column(DateTime) # Janela de 48h
     permissoes = Column(String, default="dashboard") # Dashboard é o acesso mínimo
     cargo = Column(String, nullable=True) # Ex: Estoquista, Gerente
+    token_sessao = Column(String, nullable=True) # <--- NOVO: Trava de sessão única por usuário
     
 class Categoria(Base):
     __tablename__ = "categorias"
@@ -96,3 +97,38 @@ class OperadorTurno(Base):
     cliente_id = Column(Integer, ForeignKey("clientes.id")) # De qual restaurante ele é
     nome = Column(String, nullable=False)
     pin = Column(String(4), nullable=False) # A senha de 4 dígitos
+    
+class CnpjWhitelist(Base):
+    __tablename__ = "cnpj_whitelist"
+    id = Column(Integer, primary_key=True, index=True)
+    cnpj = Column(String, unique=True, index=True, nullable=False)
+    plano = Column(String, default="BÁSICO") # BÁSICO ou PRO
+    data_fim = Column(DateTime, nullable=False)
+    
+class FeedbackCliente(Base):
+    __tablename__ = "feedbacks_cliente"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    estrelas = Column(Integer, nullable=False) # Nota de 1 a 5
+    comentario = Column(String, nullable=True)  # Críticas, elogios ou choradeiras
+    data_envio = Column(DateTime, default=datetime.utcnow)
+    
+class MensagemSuporte(Base):
+    __tablename__ = "mensagens_suporte"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    remetente = Column(String, nullable=False)  # 'CLIENTE' ou 'ADMIN'
+    texto = Column(String, nullable=False)
+    data_envio = Column(DateTime, default=datetime.utcnow)
+    
+# ==========================================
+# CAIXA-PRETA: AUDITORIA DE AÇÕES CRÍTICAS
+# ==========================================
+class LogAuditoria(Base):
+    __tablename__ = "logs_auditoria"
+    id = Column(Integer, primary_key=True, index=True)
+    cliente_id = Column(Integer, ForeignKey("clientes.id"), nullable=False)
+    usuario_id = Column(Integer, nullable=True)
+    operador_nome = Column(String, nullable=False) # Ex: "Admin" ou login de quem fez
+    acao = Column(String, nullable=False) # Ex: "ZEROU TODO O ESTOQUE" ou "APAGOU O CATÁLOGO"
+    data_hora = Column(DateTime, default=lambda: datetime.utcnow() - timedelta(hours=3))

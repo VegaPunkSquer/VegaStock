@@ -1,3 +1,5 @@
+import datetime
+
 from pydantic import BaseModel
 from typing import Optional
 
@@ -25,9 +27,10 @@ class ProdutoResponse(BaseModel):
 class ProdutoCreate(BaseModel):
     cliente_id: int
     nome: str
-    categoria_id: int
+    categoria_id: Optional[int] = None
     unidade_medida: str
     estoque_minimo: float
+    codigo_barras: Optional[str] = None
 
 # Schema que o PySide vai ENVIAR para dar a baixa
 class MovimentacaoCreate(BaseModel):
@@ -116,3 +119,43 @@ class UnidadeResponse(BaseModel):
     nome: str
     class Config:
         from_attributes = True
+        
+class WhitelistCreate(BaseModel):
+    cnpj: str
+    plano: str
+    data_fim: str
+    
+class FeedbackCreate(BaseModel):
+    cliente_id: int
+    estrelas: int
+    comentario: Optional[str] = None
+
+class FeedbackResponse(BaseModel):
+    id: int
+    nome_fantasia: str  # Vamos puxar do relacionamento para você saber de quem é
+    estrelas: int
+    comentario: Optional[str]
+    data_envio: datetime.datetime
+    class Config:
+        from_attributes = True
+        
+class MensagemSuporteCreate(BaseModel):
+    cliente_id: int
+    remetente: str  # 'CLIENTE' ou 'ADMIN'
+    texto: str
+
+class MensagemSuporteResponse(BaseModel):
+    id: int
+    cliente_id: int
+    remetente: str
+    texto: str
+    data_envio: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+class ConversaAtivaResponse(BaseModel):
+    cliente_id: int
+    nome_fantasia: str
+    ultima_mensagem: str
+    data_ultima: datetime.datetime

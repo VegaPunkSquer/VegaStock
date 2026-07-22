@@ -4,34 +4,72 @@ from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QCombo
                                QMessageBox, QGroupBox, QFormLayout, QRadioButton, 
                                QButtonGroup, QDoubleSpinBox, QAbstractItemView)
 import os
-from PySide6.QtCore import Qt, QThread, Signal, QSize
+from PySide6.QtCore import Qt, QThread, Signal, QSize, QUrl
 from PySide6.QtGui import QMovie
+from PySide6.QtMultimedia import QSoundEffect
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerEstoque(QThread):
     resultado = Signal(dict)
     erro = Signal(str)
+    alerta_ui = Signal(str) # <--- SINAL DE COMUNICAÇÃO DE RETRY
 
-    def __init__(self, cliente_id, dias):
+    def __init__(self, cliente_id, dias, limit, offset, atualizar_combos=True):
         super().__init__()
         self.cliente_id = cliente_id
-        self.dias = dias # Recebe os dias do filtro
+        self.dias = dias
+        self.limit = limit
+        self.offset = offset
+        self.atualizar_combos = atualizar_combos
 
     def run(self):
-        try:
-            # Puxa tudo de uma vez
-            r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id})
-            r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}")
-            r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/{self.cliente_id}?dias={self.dias}")
+        import time
+        max_tentativas = 3
+        
+        for tentativa in range(1, max_tentativas + 1):
+            try:
+                dados = {"atualizar_combos": self.atualizar_combos}
+                
+                if self.atualizar_combos:
+                    r_prod = requests.get(f"{API_BASE_URL}/produtos", params={"cliente_id": self.cliente_id}, timeout=8)
+                    r_mot = requests.get(f"{API_BASE_URL}/motivos/{self.cliente_id}", timeout=8)
+                    r_cat = requests.get(f"{API_BASE_URL}/categorias/{self.cliente_id}", timeout=8)
+                    
+                    dados["produtos"] = r_prod.json() if r_prod.status_code == 200 else []
+                    dados["motivos"] = r_mot.json() if r_mot.status_code == 200 else []
+                    dados["categorias"] = r_cat.json() if r_cat.status_code == 200 else []
 
-            self.resultado.emit({
-                "produtos": r_prod.json() if r_prod.status_code == 200 else [],
-                "motivos": r_mot.json() if r_mot.status_code == 200 else [],
-                "historico": r_hist.json() if r_hist.status_code == 200 else []
-            })
-        except Exception:
-            self.erro.emit("Falha de conexão.")
+                r_hist = requests.get(f"{API_BASE_URL}/movimentacoes/paginado/{self.cliente_id}", params={"dias": self.dias, "limit": self.limit, "offset": self.offset}, timeout=10)
+
+                # Se for sucesso absoluto, emite e mata o loop
+                if r_hist.status_code == 200:
+                    json_hist = r_hist.json()
+                    dados["historico"] = json_hist.get("movimentacoes", [])
+                    dados["total"] = json_hist.get("total", 0)
+                    self.resultado.emit(dados)
+                    return 
+                    
+                # Se o Hugging Face estiver capengando (HTML gigante, 500, 503)
+                elif r_hist.status_code in [500, 502, 503, 504]:
+                    if tentativa < max_tentativas:
+                        self.alerta_ui.emit(f"Servidor instável. Tentando reconectar ({tentativa}/{max_tentativas})...")
+                        time.sleep(3) # Pausa segura dentro do Porão
+                        continue
+                    else:
+                        self.erro.emit(f"Nuvem inacessível no momento. Tente novamente em instantes.")
+                        return
+                else:
+                    self.erro.emit(f"Erro na API Paginada: {r_hist.status_code}")
+                    return
+
+            except Exception as e:
+                if tentativa < max_tentativas:
+                    self.alerta_ui.emit(f"Falha na rede. Tentando reconectar ({tentativa}/{max_tentativas})...")
+                    time.sleep(3)
+                    continue
+                else:
+                    self.erro.emit(f"Falha de conexão física: {str(e)}")
+                    return
 
 class AbaEstoque(QWidget):
     def __init__(self, cliente_dados):
@@ -93,7 +131,19 @@ class AbaEstoque(QWidget):
 
         # --- Campos do Formulário ---
         self.combo_produto = QComboBox()
-        self.combo_produto.setPlaceholderText("Selecione o Produto...")
+        self.combo_produto.setPlaceholderText("Selecione ou digite para pesquisar...")
+        
+        # MÁGICA DA PESQUISA: Permite digitar, mas bloqueia cadastro de novos itens por aqui
+        self.combo_produto.setEditable(True)
+        self.combo_produto.setInsertPolicy(QComboBox.NoInsert)
+        
+        # Configura o autocompletar para buscar em qualquer parte do texto (MatchContains)
+        from PySide6.QtWidgets import QCompleter  # Importação local segura
+        completer = self.combo_produto.completer()
+        completer.setCompletionMode(QCompleter.PopupCompletion)  # Corrigido para QCompleter!
+        completer.setFilterMode(Qt.MatchContains)
+        completer.setCaseSensitivity(Qt.CaseInsensitive)
+        
         self.combo_produto.currentIndexChanged.connect(self.ajustar_decimais)
 
         # O SpinBox é perfeito: evita que digitem letras e já formata os números
@@ -134,8 +184,13 @@ class AbaEstoque(QWidget):
         lbl_historico.setStyleSheet("font-size: 16px; font-weight: bold;")
         
         self.combo_filtro = QComboBox()
-        self.combo_filtro.addItems(["Hoje", "Últimos 7 Dias", "Últimos 30 Dias"])
+        self.combo_filtro.addItems(["Tudo (Todo o Histórico)", "Hoje", "Últimos 7 Dias", "Últimos 30 Dias"])
         self.combo_filtro.currentIndexChanged.connect(self.carregar_historico)
+        
+        # --- NOVO COMBO DE FILTRO POR CATEGORIA ---
+        self.combo_cat_filtro = QComboBox()
+        self.combo_cat_filtro.addItem("Todas as Categorias", None)
+        self.combo_cat_filtro.currentIndexChanged.connect(self.carregar_historico)
         
         # --- O BOTÃO ENTRA EXATAMENTE AQUI ---
         self.btn_atualizar = QPushButton("Atualizar Tabela")
@@ -145,10 +200,50 @@ class AbaEstoque(QWidget):
         
         layout_filtro.addWidget(lbl_historico)
         layout_filtro.addStretch()
-        layout_filtro.addWidget(QLabel("Filtrar por:"))
+        layout_filtro.addWidget(QLabel("Período:"))
         layout_filtro.addWidget(self.combo_filtro)
+        layout_filtro.addWidget(QLabel("Categoria:"))
+        layout_filtro.addWidget(self.combo_cat_filtro)
         layout_filtro.addWidget(self.btn_atualizar) # O botão é injetado na tela aqui
         layout_principal.addLayout(layout_filtro)
+
+        # ==========================================
+        # PAGINAÇÃO (NO TOPO) E TABELA
+        # ==========================================
+        self.limite_atual = 30
+        self.offset_atual = 0
+        self.total_movs = 0
+        
+        layout_paginacao = QHBoxLayout()
+        layout_paginacao.setContentsMargins(0, 15, 0, 5)
+        
+        layout_paginacao.addWidget(QLabel("Mostrar:"))
+        self.combo_limite = QComboBox()
+        self.combo_limite.addItems(["10", "30", "50", "100"])
+        self.combo_limite.blockSignals(True) 
+        self.combo_limite.setCurrentText("30")
+        self.combo_limite.blockSignals(False)
+        self.combo_limite.currentIndexChanged.connect(self.mudar_limite)
+        layout_paginacao.addWidget(self.combo_limite)
+        
+        layout_paginacao.addStretch()
+        
+        self.btn_anterior = QPushButton("◀ Anterior")
+        self.btn_anterior.setStyleSheet("font-weight: bold; padding: 5px 15px; border-radius: 4px; background-color: #eee;")
+        self.btn_anterior.clicked.connect(lambda: self.mudar_pagina(-1))
+        
+        self.lbl_pagina = QLabel("Página 1")
+        self.lbl_pagina.setStyleSheet("font-weight: bold; color: #555;")
+        
+        self.btn_proxima = QPushButton("Próxima ▶")
+        self.btn_proxima.setStyleSheet("font-weight: bold; padding: 5px 15px; border-radius: 4px; background-color: #eee;")
+        self.btn_proxima.clicked.connect(lambda: self.mudar_pagina(1))
+        
+        layout_paginacao.addWidget(self.btn_anterior)
+        layout_paginacao.addWidget(self.lbl_pagina)
+        layout_paginacao.addWidget(self.btn_proxima)
+        
+        layout_principal.addLayout(layout_paginacao)
 
         # Tabela
         self.tabela = QTableWidget()
@@ -160,6 +255,19 @@ class AbaEstoque(QWidget):
         self.tabela.setColumnHidden(0, True) # Esconde o ID
         
         layout_principal.addWidget(self.tabela)
+        
+        # --- BOTÃO NUCLEAR: ZERAR ESTOQUE E HISTÓRICO (SÓ APARECE PARA O ADMIN) ---
+        self.btn_zerar_estoque = QPushButton("⚠️ Zerar Histórico e Saldo")
+        self.btn_zerar_estoque.setCursor(Qt.PointingHandCursor)
+        self.btn_zerar_estoque.setStyleSheet("background-color: #d32f2f; color: white; font-weight: bold; padding: 8px; border-radius: 5px;")
+        self.btn_zerar_estoque.clicked.connect(self.confirmar_reset_estoque)
+        
+        # Se o usuário logado NÃO FOR ADMIN, o botão nem aparece na tela!
+        if self.cliente_dados.get("nivel_acesso") != "Admin":
+            self.btn_zerar_estoque.hide()
+            
+        # (Adicione self.btn_zerar_estoque ao seu layout, por exemplo junto com o botão self.btn_atualizar)
+        layout_filtro.addWidget(self.btn_zerar_estoque)
 
         # Prepara a tela inicial
         self.alternar_modo()
@@ -192,8 +300,20 @@ class AbaEstoque(QWidget):
         else:
             self.spin_qtd.setDecimals(0)
 
+    def mudar_limite(self):
+        self.limite_atual = int(self.combo_limite.currentText())
+        self.offset_atual = 0 # Volta pra página 1 sempre que o limite muda
+        self.carregar_dados(atualizar_combos=False)
+        
+    def mudar_pagina(self, direcao):
+        novo_offset = self.offset_atual + (direcao * self.limite_atual)
+        if 0 <= novo_offset < self.total_movs:
+            self.offset_atual = novo_offset
+            self.carregar_dados(atualizar_combos=False)
+
     def carregar_historico(self):
-        # Quando o filtro de dias muda, NÃO recarrega os combos pra não apagar o que o usuário já digitou, só atualiza a tabela.
+        # Se mudar o filtro (Hoje, 7 dias, etc), a paginação zera e volta pro começo!
+        self.offset_atual = 0
         self.carregar_dados(atualizar_combos=False)
 
     def carregar_dados(self, atualizar_combos=True):
@@ -208,60 +328,66 @@ class AbaEstoque(QWidget):
             self.combo_motivo.clear()
             self.combo_motivo.addItem("Carregando...")
 
-        # Mágica do GIF na Tabela
-        self.tabela.setRowCount(1)
-        lbl_gif = QLabel()
-        BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
-        
-        self.movie = QMovie(caminho_gif)
-        self.movie.setScaledSize(QSize(20, 20))
-        lbl_gif.setMovie(self.movie)
-        lbl_gif.setAlignment(Qt.AlignCenter)
-        self.movie.start()
-        
-        self.tabela.setCellWidget(0, 1, lbl_gif) # GIF escondido na coluna ID
-        self.tabela.setItem(0, 1, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 2, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 3, QTableWidgetItem("Buscando dados nos EUA..."))
-        self.tabela.setItem(0, 4, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 5, QTableWidgetItem("..."))
-        self.tabela.setItem(0, 6, QTableWidgetItem("..."))
+        self.tabela.setRowCount(0)
+        self.lbl_pagina.setText("Carregando...")
+        self.btn_anterior.setEnabled(False)
+        self.btn_proxima.setEnabled(False)
 
-        # Lê o combobox para saber quantos dias pedir pro trabalhador
         filtro_txt = self.combo_filtro.currentText()
         if filtro_txt == "Hoje": dias = 1
         elif filtro_txt == "Últimos 7 Dias": dias = 7
-        else: dias = 30
+        elif filtro_txt == "Últimos 30 Dias": dias = 30
+        else: dias = 0  # 0 representa "Tudo", sem corte de data
 
-        # Manda o trabalhador pro porão
-        self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias)
+        self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias, getattr(self, 'limite_atual', 30), getattr(self, 'offset_atual', 0), atualizar_combos)
         self.worker.resultado.connect(self.atualizar_tela)
+        self.worker.erro.connect(self.mostrar_erro)
+        # O GANCHO VISUAL: O trabalhador fala e o Label do meio da tela atualiza na hora!
+        self.worker.alerta_ui.connect(lambda msg: self.lbl_pagina.setText(msg))
         self.worker.start()
 
     def atualizar_tela(self, dados):
-        # Preenche os combos SOMENTE se for necessário
-        if self.atualizando_combos:
+        if self.atualizando_combos and "produtos" in dados:
             self.combo_produto.blockSignals(True)
             self.combo_produto.clear()
             for prod in dados["produtos"]:
-                self.combo_produto.addItem(f"{prod['nome']} ({prod['unidade_medida']})", {"id": prod["id"], "unidade": prod["unidade_medida"]})
+                # Mostra o saldo físico na própria caixinha de seleção!
+                qtd_atual = float(prod.get('quantidade_atual', 0.0))
+                self.combo_produto.addItem(
+                    f"{prod['nome']} — [Saldo: {qtd_atual} {prod['unidade_medida']}]", 
+                    {"id": prod["id"], "unidade": prod["unidade_medida"]}
+                )
             self.combo_produto.blockSignals(False)
             self.ajustar_decimais()
 
             self.combo_motivo.clear()
             for mot in dados["motivos"]:
                 self.combo_motivo.addItem(mot["descricao"], mot["id"])
+                
+            # Preenche também o nosso novo filtro de categorias da tabela!
+            self.combo_cat_filtro.blockSignals(True)
+            while self.combo_cat_filtro.count() > 1: self.combo_cat_filtro.removeItem(1)
+            for cat in dados.get("categorias", []):
+                self.combo_cat_filtro.addItem(cat["nome"], cat["id"])
+            self.combo_cat_filtro.blockSignals(False)
 
-        # Preenche a tabela finalizando o GIF
+        # Matemática da Paginação
+        import math
+        self.total_movs = dados.get("total", 0)
+        pagina_atual = (self.offset_atual // self.limite_atual) + 1
+        total_paginas = math.ceil(self.total_movs / self.limite_atual) if self.total_movs > 0 else 1
+        
+        self.lbl_pagina.setText(f"Página {pagina_atual} de {total_paginas} (Total: {self.total_movs})")
+        self.btn_anterior.setEnabled(self.offset_atual > 0)
+        self.btn_proxima.setEnabled((self.offset_atual + self.limite_atual) < self.total_movs)
+
         self.tabela.setRowCount(0)
-        for i, mov in enumerate(dados["historico"]):
+        for i, mov in enumerate(dados.get("historico", [])):
             self.tabela.insertRow(i)
             self.tabela.setItem(i, 0, QTableWidgetItem(str(mov["id"])))
             self.tabela.setItem(i, 1, QTableWidgetItem(mov["data"]))
             
-            tipo_mov = mov.get("tipo", "") # Para evitar erros se vier vazio
-            # Se a API na nuvem devolver "Entrada" (como no seu novo back-end mobile) ou "ENTRADA", ele tratará como minúsculo
+            tipo_mov = mov.get("tipo", "")
             tipo_mov_lower = tipo_mov.lower()
 
             item_tipo = QTableWidgetItem(tipo_mov)
@@ -277,12 +403,14 @@ class AbaEstoque(QWidget):
             custo_str = f"R$ {mov['custo']:.2f}" if mov['custo'] else "-"
             self.tabela.setItem(i, 5, QTableWidgetItem(custo_str))
             
-            # Joga o nome do Operador na nova coluna (6)
             self.tabela.setItem(i, 6, QTableWidgetItem(mov.get("responsavel", "Desconhecido")))
 
-            # Empurra o Motivo para a última coluna (7)
             texto_motivo = mov.get("motivo", "") if tipo_mov_lower == "saida" else ""
             self.tabela.setItem(i, 7, QTableWidgetItem(texto_motivo))
+
+    def mostrar_erro(self, msg):
+        self.lbl_pagina.setText("Erro de Conexão")
+        QMessageBox.critical(self, "Falha na Nuvem", f"Ocorreu um erro ao buscar o histórico:\n\n{msg}")
 
     def registrar_movimentacao(self):
         dados_produto = self.combo_produto.currentData()
@@ -322,15 +450,70 @@ class AbaEstoque(QWidget):
                 return
             payload["motivo_baixa_id"] = motivo_id
 
+        # TRAVA ANTI-DUPLICIDADE: Desativa o botão na hora para impedir clique duplo!
+        self.btn_registrar.setEnabled(False)
+        self.btn_registrar.setText("⏳ Salvando na Nuvem...")
+
         try:
             resp = requests.post(f"{API_BASE_URL}/movimentacao", json=payload)
             if resp.status_code == 200:
+                resultado = resp.json()
                 self.spin_qtd.setValue(0)
                 self.spin_custo.setValue(0)
                 # Dá F5 na tabela e nos combos para garantir dados frescos usando a Thread
                 self.carregar_dados(atualizar_combos=True) 
-                QMessageBox.information(self, "Sucesso", "Movimentação registrada com sucesso!")
+                if resultado.get("alerta"):
+                    self.tocar_alerta_sonoro()
+                    QMessageBox.warning(self, "Atenção!", "Produto atingiu estoque mínimo!")
+                else:
+                    QMessageBox.information(self, "Sucesso", "Movimentação registrada com sucesso!")
             else:
                 QMessageBox.warning(self, "Erro", resp.json().get("detail", "Erro ao registrar."))
         except Exception:
             QMessageBox.critical(self, "Erro", "Falha de conexão com o servidor.")
+        finally:
+            # Garante que o botão sempre volte ao normal no final, mesmo se der erro ou alerta
+            self.btn_registrar.setEnabled(True)
+            self.btn_registrar.setText("REGISTRAR MOVIMENTAÇÃO")
+            
+    def tocar_alerta_sonoro(self):
+        if not hasattr(self, 'player'):
+            self.player = QSoundEffect()
+        
+        # Constrói o caminho absoluto para a pasta assets
+        base_dir = os.path.dirname(os.path.abspath(__file__))
+        caminho_som = os.path.join(base_dir, "assets", "alerta.wav")
+        
+        if os.path.exists(caminho_som):
+            self.player.setSource(QUrl.fromLocalFile(caminho_som))
+            self.player.setVolume(1.0)
+            self.player.play()
+            
+    def confirmar_reset_estoque(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("⚠️ ALERTA DE RISCO CRÍTICO")
+        msg.setText("<b>Você está prestes a ZERAR TODO O ESTOQUE e o HISTÓRICO da empresa!</b>")
+        msg.setInformativeText("Essa ação é irreversível. Todas as entradas e saídas serão apagadas e os produtos voltarão a ter saldo 0.0.\n\nDeseja realmente continuar?")
+        msg.setIcon(QMessageBox.Warning)
+        
+        btn_sim = msg.addButton("Sim, Zerar Tudo", QMessageBox.ActionRole)
+        btn_sim.setStyleSheet("background-color: #d32f2f; color: white; font-weight: bold; padding: 6px 15px;")
+        
+        btn_nao = msg.addButton("Cancelar", QMessageBox.RejectRole)
+        btn_nao.setStyleSheet("background-color: #555; color: white; font-weight: bold; padding: 6px 15px;")
+        msg.setDefaultButton(btn_nao)
+        
+        msg.exec()
+        
+        if msg.clickedButton() == btn_sim:
+            try:
+                # O token_sessao agora viaja junto na URL para o FastAPI verificar a identidade do Admin
+                url = f"{API_BASE_URL}/estoque/resetar/{self.cliente_dados['cliente_id']}?usuario_id={self.cliente_dados['usuario_id']}&token_sessao={self.cliente_dados.get('token_sessao', '')}"
+                resp = requests.delete(url)
+                if resp.status_code == 200:
+                    QMessageBox.information(self, "Sucesso", resp.json().get("mensagem", "Estoque zerado com sucesso!"))
+                    self.carregar_dados(atualizar_combos=True) # Atualiza a tabela na hora
+                else:
+                    QMessageBox.critical(self, "Acesso Negado", resp.json().get("detail", "Erro ao executar ação."))
+            except Exception as e:
+                QMessageBox.critical(self, "Erro", f"Falha na comunicação com o servidor: {e}")

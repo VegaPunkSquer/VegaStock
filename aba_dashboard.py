@@ -1,13 +1,13 @@
 import requests
 import os
-from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+from PySide6.QtWidgets import (QPushButton, QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QTableWidget, QTableWidgetItem, QHeaderView, 
                                QFrame, QAbstractItemView)
 from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtGui import QPixmap, QIcon, QMovie
+from dialog_relatorios import DialogGeradorRelatorio
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class WorkerDashboard(QThread):
     resultado = Signal(dict)
     erro = Signal(str)
@@ -102,6 +102,22 @@ class AbaDashboard(QWidget):
         self.lbl_mov = QLabel("Movimentação de Hoje: 0 Entradas | 0 Saídas")
         self.lbl_mov.setStyleSheet("font-size: 13px; color: #555; font-style: italic; margin-top: 10px;")
         layout_principal.addWidget(self.lbl_mov)
+        
+        # --- NOVO BOTÃO CENTRAL DE RELATÓRIOS ---
+        self.btn_abrir_relatorios = QPushButton("📑 Gerar Relatório Executivo (PDF)")
+        self.btn_abrir_relatorios.setMinimumHeight(38)
+        self.btn_abrir_relatorios.setStyleSheet("""
+            QPushButton {
+                background-color: #2563EB; color: white; font-weight: bold; font-size: 13px; 
+                border-radius: 6px; padding: 0px 15px; border: none;
+            }
+            QPushButton:hover { background-color: #1D4ED8; }
+        """)
+        self.btn_abrir_relatorios.setCursor(Qt.PointingHandCursor)
+        self.btn_abrir_relatorios.clicked.connect(self.abrir_central_relatorios)
+        
+        # Adicione o botão ao layout do topo da sua tela (ajuste 'layout_topo' ou 'layout_principal' para o nome da sua variável)
+        self.layout().addWidget(self.btn_abrir_relatorios)
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -111,7 +127,7 @@ class AbaDashboard(QWidget):
         # 1. Coloca a tela em estado de carregamento IMEDIATO
         # Configura o GIF usando caminho absoluto
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        caminho_gif = os.path.join(BASE_DIR, "assets", 'hourglass.gif')
         
         self.movie = QMovie(caminho_gif)
         self.movie.setScaledSize(QSize(30, 30)) # Redimensiona para não quebrar seu layout
@@ -171,3 +187,7 @@ class AbaDashboard(QWidget):
         self.val_itens.setText("-")
         self.val_alerta.setText("-")
         self.lbl_mov.setText(f"Falha ao carregar: {msg}")
+        
+    def abrir_central_relatorios(self):
+        modal = DialogGeradorRelatorio(self.cliente_dados, self)
+        modal.exec()

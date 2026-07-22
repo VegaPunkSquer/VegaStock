@@ -3,9 +3,9 @@ import requests
 from PySide6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
                                QLineEdit, QPushButton, QMessageBox, QFileDialog, QFrame)
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QPixmap  # <--- Injetado aqui para o QR Code ser desenhado na tela!
 
-API_BASE_URL = "https://vegastock.onrender.com"
-
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 class AbaConta(QWidget):
     def __init__(self, cliente_dados, main_window):
         super().__init__()
@@ -66,7 +66,42 @@ class AbaConta(QWidget):
         
         layout_principal.addWidget(frame_info)
 
-        # --- BLOCO 2: ALTERAÇÃO DE SENHA ---
+        # --- CONTROLE DE ACESSIBILIDADE COM MEMÓRIA SALVA ---
+        from PySide6.QtWidgets import QComboBox
+        from PySide6.QtCore import QSettings
+        
+        frame_acessibilidade = QFrame()
+        frame_acessibilidade.setStyleSheet("background-color: #ffffff; border: 1px solid #ddd; border-radius: 8px; padding: 15px;")
+        layout_acessibilidade = QVBoxLayout(frame_acessibilidade)
+        
+        lbl_titulo_ace = QLabel("👁️ Acessibilidade e Visual")
+        lbl_titulo_ace.setStyleSheet("font-size: 16px; font-weight: bold; color: #333; border: none;")
+        layout_acessibilidade.addWidget(lbl_titulo_ace)
+        
+        layout_combo = QHBoxLayout()
+        lbl_zoom = QLabel("Tamanho do Texto:")
+        lbl_zoom.setStyleSheet("font-size: 13px; color: #555; border: none;")
+        
+        self.combo_zoom = QComboBox()
+        self.combo_zoom.addItems(["Padrão (Pequeno)", "Médio (+25%)", "Grande (+50%)"])
+        self.combo_zoom.setStyleSheet("padding: 5px; min-width: 150px; color: #333;")
+        
+        # Recupera a configuração salva localmente na máquina
+        config = QSettings("VegaStock", "Preferencias")
+        indice_salvo = int(config.value("escala_fonte_index", 0))
+        self.combo_zoom.setCurrentIndex(indice_salvo)
+        
+        self.combo_zoom.currentIndexChanged.connect(self.mudar_escala_aplicativo)
+        
+        layout_combo.addWidget(lbl_zoom)
+        layout_combo.addWidget(self.combo_zoom)
+        layout_combo.addStretch()
+        layout_acessibilidade.addLayout(layout_combo)
+        
+        layout_principal.addWidget(frame_acessibilidade)
+        # ----------------------------------------------------
+
+        # Bloco 2: Alterar Senha
         frame_senha = QFrame()
         frame_senha.setStyleSheet("background-color: #f9f9f9; border: 1px solid #ddd; border-radius: 5px;")
         layout_senha = QVBoxLayout(frame_senha)
@@ -76,27 +111,56 @@ class AbaConta(QWidget):
         lbl_senha_titulo.setStyleSheet("font-weight: bold; font-size: 16px; border: none;")
         layout_senha.addWidget(lbl_senha_titulo)
 
-        # Campos de Senha
+        # Estilo padrão para os botões de olhinho da aba conta
+        estilo_olho = "padding: 7px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px;"
+
+        # 1. Campo Senha Atual com Olhinho
         self.input_senha_atual = QLineEdit()
         self.input_senha_atual.setPlaceholderText("Senha Atual")
         self.input_senha_atual.setEchoMode(QLineEdit.Password)
-        self.input_senha_atual.setFixedWidth(300)
         self.input_senha_atual.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
-        layout_senha.addWidget(self.input_senha_atual)
+        
+        layout_sa = QHBoxLayout()
+        layout_sa.addWidget(self.input_senha_atual)
+        self.btn_olho_sa = QPushButton("👁️")
+        self.btn_olho_sa.setFixedWidth(35)
+        self.btn_olho_sa.setStyleSheet(estilo_olho)
+        self.btn_olho_sa.clicked.connect(lambda: self.toggle_campo_senha(self.input_senha_atual, self.btn_olho_sa))
+        layout_sa.addWidget(self.btn_olho_sa)
+        layout_sa.addStretch()
+        layout_senha.addLayout(layout_sa)
 
+        # 2. Campo Nova Senha com Olhinho
         self.input_nova_senha = QLineEdit()
         self.input_nova_senha.setPlaceholderText("Nova Senha")
         self.input_nova_senha.setEchoMode(QLineEdit.Password)
-        self.input_nova_senha.setFixedWidth(300)
         self.input_nova_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
-        layout_senha.addWidget(self.input_nova_senha)
+        
+        layout_ns = QHBoxLayout()
+        layout_ns.addWidget(self.input_nova_senha)
+        self.btn_olho_ns = QPushButton("👁️")
+        self.btn_olho_ns.setFixedWidth(35)
+        self.btn_olho_ns.setStyleSheet(estilo_olho)
+        self.btn_olho_ns.clicked.connect(lambda: self.toggle_campo_senha(self.input_nova_senha, self.btn_olho_ns))
+        layout_ns.addWidget(self.btn_olho_ns)
+        layout_ns.addStretch()
+        layout_senha.addLayout(layout_ns)
 
+        # 3. Campo Confirmar Senha com Olhinho
         self.input_confirma_senha = QLineEdit()
         self.input_confirma_senha.setPlaceholderText("Confirmar Nova Senha")
         self.input_confirma_senha.setEchoMode(QLineEdit.Password)
-        self.input_confirma_senha.setFixedWidth(300)
         self.input_confirma_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
-        layout_senha.addWidget(self.input_confirma_senha)
+        
+        layout_cs = QHBoxLayout()
+        layout_cs.addWidget(self.input_confirma_senha)
+        self.btn_olho_cs = QPushButton("👁️")
+        self.btn_olho_cs.setFixedWidth(35)
+        self.btn_olho_cs.setStyleSheet(estilo_olho)
+        self.btn_olho_cs.clicked.connect(lambda: self.toggle_campo_senha(self.input_confirma_senha, self.btn_olho_cs))
+        layout_cs.addWidget(self.btn_olho_cs)
+        layout_cs.addStretch()
+        layout_senha.addLayout(layout_cs)
 
         btn_salvar_senha = QPushButton("Atualizar Senha")
         btn_salvar_senha.setFixedWidth(150)
@@ -133,14 +197,27 @@ class AbaConta(QWidget):
         self.input_pin.setMaxLength(4)
         self.input_pin.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
         
+        # Botão de olhinho para o PIN do mobile
+        self.btn_olho_pin = QPushButton("👁️")
+        self.btn_olho_pin.setFixedWidth(35)
+        self.btn_olho_pin.setStyleSheet("padding: 7px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px;")
+        self.btn_olho_pin.clicked.connect(lambda: self.toggle_campo_senha(self.input_pin, self.btn_olho_pin))
+        
         btn_salvar_pin = QPushButton("Salvar PIN Operacional")
         btn_salvar_pin.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px; border-radius: 3px;")
         btn_salvar_pin.clicked.connect(self.salvar_pin_mobile)
 
         layout_pin.addWidget(self.input_nome_operador)
         layout_pin.addWidget(self.input_pin)
+        layout_pin.addWidget(self.btn_olho_pin) # Injetado entre o PIN e o Salvar
         layout_pin.addWidget(btn_salvar_pin)
         
+        # Injetando o botão mestre de pareamento logo abaixo do bloco de salvar o PIN
+        self.btn_parear_mobile = QPushButton("📱 Parear Dispositivo Mobile")
+        self.btn_parear_mobile.setStyleSheet("padding: 10px; background-color: #2196F3; color: white; font-weight: bold; border-radius: 4px; margin-top: 10px;")
+        self.btn_parear_mobile.clicked.connect(self.abrir_popup_qrcode)
+        layout_pin.addWidget(self.btn_parear_mobile)
+
         layout_mobile.addLayout(layout_pin)
         layout_principal.addWidget(frame_mobile)
 
@@ -152,7 +229,7 @@ class AbaConta(QWidget):
         # ==========================================
         # TRAVA DE HIERARQUIA (O PPOREEEEM GIGANTE)
         # ==========================================
-        if self.cliente_dados.get("nivel_acesso", "Normal") != "Admin":
+        if str(self.cliente_dados.get("nivel_acesso", "Normal")).lower() != "admin":
             frame_info.hide() 
             frame_mobile.hide() # <--- ADICIONE ESTA LINHA PARA ESCONDER O ACESSO MOBILE
             lbl_senha_titulo.setText("Segurança: Alterar Minhas Credenciais")
@@ -213,7 +290,7 @@ class AbaConta(QWidget):
         # ==========================================
         # ROTA 1: SE FOR ADMIN (Mantém a sua lógica intacta)
         # ==========================================
-        if nivel_acesso == "Admin":
+        if str(nivel_acesso).lower() == "admin":
             atual = self.input_senha_atual.text()
             if not all([atual, nova, confirma]):
                 QMessageBox.warning(self, "Aviso", "Preencha todos os campos de senha.")
@@ -288,6 +365,103 @@ class AbaConta(QWidget):
                 QMessageBox.information(self, "Sucesso", "PIN do Mobile configurado com sucesso!")
         except Exception as e:
             QMessageBox.critical(self, "Erro", "Erro ao salvar PIN."),
+            
+    def toggle_campo_senha(self, campo_input, botao_clicado):
+        if campo_input.echoMode() == QLineEdit.Password:
+            campo_input.setEchoMode(QLineEdit.Normal)
+            botao_clicado.setText("🔒")
+        else:
+            campo_input.setEchoMode(QLineEdit.Password)
+            botao_clicado.setText("👁️")
+            
+    def abrir_popup_qrcode(self):
+        # Importações explícitas locais para garantir autonomia total da janela
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QLabel, QPushButton
+        from PySide6.QtCore import Qt
+        from PySide6.QtGui import QPixmap
+        import requests
+        
+        # Cria a janela de Pop-up nativa
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Pareamento do Mobile")
+        dialog.setFixedSize(320, 380)
+        dialog.setStyleSheet("background-color: #ffffff;")
+        
+        layout_popup = QVBoxLayout(dialog)
+        layout_popup.setContentsMargins(20, 20, 20, 20)
+        layout_popup.setSpacing(15)
+        
+        lbl_info = QLabel("Abra o app no celular e escaneie o código abaixo para vincular este estabelecimento:")
+        lbl_info.setWordWrap(True)
+        lbl_info.setStyleSheet("font-size: 13px; color: #333; font-weight: bold;")
+        lbl_info.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        layout_popup.addWidget(lbl_info)
+        
+        # Puxa o ID de forma totalmente segura
+        cliente_id = str(self.cliente_dados.get('cliente_id') or self.cliente_dados.get('id') or '1')
+        
+        # Trocado para o QRServer (Garante entrega imediata e estável sem 404)
+        url_qrcode = f"https://api.qrserver.com/v1/create-qr-code/?size=200x200&data={cliente_id}"
+        
+        lbl_qr = QLabel()
+        lbl_qr.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        lbl_qr.setFixedSize(200, 200)
+        lbl_qr.setStyleSheet("border: 1px dashed #ccc; background-color: #fafafa;")
+        
+        try:
+            # Faz o download da imagem direto para a memória do PySide
+            resposta = requests.get(url_qrcode, timeout=5)
+            if resposta.status_code == 200:
+                pixmap = QPixmap()
+                pixmap.loadFromData(resposta.content)
+                lbl_qr.setPixmap(pixmap)
+                lbl_qr.setStyleSheet("border: none; background-color: transparent;")
+            else:
+                lbl_qr.setText(f"Erro API: {resposta.status_code}")
+        except Exception as e:
+            lbl_qr.setText("Sem conexão com a internet")
+            print(f"Erro ao gerar QR Code: {e}")
+            
+        layout_popup.addWidget(lbl_qr, alignment=Qt.AlignmentFlag.AlignCenter)
+        
+        btn_fechar = QPushButton("Concluído")
+        btn_fechar.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_fechar.setStyleSheet("padding: 10px; background-color: #333; color: white; font-weight: bold; border-radius: 4px;")
+        btn_fechar.clicked.connect(dialog.accept)
+        layout_popup.addWidget(btn_fechar)
+        
+        dialog.exec()
+        
+    def mudar_escala_aplicativo(self, indice):
+        from PySide6.QtWidgets import QApplication
+        from PySide6.QtCore import QSettings
+        
+        app_instance = QApplication.instance()
+        if not app_instance:
+            return
+            
+        # Grava a escolha no registro local para o app lembrar quando reabrir
+        config = QSettings("VegaStock", "Preferencias")
+        config.setValue("escala_fonte_index", indice)
+            
+        fatores = {0: 1.0, 1: 1.25, 2: 1.5}
+        fator = fatores.get(indice, 1.0)
+        
+        # O SEU LOOP VOLTOU: Varre as telas abertas e aplica o zoom na hora!
+        for widget in app_instance.allWidgets():
+            if widget.inherits("QLabel") or widget.inherits("QPushButton") or widget.inherits("QLineEdit") or widget.inherits("QComboBox"):
+                fonte = widget.font()
+                if not hasattr(widget, "_tam_original"):
+                    widget._tam_original = fonte.pointSize() if fonte.pointSize() > 0 else 10
+                
+                fonte.setPointSize(int(widget._tam_original * fator))
+                widget.setFont(fonte)
+                
+                # Redimensiona as caixas fixas para o texto não ficar claustrofóbico
+                if widget.maximumHeight() < 16777215 or widget.minimumHeight() > 0:
+                    if not hasattr(widget, "_alt_original"):
+                        widget._alt_original = widget.height() if widget.height() > 0 else 35
+                    widget.setMinimumHeight(int(widget._alt_original * (1.0 + (fator - 1.0) * 0.6)))
             
     def refresh_ui(self):
         """Atualiza os textos da tela com os novos dados sincronizados."""

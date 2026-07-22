@@ -12,7 +12,7 @@ from PySide6.QtGui import QMovie
 # IMPORTANTE: Importa a janela de vendas lá do seu arquivo de configurações!
 from aba_configuracoes import DialogUpgradePRO 
 
-API_BASE_URL = "https://vegastock.onrender.com"
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 
 class WorkerEquipe(QThread):
     resultado = Signal(list)
@@ -130,7 +130,18 @@ class AbaEquipe(QWidget):
         self.input_cargo.setPlaceholderText("Ex: Estoquista, Gerente")
 
         form_inputs.addRow("Login:", self.input_login)
-        form_inputs.addRow("Senha:", self.input_senha)
+        
+        # Container horizontal para o campo e o botão do olhinho ficarem lado a lado
+        layout_senha_olho = QHBoxLayout()
+        layout_senha_olho.addWidget(self.input_senha)
+        
+        self.btn_olho_equipe = QPushButton("👁️")
+        self.btn_olho_equipe.setFixedWidth(35)
+        self.btn_olho_equipe.setStyleSheet("padding: 5px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px; font-size: 12px;")
+        self.btn_olho_equipe.clicked.connect(self.toggle_senha_equipe)
+        layout_senha_olho.addWidget(self.btn_olho_equipe)
+        
+        form_inputs.addRow("Senha:", layout_senha_olho)
         
         # --- INÍCIO: FEEDBACK VISUAL DA SENHA (NOVO) ---
         self.input_senha.textChanged.connect(self.validar_senha_tempo_real)
@@ -201,8 +212,10 @@ class AbaEquipe(QWidget):
 
     def showEvent(self, event):
         super().showEvent(event)
-        # Trava Mestra de Acesso
-        if self.cliente_dados.get('status_assinatura') == "PRO":
+        # Trava Mestra de Acesso (Agora aceita PRO oficial e TESTE_PRO)
+        status_atual = str(self.cliente_dados.get('status_assinatura', '')).upper()
+        
+        if "PRO" in status_atual:
             self.frame_bloqueado.hide()
             self.frame_livre.show()
             self.carregar_equipe()
@@ -221,7 +234,7 @@ class AbaEquipe(QWidget):
         self.tabela.setRowCount(1)
         lbl_gif = QLabel()
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        caminho_gif = os.path.join(BASE_DIR, "assets", 'hourglass.gif')
         
         self.movie = QMovie(caminho_gif)
         self.movie.setScaledSize(QSize(20, 20))
@@ -476,3 +489,11 @@ class AbaEquipe(QWidget):
                 self.carregar_equipe()
             except: 
                 pass
+            
+    def toggle_senha_equipe(self):
+        if self.input_senha.echoMode() == QLineEdit.Password:
+            self.input_senha.setEchoMode(QLineEdit.Normal)
+            self.btn_olho_equipe.setText("🔒")
+        else:
+            self.input_senha.setEchoMode(QLineEdit.Password)
+            self.btn_olho_equipe.setText("👁️")

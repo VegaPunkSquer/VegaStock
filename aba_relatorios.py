@@ -6,7 +6,7 @@ import os
 from PySide6.QtCore import Qt, QThread, Signal, QSize
 from PySide6.QtGui import QMovie
 
-API_BASE_URL = "https://vegastock.onrender.com"
+API_BASE_URL = "https://vegap-vega-stock.hf.space"
 
 class WorkerRelatorios(QThread):
     resultado = Signal(dict)
@@ -163,7 +163,7 @@ class AbaRelatorios(QWidget):
         self.tabela.setRowCount(1)
         lbl_gif = QLabel()
         BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-        caminho_gif = os.path.join(BASE_DIR, 'hourglass.gif')
+        caminho_gif = os.path.join(BASE_DIR, "assets", 'hourglass.gif')
         
         self.movie = QMovie(caminho_gif)
         self.movie.setScaledSize(QSize(20, 20))
@@ -197,7 +197,13 @@ class AbaRelatorios(QWidget):
             motivo_id = self.combo_motivo.currentData()
             if motivo_id: url += f"&motivo_id={motivo_id}"
 
-        # 4. Envia o trabalhador pro porão
+        # 4. Envia o trabalhador pro porão (Com proteção anti-crash de threads simultâneas!)
+        if not hasattr(self, 'cemiterio_threads'):
+            self.cemiterio_threads = []
+        self.cemiterio_threads = [t for t in self.cemiterio_threads if t.isRunning()]
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.cemiterio_threads.append(self.worker)
+
         self.worker = WorkerRelatorios(self.cliente_dados['cliente_id'], url, atualizar_filtros)
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.start()
