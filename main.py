@@ -1532,3 +1532,11 @@ def fazer_logoff_api(dados: dict, db: Session = Depends(get_db)):
     except Exception as e:
         print(f"Erro no logoff: {e}")
         raise HTTPException(status_code=500, detail="Erro interno no servidor.")
+    
+# ==========================================
+# ROTA: HEALTH CHECK (PARA O UPTIME ROBOT)
+# ==========================================
+@app.get("/ping")
+def health_check():
+    """Endpoint leve apenas para manter o servidor e o robô acordados sem estressar a RAM."""
+    return {"status": "online", "timestamp": datetime.utcnow().isoformat()}
