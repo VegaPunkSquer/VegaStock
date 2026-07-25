@@ -1534,9 +1534,10 @@ def fazer_logoff_api(dados: dict, db: Session = Depends(get_db)):
         raise HTTPException(status_code=500, detail="Erro interno no servidor.")
     
 # ==========================================
-# ROTA: HEALTH CHECK (PARA O UPTIME ROBOT)
+# ROTA: HEALTH CHECK BLINDADO (UPTIME ROBOT)
 # ==========================================
-@app.api_route("/ping", methods=["GET", "HEAD", "POST", "OPTIONS"])
+@app.api_route("/ping", methods=["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"], include_in_schema=False)
+@app.api_route("/ping/", methods=["GET", "HEAD", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"], include_in_schema=False)
 def health_check():
-    """Endpoint universal: aceita GET, HEAD, POST ou OPTIONS de qualquer robô sem dar erro 405."""
+    """Aceita chamadas COM e SEM barra no final, usando qualquer método HTTP existente no universo."""
     return {"status": "online", "timestamp": datetime.utcnow().isoformat()}
