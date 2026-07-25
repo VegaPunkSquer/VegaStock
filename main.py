@@ -1536,7 +1536,7 @@ def fazer_logoff_api(dados: dict, db: Session = Depends(get_db)):
 # ==========================================
 # ROTA: HEALTH CHECK (PARA O UPTIME ROBOT)
 # ==========================================
-@app.get("/ping")
+@app.api_route("/ping", methods=["GET", "HEAD", "POST", "OPTIONS"])
 def health_check():
-    """Endpoint leve apenas para manter o servidor e o robô acordados sem estressar a RAM."""
+    """Endpoint universal: aceita GET, HEAD, POST ou OPTIONS de qualquer robô sem dar erro 405."""
     return {"status": "online", "timestamp": datetime.utcnow().isoformat()}
