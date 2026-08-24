@@ -129,8 +129,12 @@ class AbaRelatorios(QWidget):
         # ==========================================
         self.tabela = QTableWidget()
         self.tabela.setColumnCount(7) # <--- Aumentou pra 7
-        self.tabela.setHorizontalHeaderLabels(["Produto", "Categoria", "Qtd Perdida", "Motivo da Baixa", "Prejuízo (R$)", "Responsável", "Data"]) # <--- Nova coluna
-        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabela.setHorizontalHeaderLabels(["Produto", "Categoria", "Qtd Perdida", "Motivo da Baixa", "Prejuízo (R$)", "Responsável", "Data"])
+        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.tabela.horizontalHeader().setStretchLastSection(True)
+        self.tabela.setWordWrap(True)
+        self.tabela.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tabela.setMinimumHeight(400)
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
         
@@ -138,6 +142,8 @@ class AbaRelatorios(QWidget):
         self.tabela.setStyleSheet("QHeaderView::section { background-color: #f0f0f0; font-weight: bold; }")
 
         layout_principal.addWidget(self.tabela)
+        
+        layout_principal.addStretch()
 
     # --- FUNÇÕES ---
 

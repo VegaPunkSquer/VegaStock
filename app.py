@@ -69,7 +69,7 @@ splash.atualizar(30, "Carregando núcleo de interface gráfica...")
 import re
 from datetime import datetime
 from PySide6.QtWidgets import (QMainWindow, QMessageBox, QWidget, QVBoxLayout, 
-                               QLabel, QHBoxLayout, QStackedWidget, QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout)
+                               QLabel, QHBoxLayout, QStackedWidget, QListWidget, QPushButton, QFrame, QSizePolicy, QGridLayout, QScrollArea)
 from PySide6.QtGui import QPainter, QPainterPath, QColor, QBrush, QIcon
 from PySide6.QtCore import QSize
 splash.atualizar(60, "Conectando módulos e banco de dados...")
@@ -98,21 +98,32 @@ class MainWindow(QMainWindow):
         self.setWindowIcon(QIcon(caminho_icone))
         self.cliente_dados = cliente_dados
         self.setWindowTitle(f"VegaStock - Gerenciamento de Estoque - {self.cliente_dados['nome_fantasia']}")
-        self.resize(900, 600)
+        self.resize(1280, 960) # Largura 1280 pra caber o menu largo e a tabela folgada, altura 960!
+        self.setMinimumSize(400, 400)
         central_widget = QWidget()
         self.setCentralWidget(central_widget)
-        # --- INÍCIO DO LAYOUT GRID DEFINITIVO ---
-        layout_principal = QGridLayout(central_widget)
+        
+        # --- LAYOUT MESTRE: TOPO (Fixo) + CORPO (Dinâmico) ---
+        layout_principal = QVBoxLayout(central_widget)
         layout_principal.setContentsMargins(15, 15, 15, 15)
         layout_principal.setSpacing(15)
 
         # ==========================================
-        # 1. TOPO ESQUERDA: LOGO (Linha 0, Coluna 0)
+        # 1. TOPO: LOGO E NOME (A entidade intocável)
         # ==========================================
+        self.frame_topo = QFrame()
+        self.frame_topo.setFixedHeight(180)
+        self.frame_topo.setStyleSheet("background-color: transparent;")
+        layout_topo = QHBoxLayout(self.frame_topo)
+        layout_topo.setContentsMargins(0, 0, 0, 0)
+        layout_topo.setSpacing(15)
+        
+        # LOGO (Largura cravada em 290px, igual ao menu aberto)
         self.frame_logo = QFrame()
-        self.frame_logo.setFixedSize(220, 180) # Trava o tamanho do quadro do logo
-        self.frame_logo.setStyleSheet("border-bottom: 2px solid #ccc; background-color: #f9f9f9;") # Linha separadora embaixo
+        self.frame_logo.setFixedSize(290, 180)
+        self.frame_logo.setStyleSheet("border-bottom: 2px solid #ccc; background-color: #f9f9f9;")
         layout_logo = QVBoxLayout(self.frame_logo)
+        layout_logo.setContentsMargins(0, 0, 0, 0)
         
         self.lbl_logo = QLabel()
         self.lbl_logo.setAlignment(Qt.AlignCenter)
@@ -120,42 +131,58 @@ class MainWindow(QMainWindow):
         self.carregar_logo_redondo(self.cliente_dados.get('logo_url', ''))
         layout_logo.addWidget(self.lbl_logo)
         
-        layout_principal.addWidget(self.frame_logo, 0, 0)
-
-        # ==========================================
-        # 2. TOPO DIREITA: NOME (Linha 0, Coluna 1)
-        # ==========================================
+        # NOME (Ocupa o resto da largura superior)
         self.frame_nome = QFrame()
-        self.frame_nome.setFixedHeight(180) # Mesma altura exata do logo
-        self.frame_nome.setStyleSheet("background-color: transparent; border-bottom: 2px solid #ccc;") # Linha separadora embaixo
+        self.frame_nome.setFixedHeight(180)
+        self.frame_nome.setStyleSheet("background-color: transparent; border-bottom: 2px solid #ccc;")
         layout_nome = QVBoxLayout(self.frame_nome)
         layout_nome.setContentsMargins(0, 0, 0, 0)
         
         nome_fantasia = self.cliente_dados.get('nome_fantasia', 'RESTAURANTE')
         self.lbl_nome = QLabel(nome_fantasia.upper())
-        self.lbl_nome.setAlignment(Qt.AlignCenter) # Centralizado X e Y
-        self.lbl_nome.setStyleSheet("font-size: 48px; font-weight: bold; color: #333; border: none;") # Fonte maior
+        self.lbl_nome.setAlignment(Qt.AlignCenter)
+        self.lbl_nome.setStyleSheet("font-size: 48px; font-weight: bold; color: #333; border: none;")
         layout_nome.addWidget(self.lbl_nome)
         
-        layout_principal.addWidget(self.frame_nome, 0, 1)
+        layout_topo.addWidget(self.frame_logo)
+        layout_topo.addWidget(self.frame_nome)
+        layout_principal.addWidget(self.frame_topo)
 
         # ==========================================
-        # 3. BAIXO ESQUERDA: MENU (Linha 1, Coluna 0)
+        # 2. CORPO: MENU E CONTEÚDO (Onde o hambúrguer age)
         # ==========================================
+        self.frame_corpo = QFrame()
+        self.layout_corpo = QHBoxLayout(self.frame_corpo)
+        self.layout_corpo.setContentsMargins(0, 0, 0, 0)
+        self.layout_corpo.setSpacing(15)
+        layout_principal.addWidget(self.frame_corpo)
+
         self.frame_menu = QFrame()
-        self.frame_menu.setFixedWidth(220)
+        self.frame_menu.setFixedWidth(290) # Mais largo pra não cortar "Sincronizar Dados"
         self.frame_menu.setStyleSheet("border: none; background-color: transparent;")
         self.layout_abas = QVBoxLayout(self.frame_menu)
-        self.layout_abas.setContentsMargins(0, 10, 0, 0) # Remove margens laterais
-        self.layout_abas.setSpacing(0) # Sem espaço entre os botões para parecerem blocos
+        self.layout_abas.setContentsMargins(0, 5, 0, 0)
+        self.layout_abas.setSpacing(0)
 
-        self.nomes_abas = [
-            "DASHBOARD", "CATÁLOGO DE PRODUTOS", "OPERAÇÃO DE ESTOQUE",
-            "ANÁLISE DE DESPERDÍCIO", "EQUIPE E PERMISSÕES 🔒", "MINHA CONTA", "CONFIGURAÇÕES", "ℹ️ SOBRE"
+        # O BOTÃO HAMBÚRGUER (No topo do Menu Lateral)
+        self.btn_hamburguer = QPushButton("☰")
+        self.btn_hamburguer.setCursor(Qt.PointingHandCursor)
+        self.btn_hamburguer.setStyleSheet("background-color: transparent; font-size: 26px; font-weight: bold; color: #333; border: none; text-align: center; padding-bottom: 10px;")
+        self.btn_hamburguer.clicked.connect(self.toggle_menu)
+        self.layout_abas.addWidget(self.btn_hamburguer)
+
+        self.menu_items = [
+            ("📊", "DASHBOARD"),
+            ("📦", "CATÁLOGO DE PRODUTOS"),
+            ("🔄", "OPERAÇÃO DE ESTOQUE"),
+            ("📉", "ANÁLISE DE DESPERDÍCIO"),
+            ("👥", "EQUIPE E PERMISSÕES 🔒"),
+            ("👤", "MINHA CONTA"),
+            ("⚙️", "CONFIGURAÇÕES"),
+            ("ℹ️", "SOBRE")
         ]
         
-        # DESIGN DO MENU PREMIUM: Sem blocos cinzas, apenas linhas de marcação
-        estilo_btn = """
+        self.estilo_btn = """
             QPushButton {
                 background-color: transparent; 
                 border: none;
@@ -171,60 +198,42 @@ class MainWindow(QMainWindow):
             QPushButton:checked { background-color: #FFFBEB; border-left: 3px solid #FFD700; color: #0F172A; }
         """
         
-        # --- BOTÃO LOGOFF ---
         self.btn_logoff = QPushButton("🚪 TROCAR CONTA")
-        self.btn_logoff.setStyleSheet("""
-            QPushButton {
-                background-color: transparent; color: #f44336; padding: 12px;
-                border: 1px solid #f44336; border-radius: 5px; font-weight: bold; font-size: 14px;
-            }
-            QPushButton:hover { background-color: #f44336; color: white; }
-        """)
+        self.btn_logoff.setStyleSheet("QPushButton { background-color: transparent; color: #f44336; padding: 12px; border: 1px solid #f44336; border-radius: 5px; font-weight: bold; font-size: 14px; text-align: left; margin: 0px 15px; } QPushButton:hover { background-color: #f44336; color: white; }")
         self.btn_logoff.clicked.connect(self.fazer_logoff)
-        
-        # Coloque o botão no layout do seu menu lateral. 
-        # (Se o seu layout lateral se chamar 'layout_menu' ou 'layout_botoes', use o nome dele aqui)
         self.layout_abas.addWidget(self.btn_logoff)
         
-        # --- MAPA DE PERMISSÕES (NOVO) ---
-        # Relaciona o nome do botão com a palavra salva no banco de dados
+        # Mapa de permissões ... (mantenha seu código do mapa aqui)
         mapa_permissoes = {
             "DASHBOARD": "dashboard",
             "CATÁLOGO DE PRODUTOS": "catalogo",
             "OPERAÇÃO DE ESTOQUE": "estoque",
             "ANÁLISE DE DESPERDÍCIO": "relatorios",
-            "EQUIPE E PERMISSÕES 🔒": "admin", # Apenas Admin/Dono
-            "MINHA CONTA": "livre",           # Todos veem
+            "EQUIPE E PERMISSÕES 🔒": "admin",
+            "MINHA CONTA": "livre",
             "CONFIGURAÇÕES": "configuracoes",
             "ℹ️ SOBRE": "livre"
         }
 
-        # Descobre quem é o cara logado
         cargo_usuario = self.cliente_dados.get("cargo", "Admin")
         permissoes_usuario = self.cliente_dados.get("permissoes", [])
 
         self.botoes_abas = []
-        for i, nome in enumerate(self.nomes_abas):
-            btn = QPushButton(nome)
+        for i, (icone, nome) in enumerate(self.menu_items):
+            btn = QPushButton(f"{icone}  {nome}")
             btn.setCheckable(True)
             btn.setAutoExclusive(True)
+            btn.setToolTip(nome)
             btn.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding) 
-            btn.setStyleSheet(estilo_btn)
+            btn.setStyleSheet(self.estilo_btn)
             btn.clicked.connect(lambda _, idx=i: self.mudar_aba(idx))
             
             if "🔒" in nome:
                 status = str(self.cliente_dados.get('status_assinatura', '')).upper()
-                if status == "PRO" or status == "TESTE_PRO":
-                    btn.setText(nome.replace(" 🔒", ""))
+                if status in ["PRO", "TESTE_PRO"]:
+                    btn.setText(f"{icone}  {nome.replace(' 🔒', '')}")
                 else:
-                    estilo_bloqueado = """
-                        QPushButton {
-                            background-color: #fafafa; color: #aaa; border: 1px solid #e0e0e0;
-                            text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; border-radius: 5px;
-                        }
-                        QPushButton:checked { background-color: #e0e0e0; color: #555; border: 1px solid #ccc; }
-                    """
-                    btn.setStyleSheet(estilo_bloqueado)
+                    btn.setStyleSheet("QPushButton { background-color: #fafafa; color: #aaa; border: 1px solid #e0e0e0; text-align: center; padding-left: 15px; font-weight: bold; font-size: 12px; border-radius: 5px; } QPushButton:checked { background-color: #e0e0e0; color: #555; border: 1px solid #ccc; }")
                     btn.setEnabled(False)
                     
             self.layout_abas.addWidget(btn)
@@ -232,21 +241,20 @@ class MainWindow(QMainWindow):
 
         self.botoes_abas[0].setChecked(True)
         
-        # --- BOTÃO DE SINCRONIZAR NO MENU ---
         self.btn_sync = QPushButton(" 🔄 SINCRONIZAR DADOS")
-        self.btn_sync.setStyleSheet("background-color: #2b2b36; color: #FFD700; text-align: center; padding: 15px; border: 1px solid #444; font-weight: bold; border-radius: 5px; margin-top: 20px;")
+        self.btn_sync.setStyleSheet("background-color: #2b2b36; color: #FFD700; text-align: center; padding: 15px; border: 1px solid #444; font-weight: bold; border-radius: 5px; margin-top: 20px; margin-left: 15px; margin-right: 15px;")
         self.btn_sync.clicked.connect(self.sincronizar_dados_nuvem)
-        self.layout_abas.addWidget(self.btn_sync) # <--- AQUI ESTÁ O NOME CERTO!
+        self.layout_abas.addWidget(self.btn_sync)
         
-        layout_principal.addWidget(self.frame_menu, 1, 0)
+        self.layout_corpo.addWidget(self.frame_menu)
 
         # ==========================================
-        # 4. BAIXO DIREITA: CONTEÚDO E RODAPÉ (Linha 1, Coluna 1)
+        # 4. BAIXO DIREITA: CONTEÚDO E RODAPÉ
         # ==========================================
         self.frame_conteudo = QFrame()
         self.frame_conteudo.setStyleSheet("border: none; background-color: #ffffff;")
         layout_dir = QVBoxLayout(self.frame_conteudo)
-        layout_dir.setContentsMargins(20, 20, 0, 0)
+        layout_dir.setContentsMargins(20, 20, 20, 20)
         
         self.area_central = QStackedWidget()
         self.area_central.setStyleSheet("border: none;")
@@ -269,7 +277,24 @@ class MainWindow(QMainWindow):
         self.area_central.addWidget(self.aba_cfg)
         self.area_central.addWidget(self.aba_abt)
         
-        layout_dir.addWidget(self.area_central)
+        # O TRUQUE DO TAMANHO FANTASMA (Início)
+        for i in range(self.area_central.count()):
+            self.area_central.widget(i).setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+        self.area_central.widget(0).setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+
+        # A MATEMÁTICA DA ROLAGEM: 
+        # Ao forçar esse tamanho mínimo, dizemos que 750x550 é o limite aceitável de compressão.
+        # Como abrimos a janela gigante (1280x960), sobra espaço e a rolagem FICA INVISÍVEL.
+        # Se a janela for espremida abaixo de 750x550, aí sim a barra nasce para proteger as abas!
+        self.area_central.setMinimumWidth(750) 
+        
+        scroll_area = QScrollArea()
+        scroll_area.setWidgetResizable(True)
+        scroll_area.setFrameShape(QFrame.NoFrame)
+        scroll_area.setStyleSheet("background-color: transparent;")
+        scroll_area.setWidget(self.area_central)
+        
+        layout_dir.addWidget(scroll_area)
 
         # Rodapé
         layout_rodape = QHBoxLayout()
@@ -280,7 +305,7 @@ class MainWindow(QMainWindow):
         layout_rodape.addWidget(lbl_user)
         layout_dir.addLayout(layout_rodape)
 
-        layout_principal.addWidget(self.frame_conteudo, 1, 1)
+        self.layout_corpo.addWidget(self.frame_conteudo)
         
         # ========================================================
         # O CADEADO DE INICIALIZAÇÃO: 
@@ -442,6 +467,16 @@ class MainWindow(QMainWindow):
                 return
                 
         self.area_central.setCurrentIndex(index)
+            
+        # O TRUQUE DO TAMANHO FANTASMA (Na troca de abas)
+        for i in range(self.area_central.count()):
+            w = self.area_central.widget(i)
+            if i == index:
+                w.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+            else:
+                w.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Ignored)
+            
+            self.area_central.adjustSize()
 
     def carregar_logo_redondo(self, caminho_logo):
         tamanho = 180
@@ -560,8 +595,10 @@ class MainWindow(QMainWindow):
             except:
                 pass 
                 
-            import os, sys
-            os.execl(sys.executable, sys.executable, *sys.argv)
+            import sys, subprocess
+            from PySide6.QtWidgets import QApplication
+            subprocess.Popen([sys.executable] + sys.argv)
+            QApplication.quit()
             
     def atualizar_bloqueios_interface(self):
         # 1. IDENTIFICA SE A CONTA LOGADA É O ADMIN (O DONO DA LICENÇA)
@@ -671,6 +708,50 @@ class MainWindow(QMainWindow):
             x = max(monitor.x(), monitor.x() + (monitor.width() - largura_final) // 2)
             y = max(monitor.y(), monitor.y() + (monitor.height() - altura_final) // 2)
             self.move(x, y)
+            
+    def toggle_menu(self):
+        self.menu_recolhido = not getattr(self, 'menu_recolhido', False)
+        status = str(self.cliente_dados.get('status_assinatura', '')).upper()
+        is_pro = status in ["PRO", "TESTE_PRO"]
+        
+        if self.menu_recolhido:
+            # Encolhe SÓ a barra lateral do Menu para 80px. A Logo fica intocada na largura original!
+            self.frame_menu.setFixedWidth(80)
+            
+            estilo_recolhido = self.estilo_btn.replace("text-align: left;", "text-align: center;").replace("padding: 12px 15px;", "padding: 12px 0px; font-size: 22px;")
+            
+            for i, btn in enumerate(self.botoes_abas):
+                icone = self.menu_items[i][0]
+                nome = self.menu_items[i][1]
+                btn.setText(icone)
+                if "🔒" not in nome or is_pro:
+                    btn.setStyleSheet(estilo_recolhido)
+            
+            # Emojis nos botões do rodapé
+            self.btn_logoff.setText("🚪")
+            self.btn_logoff.setStyleSheet("QPushButton { background-color: transparent; color: #f44336; padding: 12px 0px; border: 1px solid #f44336; border-radius: 5px; font-size: 20px; text-align: center; margin: 0px 10px; } QPushButton:hover { background-color: #f44336; color: white; }")
+            
+            self.btn_sync.setText("🔄")
+            self.btn_sync.setStyleSheet("background-color: #2b2b36; color: #FFD700; padding: 15px 0px; border: 1px solid #444; border-radius: 5px; margin-top: 20px; font-size: 20px; text-align: center; margin-left: 10px; margin-right: 10px;")
+            
+        else:
+            # Expande o menu de volta para 290px
+            self.frame_menu.setFixedWidth(290)
+            
+            for i, btn in enumerate(self.botoes_abas):
+                icone = self.menu_items[i][0]
+                nome = self.menu_items[i][1]
+                if "🔒" in nome and is_pro:
+                    nome = nome.replace(" 🔒", "")
+                btn.setText(f"{icone}  {nome}")
+                if "🔒" not in self.menu_items[i][1] or is_pro:
+                    btn.setStyleSheet(self.estilo_btn)
+
+            self.btn_logoff.setText("🚪 TROCAR CONTA")
+            self.btn_logoff.setStyleSheet("QPushButton { background-color: transparent; color: #f44336; padding: 12px; border: 1px solid #f44336; border-radius: 5px; font-weight: bold; font-size: 14px; text-align: left; margin: 0px 15px; } QPushButton:hover { background-color: #f44336; color: white; }")
+            
+            self.btn_sync.setText(" 🔄 SINCRONIZAR DADOS")
+            self.btn_sync.setStyleSheet("background-color: #2b2b36; color: #FFD700; text-align: center; padding: 15px; border: 1px solid #444; font-weight: bold; border-radius: 5px; margin-top: 20px; margin-left: 15px; margin-right: 15px;")
 
 def iniciar_app():
     app_instancia.setStyleSheet(estilos.ESTILO_GLOBAL)
@@ -686,7 +767,7 @@ def iniciar_app():
 
         if resultado_login == TelaLogin.Accepted:
             janela_principal = MainWindow(tela_login.cliente_dados)
-            janela_principal.showMaximized() # <--- FORÇA ABRIR EM TELA CHEIA PERFEITA
+            janela_principal.show() 
             sys.exit(app_instancia.exec())
         elif tela_login.ir_para_cadastro:
             tela_cadastro = TelaCadastro()

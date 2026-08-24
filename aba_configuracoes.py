@@ -310,6 +310,7 @@ class AbaConfiguracoes(QWidget):
         layout_cat.addLayout(layout_add_cat)
 
         self.lista_categorias = QListWidget()
+        self.lista_categorias.setMinimumHeight(250)
         layout_cat.addWidget(self.lista_categorias)
 
         btn_del_cat = QPushButton("Excluir Categoria Selecionada")
@@ -339,6 +340,7 @@ class AbaConfiguracoes(QWidget):
         layout_perda.addLayout(layout_add_perda)
 
         self.lista_perdas = QListWidget()
+        self.lista_perdas.setMinimumHeight(250)
         layout_perda.addWidget(self.lista_perdas)
 
         btn_del_perda = QPushButton("Excluir Motivo Selecionado")
@@ -369,6 +371,7 @@ class AbaConfiguracoes(QWidget):
         layout_unidade.addLayout(layout_add_unidade)
 
         self.lista_unidades = QListWidget()
+        self.lista_unidades.setMinimumHeight(250)
         self.lista_unidades.itemDoubleClicked.connect(self.editar_unidade)
         layout_unidade.addWidget(self.lista_unidades)
 
@@ -395,6 +398,8 @@ class AbaConfiguracoes(QWidget):
         layout_app_info.addStretch()
         layout_app_info.addWidget(lbl_dev)
         layout_principal.addLayout(layout_app_info)
+        
+        layout_principal.addStretch()
 
     # --- FUNÇÕES DE LÓGICA E CONEXÃO COM A API ---
     

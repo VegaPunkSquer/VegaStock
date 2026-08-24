@@ -39,21 +39,21 @@ class AbaConta(QWidget):
 
         self.input_nome_fantasia = QLineEdit(self.cliente_dados.get('nome_fantasia', ''))
         self.input_nome_fantasia.setPlaceholderText("Nome Fantasia")
-        self.input_nome_fantasia.setFixedWidth(300)
-        self.input_nome_fantasia.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        self.input_nome_fantasia.setMinimumHeight(40) # Modular: define a altura mínima, mas deixa esticar prós lados
+        self.input_nome_fantasia.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 4px;")
         layout_info.addWidget(self.input_nome_fantasia)
 
         layout_botoes_perfil = QHBoxLayout()
         
         btn_alterar_logo = QPushButton("Selecionar Nova Logo")
-        btn_alterar_logo.setFixedWidth(150)
-        btn_alterar_logo.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px; border-radius: 3px;")
+        btn_alterar_logo.setMinimumHeight(40)
+        btn_alterar_logo.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
         btn_alterar_logo.clicked.connect(self.alterar_logo)
         layout_botoes_perfil.addWidget(btn_alterar_logo)
         
         btn_salvar_perfil = QPushButton("Salvar Alterações")
-        btn_salvar_perfil.setFixedWidth(150)
-        btn_salvar_perfil.setStyleSheet("background-color: #FFD700; color: #000; font-weight: bold; padding: 8px; border-radius: 3px;")
+        btn_salvar_perfil.setMinimumHeight(40)
+        btn_salvar_perfil.setStyleSheet("background-color: #FFD700; color: #000; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
         btn_salvar_perfil.clicked.connect(self.salvar_perfil)
         layout_botoes_perfil.addWidget(btn_salvar_perfil)
         
@@ -111,67 +111,63 @@ class AbaConta(QWidget):
         lbl_senha_titulo.setStyleSheet("font-weight: bold; font-size: 16px; border: none;")
         layout_senha.addWidget(lbl_senha_titulo)
 
-        # Estilo padrão para os botões de olhinho da aba conta
-        estilo_olho = "padding: 7px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px;"
+        # Estilo padrão para os botões de olhinho
+        estilo_olho = "padding: 5px; background-color: #eee; border: 1px solid #ccc; border-radius: 4px;"
 
-        # 1. Campo Senha Atual com Olhinho
         self.input_senha_atual = QLineEdit()
+        self.input_senha_atual.setMinimumHeight(40)
         self.input_senha_atual.setPlaceholderText("Senha Atual")
         self.input_senha_atual.setEchoMode(QLineEdit.Password)
-        self.input_senha_atual.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        self.input_senha_atual.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 4px;")
         
         layout_sa = QHBoxLayout()
         layout_sa.addWidget(self.input_senha_atual)
         self.btn_olho_sa = QPushButton("👁️")
-        self.btn_olho_sa.setFixedWidth(35)
+        self.btn_olho_sa.setMinimumSize(40, 40) # Botão quadradinho perfeito blindado
         self.btn_olho_sa.setStyleSheet(estilo_olho)
         self.btn_olho_sa.clicked.connect(lambda: self.toggle_campo_senha(self.input_senha_atual, self.btn_olho_sa))
         layout_sa.addWidget(self.btn_olho_sa)
-        layout_sa.addStretch()
-        layout_senha.addLayout(layout_sa)
+        layout_senha.addLayout(layout_sa) 
 
-        # 2. Campo Nova Senha com Olhinho
         self.input_nova_senha = QLineEdit()
+        self.input_nova_senha.setMinimumHeight(40)
         self.input_nova_senha.setPlaceholderText("Nova Senha")
         self.input_nova_senha.setEchoMode(QLineEdit.Password)
-        self.input_nova_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        self.input_nova_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 4px;")
         
         layout_ns = QHBoxLayout()
         layout_ns.addWidget(self.input_nova_senha)
         self.btn_olho_ns = QPushButton("👁️")
-        self.btn_olho_ns.setFixedWidth(35)
+        self.btn_olho_ns.setMinimumSize(40, 40)
         self.btn_olho_ns.setStyleSheet(estilo_olho)
         self.btn_olho_ns.clicked.connect(lambda: self.toggle_campo_senha(self.input_nova_senha, self.btn_olho_ns))
         layout_ns.addWidget(self.btn_olho_ns)
-        layout_ns.addStretch()
         layout_senha.addLayout(layout_ns)
 
-        # 3. Campo Confirmar Senha com Olhinho
         self.input_confirma_senha = QLineEdit()
+        self.input_confirma_senha.setMinimumHeight(40)
         self.input_confirma_senha.setPlaceholderText("Confirmar Nova Senha")
         self.input_confirma_senha.setEchoMode(QLineEdit.Password)
-        self.input_confirma_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        self.input_confirma_senha.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 4px;")
         
         layout_cs = QHBoxLayout()
         layout_cs.addWidget(self.input_confirma_senha)
         self.btn_olho_cs = QPushButton("👁️")
-        self.btn_olho_cs.setFixedWidth(35)
+        self.btn_olho_cs.setMinimumSize(40, 40)
         self.btn_olho_cs.setStyleSheet(estilo_olho)
         self.btn_olho_cs.clicked.connect(lambda: self.toggle_campo_senha(self.input_confirma_senha, self.btn_olho_cs))
         layout_cs.addWidget(self.btn_olho_cs)
-        layout_cs.addStretch()
         layout_senha.addLayout(layout_cs)
 
-        btn_salvar_senha = QPushButton("Atualizar Senha")
-        btn_salvar_senha.setFixedWidth(150)
-        btn_salvar_senha.setStyleSheet("background-color: #FFD700; color: #000; font-weight: bold; padding: 8px; border-radius: 3px;")
-        # NOVO CAMPO: Login para funcionários
         self.input_novo_login = QLineEdit()
+        self.input_novo_login.setMinimumHeight(40)
         self.input_novo_login.setPlaceholderText("Novo Login (Deixe em branco para manter)")
-        self.input_novo_login.setFixedWidth(300)
-        self.input_novo_login.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
-        layout_senha.insertWidget(1, self.input_novo_login) # Coloca logo abaixo do título
+        self.input_novo_login.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 4px;")
+        layout_senha.insertWidget(1, self.input_novo_login)
 
+        btn_salvar_senha = QPushButton("Atualizar Senha")
+        btn_salvar_senha.setMinimumHeight(40)
+        btn_salvar_senha.setStyleSheet("background-color: #FFD700; color: #000; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
         btn_salvar_senha.clicked.connect(self.alterar_senha)
         layout_senha.addWidget(btn_salvar_senha)
 
@@ -188,37 +184,41 @@ class AbaConta(QWidget):
 
         layout_pin = QHBoxLayout()
         self.input_nome_operador = QLineEdit()
+        self.input_nome_operador.setMinimumHeight(40)
         self.input_nome_operador.setPlaceholderText("Nome do Operador (Ex: João)")
-        self.input_nome_operador.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        self.input_nome_operador.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 4px;")
         
         self.input_pin = QLineEdit()
+        self.input_pin.setMinimumHeight(40)
         self.input_pin.setPlaceholderText("PIN de 4 dígitos (Ex: 1234)")
         self.input_pin.setEchoMode(QLineEdit.Password)
         self.input_pin.setMaxLength(4)
-        self.input_pin.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 3px;")
+        self.input_pin.setStyleSheet("padding: 8px; border: 1px solid #ccc; border-radius: 4px;")
         
-        # Botão de olhinho para o PIN do mobile
         self.btn_olho_pin = QPushButton("👁️")
-        self.btn_olho_pin.setFixedWidth(35)
-        self.btn_olho_pin.setStyleSheet("padding: 7px; background-color: #eee; border: 1px solid #ccc; border-radius: 3px;")
+        self.btn_olho_pin.setMinimumSize(40, 40)
+        self.btn_olho_pin.setStyleSheet("padding: 5px; background-color: #eee; border: 1px solid #ccc; border-radius: 4px;")
         self.btn_olho_pin.clicked.connect(lambda: self.toggle_campo_senha(self.input_pin, self.btn_olho_pin))
         
         btn_salvar_pin = QPushButton("Salvar PIN Operacional")
-        btn_salvar_pin.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px; border-radius: 3px;")
+        btn_salvar_pin.setMinimumHeight(40)
+        btn_salvar_pin.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px 15px; border-radius: 4px;")
         btn_salvar_pin.clicked.connect(self.salvar_pin_mobile)
 
         layout_pin.addWidget(self.input_nome_operador)
         layout_pin.addWidget(self.input_pin)
-        layout_pin.addWidget(self.btn_olho_pin) # Injetado entre o PIN e o Salvar
+        layout_pin.addWidget(self.btn_olho_pin) 
         layout_pin.addWidget(btn_salvar_pin)
         
-        # Injetando o botão mestre de pareamento logo abaixo do bloco de salvar o PIN
-        self.btn_parear_mobile = QPushButton("📱 Parear Dispositivo Mobile")
-        self.btn_parear_mobile.setStyleSheet("padding: 10px; background-color: #2196F3; color: white; font-weight: bold; border-radius: 4px; margin-top: 10px;")
-        self.btn_parear_mobile.clicked.connect(self.abrir_popup_qrcode)
-        layout_pin.addWidget(self.btn_parear_mobile)
-
         layout_mobile.addLayout(layout_pin)
+
+        # O botão de parear agora vai na LINHA DE BAIXO, sozinho, pra ter espaço e esticar limpo!
+        self.btn_parear_mobile = QPushButton("📱 Parear Dispositivo Mobile")
+        self.btn_parear_mobile.setMinimumHeight(40)
+        self.btn_parear_mobile.setStyleSheet("padding: 10px; background-color: #2196F3; color: white; font-weight: bold; border-radius: 4px;")
+        self.btn_parear_mobile.clicked.connect(self.abrir_popup_qrcode)
+        
+        layout_mobile.addWidget(self.btn_parear_mobile)
         layout_principal.addWidget(frame_mobile)
 
         layout_principal.addStretch() # Agora sim empurra tudo pra cima!
@@ -457,11 +457,17 @@ class AbaConta(QWidget):
                 fonte.setPointSize(int(widget._tam_original * fator))
                 widget.setFont(fonte)
                 
-                # Redimensiona as caixas fixas para o texto não ficar claustrofóbico
-                if widget.maximumHeight() < 16777215 or widget.minimumHeight() > 0:
+                if widget.minimumHeight() > 0 or widget.inherits("QLineEdit"):
                     if not hasattr(widget, "_alt_original"):
-                        widget._alt_original = widget.height() if widget.height() > 0 else 35
-                    widget.setMinimumHeight(int(widget._alt_original * (1.0 + (fator - 1.0) * 0.6)))
+                        min_h = widget.minimumHeight()
+                        widget._alt_original = min_h if min_h > 0 else 40
+                    
+                    nova_altura = int(widget._alt_original * fator)
+                    widget.setMinimumHeight(nova_altura)
+                    
+                    # Trava o botão do olhinho para ser sempre um quadrado perfeito
+                    if widget.inherits("QPushButton") and widget.text() in ["👁️", "🔒"]:
+                        widget.setFixedSize(nova_altura, nova_altura)
             
     def refresh_ui(self):
         """Atualiza os textos da tela com os novos dados sincronizados."""

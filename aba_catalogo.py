@@ -79,7 +79,26 @@ class AbaCatalogo(QWidget):
         super().__init__()
         self.cliente_dados = cliente_dados
         self.ultimo_diretorio_csv = os.path.dirname(os.path.abspath(__file__)) # Memória da pasta
+        
         layout_principal = QVBoxLayout(self)
+
+        # ==========================================
+        # ESCUDO CONTRA O TEMA ESCURO DO WINDOWS
+        # ==========================================
+        self.setStyleSheet("""
+            QComboBox { background-color: white; color: black; border: 1px solid #ccc; padding: 4px; }
+            QComboBox QAbstractItemView { background-color: white; color: black; }
+            QInputDialog { background-color: white; }
+            QInputDialog QLabel { color: black; font-weight: bold; }
+            QInputDialog QLineEdit, QInputDialog QSpinBox { background-color: white; color: black; border: 1px solid #ccc; padding: 4px; }
+            QInputDialog QPushButton { background-color: #2196F3; color: white; padding: 5px 15px; font-weight: bold; border-radius: 4px; }
+            QMessageBox { background-color: white; }
+            QMessageBox QLabel { color: black; }
+            QProgressDialog { background-color: white; }
+            QProgressDialog QLabel { color: black; }
+            QDialog { background-color: white; }
+            QDialog QLabel { color: black; }
+        """)
 
         lbl_titulo = QLabel("Catálogo de Produtos")
         lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333; margin-bottom: 10px;")
@@ -103,14 +122,65 @@ class AbaCatalogo(QWidget):
         # Gatilho: Quando ele muda a opção, o PySide roda essa função
         self.combo_unidade.activated.connect(self.verificar_nova_unidade)
 
-        self.spin_alerta = QSpinBox()
-        self.spin_alerta.setRange(0, 9999)
-        self.spin_alerta.setSpecialValueText("Usar Regra Geral")
-        
+        # O CAMPO CUSTOMIZADO BLINDADO (Texto centralizado verticalmente + Botões laterais)
+        self.container_spin = QWidget()
+        self.container_spin.setMinimumHeight(40)
+        self.layout_spin_custom = QHBoxLayout(self.container_spin)
+        self.layout_spin_custom.setContentsMargins(0, 0, 0, 0)
+        self.layout_spin_custom.setSpacing(2)
+
+        self.input_alerta_custom = QLineEdit("Usar Regra Geral")
+        self.input_alerta_custom.setMinimumHeight(40)
+        self.input_alerta_custom.setAlignment(Qt.AlignCenter)
+        self.input_alerta_custom.setCursor(Qt.PointingHandCursor)
+        self.input_alerta_custom.setStyleSheet("""
+            QLineEdit {
+                font-size: 14px;
+                font-weight: bold;
+                color: #333;
+                background-color: #fff;
+                border: 1px solid #ccc;
+                border-top-left-radius: 4px;
+                border-bottom-left-radius: 4px;
+                padding: 0px 10px;
+            }
+        """)
+        self.input_alerta_custom.mousePressEvent = lambda event: self.mudar_valor_alerta_clique()
+
+        btn_menos = QPushButton("▼")
+        btn_menos.setFixedSize(40, 40)
+        btn_menos.setCursor(Qt.PointingHandCursor)
+        btn_menos.setStyleSheet("background-color: #eee; border: 1px solid #ccc; font-size: 14px; font-weight: bold; color: #333;")
+        btn_menos.clicked.connect(lambda: self.ajustar_valor_alerta(-1))
+
+        btn_mais = QPushButton("▲")
+        btn_mais.setFixedSize(40, 40)
+        btn_mais.setCursor(Qt.PointingHandCursor)
+        btn_mais.setStyleSheet("background-color: #eee; border: 1px solid #ccc; border-top-right-radius: 4px; border-bottom-right-radius: 4px; font-size: 14px; font-weight: bold; color: #333;")
+        btn_mais.clicked.connect(lambda: self.ajustar_valor_alerta(1))
+
+        self.layout_spin_custom.addWidget(self.input_alerta_custom)
+        self.layout_spin_custom.addWidget(btn_menos)
+        self.layout_spin_custom.addWidget(btn_mais)
+
         # Trava PRO para o Limite Individual
         if self.cliente_dados.get('status_assinatura') != "PRO":
-            self.spin_alerta.setEnabled(False)
-            self.spin_alerta.setToolTip("Assine o plano PRO para definir alertas individuais.")
+            self.input_alerta_custom.setEnabled(False)
+            btn_menos.setEnabled(False)
+            btn_mais.setEnabled(False)
+            self.container_spin.setToolTip("Assine o plano PRO para definir alertas individuais.")
+            self.input_alerta_custom.setStyleSheet("""
+                QLineEdit {
+                    font-size: 14px;
+                    font-weight: bold;
+                    color: #888;
+                    background-color: #f0f0f0;
+                    border: 1px solid #ccc;
+                    border-top-left-radius: 4px;
+                    border-bottom-left-radius: 4px;
+                    padding: 0px 10px;
+                }
+            """)
 
         self.btn_salvar = QPushButton("Cadastrar Produto")
         self.btn_salvar.setStyleSheet("background-color: #000; color: #fff; font-weight: bold; padding: 8px;")
@@ -119,7 +189,7 @@ class AbaCatalogo(QWidget):
         layout_form.addRow("Nome do Produto:", self.input_nome)
         layout_form.addRow("Categoria:", self.combo_categoria)
         layout_form.addRow("Unidade de Medida:", self.combo_unidade)
-        layout_form.addRow("Avisar estoque baixo em (PRO):", self.spin_alerta)
+        layout_form.addRow("Avisar estoque baixo em (PRO):", self.container_spin)
 
         group_cadastro.setLayout(layout_form)
         layout_principal.addWidget(group_cadastro)
@@ -164,7 +234,16 @@ class AbaCatalogo(QWidget):
         layout_paginacao.addWidget(QLabel("   Filtrar Categoria:"))
         self.combo_filtro_cat = QComboBox()
         self.combo_filtro_cat.addItem("Todas as Categorias", None)
-        self.combo_filtro_cat.currentIndexChanged.connect(self.mudar_categoria_filtro)
+        
+        # O AMORTECEDOR (DEBOUNCE): Impede o app de crashar ao rodar o scroll do mouse rápido!
+        from PySide6.QtCore import QTimer
+        self.timer_filtro = QTimer(self)
+        self.timer_filtro.setSingleShot(True)
+        self.timer_filtro.timeout.connect(self.mudar_categoria_filtro)
+        
+        # Ao invés de conectar direto na busca, conecta no timer!
+        self.combo_filtro_cat.currentIndexChanged.connect(lambda: self.timer_filtro.start(300))
+        
         layout_paginacao.addWidget(self.combo_filtro_cat)
         
         layout_paginacao.addStretch()
@@ -190,7 +269,8 @@ class AbaCatalogo(QWidget):
         self.tabela = QTableWidget()
         self.tabela.setColumnCount(5)
         self.tabela.setHorizontalHeaderLabels(["ID", "Nome", "Categoria", "Unidade", "Alerta Mínimo"])
-        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabela.horizontalHeader().setStretchLastSection(True) # Fim do Crash da ScrollArea!
+        self.tabela.setMinimumHeight(400) # Tabela firme, sem piscar
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectItems)
         self.tabela.setEditTriggers(QAbstractItemView.DoubleClicked)
         self.tabela.setColumnHidden(0, True)
@@ -273,6 +353,8 @@ class AbaCatalogo(QWidget):
         layout_botoes_rodape.addStretch() # Empurra o reset pro canto direito
         layout_botoes_rodape.addWidget(self.btn_resetar)
         layout_principal.addLayout(layout_botoes_rodape)
+        
+        layout_principal.addStretch() # A mola que empurra os formulários pro topo!
 
     # --- FUNÇÕES DE LÓGICA ---
 
@@ -313,7 +395,17 @@ class AbaCatalogo(QWidget):
         cat_id = getattr(self, 'combo_filtro_cat', None)
         cat_val = cat_id.currentData() if cat_id and cat_id.count() > 0 else None
 
-        # Manda pro porão com limite, offset e categoria
+        # O CEMITÉRIO DE THREADS (O verdadeiro Anti-Crash)
+        if not hasattr(self, '_workers_mortos'):
+            self._workers_mortos = []
+            
+        # Limpa da memória os que já terminaram o download e morreram de velhice
+        self._workers_mortos = [w for w in self._workers_mortos if w.isRunning()]
+        
+        if hasattr(self, 'worker') and self.worker.isRunning():
+            self.worker.resultado.disconnect() # Fica cego para o antigo
+            self._workers_mortos.append(self.worker) # Guarda no cemitério em vez de matar à force pra não dar SegFault
+
         self.worker = WorkerCatalogo(self.cliente_dados['cliente_id'], self.limite_atual, self.offset_atual, atualizar_combos, cat_val)
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.start()
@@ -382,12 +474,51 @@ class AbaCatalogo(QWidget):
         delegate = UnidadeDelegate(getattr(self, 'nomes_unidades_cache', []), self.tabela)
         self.tabela.setItemDelegateForColumn(3, delegate)
         self.tabela.blockSignals(False)
+        
+    def obter_valor_alerta_atual(self):
+        txt = self.input_alerta_custom.text().strip()
+        if "Regra" in txt or not txt:
+            return 0
+        try:
+            return int(txt)
+        except:
+            return 0
+
+    def ajustar_valor_alerta(self, delta):
+        if self.cliente_dados.get('status_assinatura') != "PRO":
+            return
+        atual = self.obter_valor_alerta_atual()
+        novo = max(0, atual + delta)
+        if novo == 0:
+            self.input_alerta_custom.setText("Usar Regra Geral")
+        else:
+            self.input_alerta_custom.setText(str(novo))
+
+    def mudar_valor_alerta_clique(self):
+        if self.cliente_dados.get('status_assinatura') != "PRO":
+            return
+            
+        dialog = QInputDialog(self)
+        dialog.setWindowTitle("Valor do Alerta")
+        dialog.setLabelText("Digite o limite de estoque baixo (0 para Usar Regra Geral):")
+        dialog.setIntValue(self.obter_valor_alerta_atual())
+        dialog.setIntRange(0, 9999)
+        
+        # Blinda a janelinha contra o fundo preto
+        dialog.setStyleSheet("QInputDialog { background-color: white; } QLabel { color: black; font-weight: bold; } QSpinBox { background-color: white; color: black; border: 1px solid #ccc; padding: 4px; } QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 6px 15px; border-radius: 4px; }")
+        
+        if dialog.exec() == QInputDialog.Accepted:
+            val = dialog.intValue()
+            if val == 0:
+                self.input_alerta_custom.setText("Usar Regra Geral")
+            else:
+                self.input_alerta_custom.setText(str(val))
 
     def cadastrar_produto(self):
         nome = self.input_nome.text().strip()
         cat_id = self.combo_categoria.currentData()
         unidade = self.combo_unidade.currentText()
-        alerta = float(self.spin_alerta.value())
+        alerta = float(self.obter_valor_alerta_atual())
 
         if unidade == "+ Adicionar Nova..." or not unidade:
             QMessageBox.warning(self, "Aviso", "Selecione uma unidade de medida válida.")
@@ -405,7 +536,7 @@ class AbaCatalogo(QWidget):
             resp = requests.post(f"{API_BASE_URL}/produtos", json=dados)
             if resp.status_code == 200:
                 self.input_nome.clear()
-                self.spin_alerta.setValue(0)
+                self.input_alerta_custom.setText("Usar Regra Geral")
                 self.carregar_dados() # Acorda a Thread pra atualizar a tela
                 QMessageBox.information(self, "Sucesso", "Produto cadastrado!")
         except Exception:
@@ -427,17 +558,27 @@ class AbaCatalogo(QWidget):
         texto_selecionado = self.combo_unidade.itemText(index)
         
         if texto_selecionado == "+ Adicionar Nova...":
-            nova_unidade, ok = QInputDialog.getText(self, "Nova Unidade", "Digite a nova unidade (Ex: Saco, Fardo):")
+            dialog = QInputDialog(self)
+            dialog.setWindowTitle("Nova Unidade")
+            dialog.setLabelText("Digite a nova unidade (Ex: Saco, Fardo):")
+            dialog.setTextValue("")
             
-            if ok and nova_unidade.strip():
-                dados = {"cliente_id": self.cliente_dados['cliente_id'], "nome": nova_unidade.strip()}
-                resp = requests.post(f"{API_BASE_URL}/unidades", json=dados)
-                
-                if resp.status_code == 200:
-                    self.carregar_dados() # Atualiza tudo com a nova unidade
+            # Blinda a janelinha contra o fundo preto
+            dialog.setStyleSheet("QInputDialog { background-color: white; } QLabel { color: black; font-weight: bold; } QLineEdit { background-color: white; color: black; border: 1px solid #ccc; padding: 4px; } QPushButton { background-color: #2196F3; color: white; font-weight: bold; padding: 6px 15px; border-radius: 4px; }")
+            
+            if dialog.exec() == QInputDialog.Accepted:
+                nova_unidade = dialog.textValue().strip()
+                if nova_unidade:
+                    dados = {"cliente_id": self.cliente_dados['cliente_id'], "nome": nova_unidade}
+                    resp = requests.post(f"{API_BASE_URL}/unidades", json=dados)
+                    
+                    if resp.status_code == 200:
+                        self.carregar_dados() # Atualiza tudo com a nova unidade
+                    else:
+                        QMessageBox.warning(self, "Aviso", "Esta unidade já existe!")
+                        self.carregar_dados() 
                 else:
-                    QMessageBox.warning(self, "Aviso", "Esta unidade já existe!")
-                    self.carregar_dados() 
+                    self.carregar_dados()
             else:
                 self.carregar_dados()
                 

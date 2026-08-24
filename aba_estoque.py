@@ -77,6 +77,17 @@ class AbaEstoque(QWidget):
         self.cliente_dados = cliente_dados
         layout_principal = QVBoxLayout(self)
 
+        self.setStyleSheet("""
+            QComboBox { background-color: white; color: black; border: 1px solid #ccc; padding: 4px; }
+            QComboBox QAbstractItemView { background-color: white; color: black; }
+            QInputDialog { background-color: white; }
+            QInputDialog QLabel { color: black; font-weight: bold; }
+            QInputDialog QLineEdit, QInputDialog QSpinBox { background-color: white; color: black; border: 1px solid #ccc; padding: 4px; }
+            QInputDialog QPushButton { background-color: #2196F3; color: white; padding: 5px 15px; font-weight: bold; border-radius: 4px; }
+            QMessageBox { background-color: white; }
+            QMessageBox QLabel { color: black; }
+        """)
+
         lbl_titulo = QLabel("Operação de Estoque")
         lbl_titulo.setStyleSheet("font-size: 24px; font-weight: bold; color: #333; margin-bottom: 10px;")
         layout_principal.addWidget(lbl_titulo, alignment=Qt.AlignCenter)
@@ -85,7 +96,7 @@ class AbaEstoque(QWidget):
         # 1. FORMULÁRIO DE MOVIMENTAÇÃO (O TOPO)
         # ==========================================
         group_mov = QGroupBox("Registrar Nova Movimentação")
-        group_mov.setStyleSheet("QGroupBox { font-weight: bold; padding-top: 25px; margin-top: 15px; } QGroupBox::title { top: -10px; left: 10px; }")
+        group_mov.setStyleSheet("QGroupBox { font-weight: bold; margin-top: 20px; } QGroupBox::title { subcontrol-origin: margin; subcontrol-position: top center; padding: 0 5px; }")
         layout_form = QFormLayout()
 
         # --- Botões de Ação (Entrada / Saída) ---
@@ -249,7 +260,11 @@ class AbaEstoque(QWidget):
         self.tabela = QTableWidget()
         self.tabela.setColumnCount(8)
         self.tabela.setHorizontalHeaderLabels(["ID", "Data/Hora", "Tipo", "Produto", "Qtd", "Custo (R$)", "Responsável", "Motivo"])
-        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.tabela.horizontalHeader().setStretchLastSection(True)
+        self.tabela.setWordWrap(True)
+        self.tabela.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tabela.setMinimumHeight(400)
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tabela.setColumnHidden(0, True) # Esconde o ID
@@ -271,6 +286,8 @@ class AbaEstoque(QWidget):
 
         # Prepara a tela inicial
         self.alternar_modo()
+        
+        layout_principal.addStretch() # A mola salva-vidas
 
     # --- FUNÇÕES DA INTERFACE ---
 
@@ -339,7 +356,13 @@ class AbaEstoque(QWidget):
         elif filtro_txt == "Últimos 30 Dias": dias = 30
         else: dias = 0  # 0 representa "Tudo", sem corte de data
 
+        if not hasattr(self, '_threads_vivas'):
+            self._threads_vivas = []
+        self._threads_vivas = [t for t in self._threads_vivas if t.isRunning()]
+        
         self.worker = WorkerEstoque(self.cliente_dados['cliente_id'], dias, getattr(self, 'limite_atual', 30), getattr(self, 'offset_atual', 0), atualizar_combos)
+        self._threads_vivas.append(self.worker)
+        
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.erro.connect(self.mostrar_erro)
         # O GANCHO VISUAL: O trabalhador fala e o Label do meio da tela atualiza na hora!

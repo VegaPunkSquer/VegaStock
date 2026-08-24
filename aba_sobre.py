@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import QFrame, QWidget, QVBoxLayout, QLabel
 from PySide6.QtCore import Qt
 import requests
-from PySide6.QtWidgets import QListWidget, QListWidgetItem, QLineEdit, QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QWidget
+from PySide6.QtWidgets import QListWidget, QListWidgetItem, QLineEdit, QTextEdit, QPushButton, QHBoxLayout, QVBoxLayout, QLabel, QWidget
 from PySide6.QtCore import QTimer, QThread, Signal
 import os
 from atualizador import VERSAO_LOCAL, API_MASTER_URL, PRODUTO_ID_NO_MASTER
@@ -13,7 +13,6 @@ class AbaSobre(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         layout = QVBoxLayout(self)
-        layout.setAlignment(Qt.AlignTop)
         layout.setContentsMargins(25, 25, 25, 25)
         layout.setSpacing(15)
 
@@ -70,23 +69,15 @@ class AbaSobre(QWidget):
         lbl_contatos.setOpenExternalLinks(True)
         layout.addWidget(lbl_contatos)
 
-        layout.addStretch()
-
-        # Rodapé
-        lbl_rodape = QLabel("© 2026 VegaStock. Todos os direitos reservados.")
-        lbl_rodape.setStyleSheet("color: #888888; font-size: 10px;")
-        layout.addWidget(lbl_rodape, alignment=Qt.AlignHCenter)
-        
         # ========================================================
-        # ESTRUTURA NATIVA DO CHAT DE SUPORTE INTERNO
+        # ESTRUTURA NATIVA DO CHAT DE SUPORTE INTERNO (CORRIGIDA)
         # ========================================================
-        lbl_suporte = QLabel("💬 Central de Suporte Interno - VegaStock")
-        lbl_suporte.setStyleSheet("font-size: 22px; font-weight: bold; color: #2C3E50; margin-top: 15px; margin-bottom: 5px;")
-        layout_principal = self.layout()
-        layout_principal.addWidget(lbl_suporte)
+        lbl_suporte_chat = QLabel("💬 Central de Suporte Interno - VegaStock")
+        lbl_suporte_chat.setStyleSheet("font-size: 22px; font-weight: bold; color: #2C3E50; margin-top: 15px; margin-bottom: 5px;")
+        layout.addWidget(lbl_suporte_chat)
 
-        # Lista nativa com fundo de chat e sem bordas genéricas esticadas
         self.lista_chat = QListWidget()
+        self.lista_chat.setMinimumHeight(450)
         
         # BLINDAGEM DO CHAT: Quebra a regra do menu lateral e zera o padding para o texto não ser esmagado
         self.lista_chat.setStyleSheet("""
@@ -100,43 +91,60 @@ class AbaSobre(QWidget):
             }
         """)
         self.lista_chat.setStyleSheet("QListWidget { border: 1px solid #DCDCDC; border-radius: 6px; background-color: #F4F6F7; padding: 8px; }")
-        layout_principal.addWidget(self.lista_chat)
-
-        # Barra inferior de digitação e envio
-        layout_envio = QHBoxLayout()
-        self.input_mensagem = QLineEdit()
+        layout.addWidget(self.lista_chat)
+        layout.addSpacing(25)
+        
+        # Barra inferior de digitação e envio blindada num QWidget (SEPARADA DA LISTA)
+        container_envio = QWidget()
+        container_envio.setFixedHeight(100) # O SEU 100 QUE RESOLVEU O CORTE
+        layout_envio = QHBoxLayout(container_envio)
+        layout_envio.setContentsMargins(0, 5, 0, 0) # AS SUAS MARGENS (5px no topo)
+        layout_envio.setSpacing(10)
+        
+        # AQUI ESTÁ A MÁGICA DA QUEBRA DE LINHA: QTextEdit em vez de QLineEdit
+        self.input_mensagem = QTextEdit() 
+        self.input_mensagem.setFixedHeight(40) # O SEU 40
         self.input_mensagem.setPlaceholderText("Digite sua dúvida aqui...")
-        self.input_mensagem.setStyleSheet("font-size: 15px; font-weight: bold; color: #2C3E50; margin-top: 15px; margin-bottom: 5px;")
-        self.input_mensagem.returnPressed.connect(self.enviar_mensagem_suporte) # Envia ao apertar Enter
+        self.input_mensagem.setStyleSheet("font-size: 14px; font-weight: bold; color: #2C3E50; padding: 5px 10px; border: 1px solid #ccc; border-radius: 6px; background-color: white;")
+        # Removida a linha do "returnPressed". O QTextEdit usa o Enter para quebrar a linha sozinho.
         
         # Corrigido o nome para btn_enviar_chat e aplicado um visual moderno e imponente estilo WhatsApp
         self.btn_enviar_chat = QPushButton("Enviar ✈️")
+        self.btn_enviar_chat.setFixedHeight(40) # O SEU 40
+        self.btn_enviar_chat.setFixedWidth(120)
         self.btn_enviar_chat.setStyleSheet("""
             QPushButton {
                 background-color: #25D366; 
                 color: white; 
                 font-weight: bold; 
                 font-size: 14px; 
-                padding: 12px 24px; 
                 border: none;
                 border-radius: 6px;
-                min-width: 110px;
             }
             QPushButton:hover { background-color: #20BA5A; }
             QPushButton:disabled { background-color: #A5E7BC; color: #F0FBF4; }
         """)
         self.btn_enviar_chat.clicked.connect(self.enviar_mensagem_suporte)
         
-        layout_envio.addWidget(self.input_mensagem, stretch=8)
+        layout_envio.addWidget(self.input_mensagem, stretch=2)
         layout_envio.addWidget(self.btn_enviar_chat, stretch=2)
-        layout_principal.addLayout(layout_envio)
+        
+        layout.addWidget(container_envio)
+        layout.addSpacing(10)
 
-        # Timer nativo para atualizar as mensagens em segundo plano a cada 5 segundos
+        # Rodapé adicionado no LUGAR CERTO, depois de tudo
+        lbl_rodape = QLabel("© 2026 VegaStock. Todos os direitos reservados.")
+        lbl_rodape.setStyleSheet("color: #888888; font-size: 10px;")
+        layout.addWidget(lbl_rodape, alignment=Qt.AlignHCenter)
+
+        # Controle de Threads para não crashar
+        self._threads_vivas = []
+
+        # Timers
         self.timer_chat = QTimer(self)
         self.timer_chat.timeout.connect(self.atualizar_chat_suporte)
-        self.timer_chat.start(5000) # 5000 milissegundos = 5 segundos
+        self.timer_chat.start(5000)
 
-        # Carrega o histórico imediatamente ao abrir a aba
         QTimer.singleShot(500, self.atualizar_chat_suporte)
         
 # ========================================================
@@ -271,8 +279,9 @@ def enviar_mensagem_suporte(self):
             self.btn_enviar_chat.setEnabled(False)
             self.input_mensagem.clear()
             
-            # parent=self inserido e variável renomeada para evitar atropelamentos com o timer de busca
+            self._threads_vivas = [t for t in self._threads_vivas if t.isRunning()]
             self.worker_envio_exclusivo_sobre = WorkerEnviarChat(cliente_id, texto, parent=self)
+            self._threads_vivas.append(self.worker_envio_exclusivo_sobre)
             self.worker_envio_exclusivo_sobre.sucesso.connect(lambda: [self.btn_enviar_chat.setEnabled(True), self.atualizar_chat_suporte()])
             self.worker_envio_exclusivo_sobre.start()
 
@@ -297,7 +306,9 @@ def ver_release_notes(self):
     self.btn_release_notes.setText("⏳ Buscando...")
     self.btn_release_notes.setEnabled(False)
     
+    self._threads_vivas = [t for t in self._threads_vivas if t.isRunning()]
     self.worker_notas = WorkerReleaseNotes(parent=self)
+    self._threads_vivas.append(self.worker_notas)
     self.worker_notas.sucesso.connect(self.exibir_release_notes)
     self.worker_notas.erro.connect(self.erro_release_notes)
     self.worker_notas.start()
@@ -307,6 +318,13 @@ def exibir_release_notes(self, versao_nuvem, notas):
     self.btn_release_notes.setEnabled(True)
     
     msg = QMessageBox(self)
+    msg.setWindowModality(Qt.ApplicationModal)
+    msg.setStyleSheet("""
+        QMessageBox {
+            background-color: white;
+            border: 1px solid #ccc;
+        })
+    """)
     msg.setWindowTitle(f"Release Notes - Versão {versao_nuvem}")
     msg.setText(f"O que há de novo na versão mais recente:\n\n{notas}")
     msg.setIcon(QMessageBox.Information)

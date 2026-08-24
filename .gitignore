@@ -47,3 +47,5 @@ config_local.json
 *.user
 
 /relatorios_gerados/*.pdf
+
+*.csv

@@ -97,7 +97,11 @@ class AbaEquipe(QWidget):
         self.tabela = QTableWidget()
         self.tabela.setColumnCount(4)
         self.tabela.setHorizontalHeaderLabels(["ID", "Login", "Cargo", "Acessos"])
-        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabela.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.tabela.horizontalHeader().setStretchLastSection(True)
+        self.tabela.setWordWrap(True)
+        self.tabela.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tabela.setMinimumHeight(400)
         self.tabela.setSelectionBehavior(QAbstractItemView.SelectRows)
         self.tabela.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tabela.setColumnHidden(0, True) # Esconde o ID
@@ -207,6 +211,8 @@ class AbaEquipe(QWidget):
 
         layout_livre.addWidget(frame_form, stretch=4)
         layout_principal.addWidget(self.frame_livre)
+        
+        layout_principal.addStretch()
 
     # --- LÓGICA DE INTERFACE E API ---
 

@@ -35,6 +35,13 @@ class AbaDashboard(QWidget):
         layout_principal = QVBoxLayout(self)
         layout_principal.setContentsMargins(20, 20, 20, 20)
 
+        self.setStyleSheet("""
+            QDialog { background-color: white; }
+            QDialog QLabel { color: black; }
+            QMessageBox { background-color: white; }
+            QMessageBox QLabel { color: black; }
+        """)
+
         # Cabeçalho Boas-Vindas
         self.lbl_boas_vindas = QLabel(f"Olá, {self.cliente_dados.get('login_usuario', 'usuário')}!")
         self.lbl_boas_vindas.setStyleSheet("font-size: 26px; font-weight: bold; color: #333;")
@@ -90,7 +97,11 @@ class AbaDashboard(QWidget):
         self.tabela_compras = QTableWidget()
         self.tabela_compras.setColumnCount(4)
         self.tabela_compras.setHorizontalHeaderLabels(["Produto", "Qtd Atual", "Mínimo Desejado", "Status"])
-        self.tabela_compras.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.tabela_compras.horizontalHeader().setSectionResizeMode(QHeaderView.Interactive)
+        self.tabela_compras.horizontalHeader().setStretchLastSection(True)
+        self.tabela_compras.setWordWrap(True)
+        self.tabela_compras.verticalHeader().setSectionResizeMode(QHeaderView.ResizeToContents)
+        self.tabela_compras.setMinimumHeight(250)
         self.tabela_compras.setEditTriggers(QAbstractItemView.NoEditTriggers)
         self.tabela_compras.setStyleSheet("QTableWidget { background-color: white; border-radius: 5px; }")
         
@@ -116,8 +127,9 @@ class AbaDashboard(QWidget):
         self.btn_abrir_relatorios.setCursor(Qt.PointingHandCursor)
         self.btn_abrir_relatorios.clicked.connect(self.abrir_central_relatorios)
         
-        # Adicione o botão ao layout do topo da sua tela (ajuste 'layout_topo' ou 'layout_principal' para o nome da sua variável)
         self.layout().addWidget(self.btn_abrir_relatorios)
+        
+        self.layout().addStretch()
 
     def showEvent(self, event):
         super().showEvent(event)
@@ -141,7 +153,13 @@ class AbaDashboard(QWidget):
         self.tabela_compras.setRowCount(0)
 
         # 2. Chama o Trabalhador do Porão e manda ele pra Virgínia
+        if not hasattr(self, '_threads_vivas'):
+            self._threads_vivas = []
+        self._threads_vivas = [t for t in self._threads_vivas if t.isRunning()]
+
         self.worker = WorkerDashboard(self.cliente_dados['cliente_id'])
+        self._threads_vivas.append(self.worker)
+
         self.worker.resultado.connect(self.atualizar_tela)
         self.worker.erro.connect(self.mostrar_erro)
         self.worker.start()
